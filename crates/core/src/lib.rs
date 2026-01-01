@@ -33,18 +33,26 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 
+pub mod audit;
+pub mod cache;
 pub mod config;
 pub mod error;
 pub mod file_scanner;
 pub mod git;
 pub mod health;
 pub mod process;
+pub mod retry;
+pub mod validation;
 
 pub use error::{Error, ErrorCode, Result, ResultExt};
 
 /// Re-export commonly used types
 pub mod prelude {
+    pub use crate::audit::{AuditAction, AuditEvent, AuditLog};
+    pub use crate::cache::{Cache, CacheConfig};
     pub use crate::error::{exit_codes, Error, ErrorCode, Result, ResultExt};
     pub use crate::git::GitRepo;
     pub use crate::health::{HealthChecker, HealthReport, HealthStatus};
+    pub use crate::retry::{retry, CircuitBreaker, RetryConfig};
+    pub use crate::validation::{ValidationResult, Validator};
 }

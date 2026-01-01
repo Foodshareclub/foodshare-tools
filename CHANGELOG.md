@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-01-01
+
+### Added
+- **Cache module** (`foodshare_core::cache`) with:
+  - File-based caching with optional in-memory layer
+  - TTL (time-to-live) support with automatic expiry
+  - Data integrity verification via SHA-256 hashing
+  - Cache statistics and cleanup utilities
+  - `cached_command` helper for caching expensive operations
+
+- **Retry module** (`foodshare_core::retry`) with:
+  - Exponential backoff with configurable jitter
+  - Preset configurations: `quick()`, `patient()`, `no_retry()`
+  - Circuit breaker pattern for preventing cascading failures
+  - Configurable failure/success thresholds
+  - Half-open state for gradual recovery
+
+- **Audit module** (`foodshare_core::audit`) with:
+  - Structured audit logging for security and compliance
+  - Severity levels (Low, Medium, High, Critical)
+  - Action types for commands, config, security, git, and system events
+  - Log rotation with configurable file size limits
+  - JSON and human-readable output formats
+  - Global audit log instance with `audit!` macro
+
+- **Validation module** (`foodshare_core::validation`) with:
+  - Fluent builder API for validation rules
+  - Built-in validators: required, min/max length, pattern, one_of, range
+  - Path validators: exists, is_file, is_directory
+  - Custom validation support
+  - Commit message format validation
+  - Path safety validation (traversal detection)
+  - Configuration schema validation
+
+### Changed
+- **Prelude** expanded to include new module types:
+  - `AuditAction`, `AuditEvent`, `AuditLog`
+  - `Cache`, `CacheConfig`
+  - `retry`, `CircuitBreaker`, `RetryConfig`
+  - `ValidationResult`, `Validator`
+
+### Dependencies
+- Added `sha2` for cache integrity hashing
+- Added `hex` for hash encoding
+- Added `uuid` for audit event IDs
+- Added `dirs` for platform-specific cache directories
+
 ## [1.1.0] - 2026-01-01
 
 ### Added
@@ -101,5 +148,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Multi-platform builds (Linux, macOS x64/ARM)
   - Automated releases
 
+[1.2.0]: https://github.com/Foodshareclub/foodshare-tools/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Foodshareclub/foodshare-tools/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Foodshareclub/foodshare-tools/releases/tag/v1.0.0
