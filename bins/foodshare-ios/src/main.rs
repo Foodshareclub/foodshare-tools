@@ -132,6 +132,12 @@ enum Commands {
         remote: Option<String>,
         /// Remote URL
         url: Option<String>,
+        /// Fail fast on first error
+        #[arg(long)]
+        fail_fast: bool,
+        /// Use release build
+        #[arg(long)]
+        release: bool,
     },
 }
 
@@ -221,8 +227,8 @@ fn main() -> Result<()> {
         Commands::Verify => {
             run_verify()
         }
-        Commands::PrePush { remote, url } => {
-            run_pre_push(remote.as_deref(), url.as_deref())
+        Commands::PrePush { remote, url, fail_fast, release } => {
+            run_pre_push(remote.as_deref(), url.as_deref(), fail_fast, release)
         }
     };
 
@@ -544,7 +550,7 @@ fn run_verify() -> i32 {
 }
 
 
-fn run_pre_push(_remote: Option<&str>, _url: Option<&str>) -> i32 {
+fn run_pre_push(_remote: Option<&str>, _url: Option<&str>, _fail_fast: bool, _release: bool) -> i32 {
     // Pre-push checks for iOS
     // This is a pass-through that allows lefthook to work
     // The actual checks are handled by lefthook configuration
