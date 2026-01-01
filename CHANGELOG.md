@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-01-01
+
+### Added
+- **Rate limiting module** (`foodshare_core::rate_limit`) with:
+  - Token bucket algorithm for smooth rate limiting
+  - Sliding window limiter for accurate request counting
+  - Burst allowance for handling traffic spikes
+  - Per-key rate limiting for multi-tenant scenarios
+  - Preset configurations: `per_second()`, `per_minute()`, `strict()`, `lenient()`
+  - Status reporting with available tokens and reset time
+
+- **Feature flags module** (`foodshare_core::feature_flags`) with:
+  - Boolean, string, numeric, and percentage-based flags
+  - Environment variable overrides
+  - Tag-based flag grouping
+  - Percentage rollouts for gradual feature releases
+  - JSON file loading and hot-reload support
+  - Default flags for common tooling settings
+
+### Changed
+- **Prelude** expanded to include:
+  - `FeatureFlags`, `Flag`, `FlagValue`
+  - `RateLimitConfig`, `RateLimiter`
+
 ## [1.2.0] - 2026-01-01
 
 ### Added
@@ -148,6 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Multi-platform builds (Linux, macOS x64/ARM)
   - Automated releases
 
+[1.3.0]: https://github.com/Foodshareclub/foodshare-tools/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Foodshareclub/foodshare-tools/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Foodshareclub/foodshare-tools/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Foodshareclub/foodshare-tools/releases/tag/v1.0.0

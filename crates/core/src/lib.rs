@@ -37,10 +37,12 @@ pub mod audit;
 pub mod cache;
 pub mod config;
 pub mod error;
+pub mod feature_flags;
 pub mod file_scanner;
 pub mod git;
 pub mod health;
 pub mod process;
+pub mod rate_limit;
 pub mod retry;
 pub mod validation;
 
@@ -51,8 +53,10 @@ pub mod prelude {
     pub use crate::audit::{AuditAction, AuditEvent, AuditLog};
     pub use crate::cache::{Cache, CacheConfig};
     pub use crate::error::{exit_codes, Error, ErrorCode, Result, ResultExt};
+    pub use crate::feature_flags::{FeatureFlags, Flag, FlagValue};
     pub use crate::git::GitRepo;
     pub use crate::health::{HealthChecker, HealthReport, HealthStatus};
+    pub use crate::rate_limit::{RateLimitConfig, RateLimiter};
     pub use crate::retry::{retry, CircuitBreaker, RetryConfig};
     pub use crate::validation::{ValidationResult, Validator};
 }
