@@ -75,8 +75,18 @@ if [[ "$1" == "--symlink" ]]; then
     echo -e "${GREEN}Symlinks created!${NC}"
 fi
 
+# Optional: Clean build artifacts
+if [[ "$1" == "--clean" ]]; then
+    echo ""
+    echo "Cleaning build artifacts..."
+    cargo clean
+    echo -e "${GREEN}Clean complete!${NC}"
+    exit 0
+fi
+
 echo ""
 echo "Usage:"
 echo "  ./install.sh           # Build only"
 echo "  ./install.sh --install # Build and install to ~/.cargo/bin"
 echo "  ./install.sh --symlink # Build and create symlinks for existing projects"
+echo "  ./install.sh --clean   # Clean all build artifacts"
