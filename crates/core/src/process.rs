@@ -24,8 +24,8 @@ pub struct CommandResult {
 }
 
 impl CommandResult {
-    /// Create from std::process::Output
-    pub fn from_output(output: Output) -> Self {
+    /// Create from `std::process::Output`
+    #[must_use] pub fn from_output(output: Output) -> Self {
         Self {
             success: output.status.success(),
             exit_code: output.status.code().unwrap_or(-1),
@@ -35,7 +35,7 @@ impl CommandResult {
     }
 
     /// Get combined output (stdout + stderr)
-    pub fn combined_output(&self) -> String {
+    #[must_use] pub fn combined_output(&self) -> String {
         if self.stderr.is_empty() {
             self.stdout.clone()
         } else if self.stdout.is_empty() {
@@ -53,7 +53,7 @@ pub fn run_command(program: &str, args: &[&str]) -> Result<CommandResult> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .map_err(|e| Error::process(format!("Failed to execute {}: {}", program, e)))?;
+        .map_err(|e| Error::process(format!("Failed to execute {program}: {e}")))?;
 
     Ok(CommandResult::from_output(output))
 }
@@ -66,7 +66,7 @@ pub fn run_command_in_dir(program: &str, args: &[&str], dir: &Path) -> Result<Co
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .map_err(|e| Error::process(format!("Failed to execute {}: {}", program, e)))?;
+        .map_err(|e| Error::process(format!("Failed to execute {program}: {e}")))?;
 
     Ok(CommandResult::from_output(output))
 }
@@ -88,17 +88,17 @@ pub fn run_command_with_env(
 
     let output = cmd
         .output()
-        .map_err(|e| Error::process(format!("Failed to execute {}: {}", program, e)))?;
+        .map_err(|e| Error::process(format!("Failed to execute {program}: {e}")))?;
 
     Ok(CommandResult::from_output(output))
 }
 
 /// Check if a command exists in PATH
-pub fn command_exists(program: &str) -> bool {
+#[must_use] pub fn command_exists(program: &str) -> bool {
     #[cfg(unix)]
     {
         Command::new("sh")
-            .args(["-c", &format!("command -v {} >/dev/null 2>&1", program)])
+            .args(["-c", &format!("command -v {program} >/dev/null 2>&1")])
             .status()
             .map(|s| s.success())
             .unwrap_or(false)
@@ -116,11 +116,11 @@ pub fn command_exists(program: &str) -> bool {
 }
 
 /// Get the path to a command
-pub fn which_command(program: &str) -> Option<std::path::PathBuf> {
+#[must_use] pub fn which_command(program: &str) -> Option<std::path::PathBuf> {
     #[cfg(unix)]
     {
         let output = Command::new("sh")
-            .args(["-c", &format!("command -v {}", program)])
+            .args(["-c", &format!("command -v {program}")])
             .output()
             .ok()?;
         if output.status.success() {
@@ -158,7 +158,7 @@ pub fn run_command_streaming(program: &str, args: &[&str]) -> Result<i32> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .map_err(|e| Error::process(format!("Failed to execute {}: {}", program, e)))?;
+        .map_err(|e| Error::process(format!("Failed to execute {program}: {e}")))?;
 
     Ok(status.code().unwrap_or(-1))
 }
@@ -171,7 +171,7 @@ pub fn run_command_streaming_in_dir(program: &str, args: &[&str], dir: &Path) ->
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .map_err(|e| Error::process(format!("Failed to execute {}: {}", program, e)))?;
+        .map_err(|e| Error::process(format!("Failed to execute {program}: {e}")))?;
 
     Ok(status.code().unwrap_or(-1))
 }

@@ -35,7 +35,7 @@ impl GitRepo {
     }
 
     /// Get the repository working directory
-    pub fn workdir(&self) -> &Path {
+    #[must_use] pub fn workdir(&self) -> &Path {
         &self.workdir
     }
 
@@ -168,7 +168,7 @@ impl GitRepo {
     pub fn commits_since(&self, since: &str) -> Result<Vec<String>> {
         let result = run_command_in_dir(
             "git",
-            &["log", &format!("{}..HEAD", since), "--oneline", "--format=%s"],
+            &["log", &format!("{since}..HEAD"), "--oneline", "--format=%s"],
             &self.workdir,
         )?;
 
@@ -233,7 +233,7 @@ impl GitRepo {
     }
 
     /// Check if a path is ignored by git
-    pub fn is_ignored(&self, path: &Path) -> bool {
+    #[must_use] pub fn is_ignored(&self, path: &Path) -> bool {
         let result = run_command_in_dir(
             "git",
             &["check-ignore", "-q", &path.to_string_lossy()],
@@ -279,14 +279,14 @@ pub struct DiffStats {
 }
 
 /// Check if we're in a git repository
-pub fn is_git_repo(path: &Path) -> bool {
+#[must_use] pub fn is_git_repo(path: &Path) -> bool {
     run_command_in_dir("git", &["rev-parse", "--git-dir"], path)
         .map(|r| r.success)
         .unwrap_or(false)
 }
 
 /// Get the git root directory
-pub fn git_root(path: &Path) -> Option<PathBuf> {
+#[must_use] pub fn git_root(path: &Path) -> Option<PathBuf> {
     run_command_in_dir("git", &["rev-parse", "--show-toplevel"], path)
         .ok()
         .filter(|r| r.success)

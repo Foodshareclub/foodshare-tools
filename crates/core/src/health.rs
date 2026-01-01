@@ -29,12 +29,12 @@ pub enum HealthStatus {
 
 impl HealthStatus {
     /// Returns true if status is healthy
-    pub fn is_healthy(&self) -> bool {
+    #[must_use] pub fn is_healthy(&self) -> bool {
         matches!(self, HealthStatus::Healthy)
     }
 
     /// Returns true if status is healthy or degraded (still operational)
-    pub fn is_operational(&self) -> bool {
+    #[must_use] pub fn is_operational(&self) -> bool {
         matches!(self, HealthStatus::Healthy | HealthStatus::Degraded)
     }
 }
@@ -89,7 +89,7 @@ impl CheckResult {
     }
 
     /// Set the duration of the check
-    pub fn with_duration(mut self, duration: Duration) -> Self {
+    #[must_use] pub fn with_duration(mut self, duration: Duration) -> Self {
         self.duration_ms = duration.as_millis() as u64;
         self
     }
@@ -118,7 +118,7 @@ pub struct HealthReport {
 
 impl HealthReport {
     /// Create a new health report from check results
-    pub fn new(checks: Vec<CheckResult>, duration: Duration) -> Self {
+    #[must_use] pub fn new(checks: Vec<CheckResult>, duration: Duration) -> Self {
         let status = if checks.iter().all(|c| c.status == HealthStatus::Healthy) {
             HealthStatus::Healthy
         } else if checks.iter().any(|c| c.status == HealthStatus::Unhealthy) {
@@ -137,12 +137,12 @@ impl HealthReport {
     }
 
     /// Returns true if overall status is healthy
-    pub fn is_healthy(&self) -> bool {
+    #[must_use] pub fn is_healthy(&self) -> bool {
         self.status.is_healthy()
     }
 
     /// Get all checks that failed (not healthy)
-    pub fn failed_checks(&self) -> Vec<&CheckResult> {
+    #[must_use] pub fn failed_checks(&self) -> Vec<&CheckResult> {
         self.checks
             .iter()
             .filter(|c| !c.status.is_healthy())
@@ -163,7 +163,7 @@ impl Default for HealthChecker {
 
 impl HealthChecker {
     /// Create a new health checker with no checks
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Self { checks: Vec::new() }
     }
 
@@ -174,13 +174,13 @@ impl HealthChecker {
     }
 
     /// Add standard checks for all platforms
-    pub fn with_standard_checks(self) -> Self {
+    #[must_use] pub fn with_standard_checks(self) -> Self {
         self.add_check(GitCheck)
             .add_check(DiskSpaceCheck::new("/", 100 * 1024 * 1024)) // 100MB minimum
     }
 
     /// Add iOS-specific checks
-    pub fn with_ios_checks(self) -> Self {
+    #[must_use] pub fn with_ios_checks(self) -> Self {
         self.add_check(CommandCheck::new("xcodebuild", Some("--version")))
             .add_check(CommandCheck::new("swift", Some("--version")))
             .add_check(CommandCheck::optional("swiftformat", Some("--version")))
@@ -188,20 +188,20 @@ impl HealthChecker {
     }
 
     /// Add Android-specific checks
-    pub fn with_android_checks(self) -> Self {
+    #[must_use] pub fn with_android_checks(self) -> Self {
         self.add_check(EnvVarCheck::new("ANDROID_HOME"))
             .add_check(CommandCheck::optional("gradle", Some("--version")))
             .add_check(CommandCheck::optional("kotlin", Some("-version")))
     }
 
     /// Add web-specific checks
-    pub fn with_web_checks(self) -> Self {
+    #[must_use] pub fn with_web_checks(self) -> Self {
         self.add_check(CommandCheck::new("node", Some("--version")))
             .add_check(CommandCheck::new("npm", Some("--version")))
     }
 
     /// Run all health checks
-    pub fn run(&self) -> HealthReport {
+    #[must_use] pub fn run(&self) -> HealthReport {
         let start = Instant::now();
         let mut results = Vec::new();
 

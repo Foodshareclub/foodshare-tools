@@ -55,7 +55,7 @@ impl Default for RetryConfig {
 
 impl RetryConfig {
     /// Create a config for quick retries
-    pub fn quick() -> Self {
+    #[must_use] pub fn quick() -> Self {
         Self {
             max_attempts: 3,
             initial_delay: Duration::from_millis(50),
@@ -67,7 +67,7 @@ impl RetryConfig {
     }
 
     /// Create a config for patient retries
-    pub fn patient() -> Self {
+    #[must_use] pub fn patient() -> Self {
         Self {
             max_attempts: 5,
             initial_delay: Duration::from_millis(500),
@@ -79,7 +79,7 @@ impl RetryConfig {
     }
 
     /// Create a config with no retries
-    pub fn no_retry() -> Self {
+    #[must_use] pub fn no_retry() -> Self {
         Self {
             max_attempts: 1,
             initial_delay: Duration::ZERO,
@@ -91,7 +91,7 @@ impl RetryConfig {
     }
 
     /// Calculate delay for a given attempt
-    pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
+    #[must_use] pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
         if attempt == 0 {
             return Duration::ZERO;
         }
@@ -233,7 +233,7 @@ impl Default for CircuitBreakerConfig {
 
 impl CircuitBreaker {
     /// Create a new circuit breaker
-    pub fn new(config: CircuitBreakerConfig) -> Self {
+    #[must_use] pub fn new(config: CircuitBreakerConfig) -> Self {
         Self {
             config,
             state: std::sync::RwLock::new(CircuitState::Closed),
@@ -367,7 +367,7 @@ impl<E: std::fmt::Display> std::fmt::Display for CircuitBreakerError<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CircuitBreakerError::CircuitOpen => write!(f, "Circuit breaker is open"),
-            CircuitBreakerError::ExecutionFailed(e) => write!(f, "Execution failed: {}", e),
+            CircuitBreakerError::ExecutionFailed(e) => write!(f, "Execution failed: {e}"),
         }
     }
 }

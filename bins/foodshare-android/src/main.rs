@@ -351,7 +351,7 @@ fn run_secrets(all: bool, config: &Config) -> i32 {
     }
 }
 
-fn run_migrations(dir: &PathBuf) -> i32 {
+fn run_migrations(dir: &std::path::Path) -> i32 {
     use foodshare_hooks::migrations;
 
     match migrations::check_migrations(dir, true, true) {
@@ -387,12 +387,10 @@ fn run_build(configuration: &str, clean: bool, bundle: bool) -> i32 {
         } else {
             gradle::bundle_debug(project_dir)
         }
+    } else if configuration == "release" {
+        gradle::build_release(project_dir)
     } else {
-        if configuration == "release" {
-            gradle::build_release(project_dir)
-        } else {
-            gradle::build_debug(project_dir)
-        }
+        gradle::build_debug(project_dir)
     };
 
     match result {
@@ -443,7 +441,7 @@ fn run_emulator(action: &str, name: Option<&str>) -> i32 {
         "list" => {
             match emulator::list_avds() {
                 Ok(avds) => {
-                    println!("{}", "Available AVDs:");
+                    println!("Available AVDs:");
                     for avd in avds {
                         println!("  - {}", avd);
                     }
@@ -576,7 +574,7 @@ fn run_swift_java(action: &str) -> i32 {
 fn run_doctor(_json: bool) -> i32 {
     use foodshare_android::{emulator, kotlin_tools, swift_android};
 
-    println!("{}", "Environment Check");
+    println!("Environment Check");
     println!();
 
     // Kotlin tools

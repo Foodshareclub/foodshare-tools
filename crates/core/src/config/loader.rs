@@ -18,7 +18,7 @@ impl Config {
     pub fn load(path: Option<&str>) -> Result<Self> {
         let config_path = path
             .map(String::from)
-            .or_else(|| find_config_file());
+            .or_else(find_config_file);
 
         let schema = if let Some(ref p) = config_path {
             load_config_file(p)?
@@ -33,7 +33,7 @@ impl Config {
     }
 
     /// Load with defaults only (no file)
-    pub fn default() -> Self {
+    #[must_use] pub fn default() -> Self {
         Self {
             schema: ConfigSchema::default(),
             path: None,
@@ -61,10 +61,10 @@ fn find_config_file() -> Option<String> {
 /// Load and parse a TOML configuration file
 fn load_config_file(path: &str) -> Result<ConfigSchema> {
     let content = std::fs::read_to_string(path)
-        .map_err(|e| Error::config(format!("Failed to read config file {}: {}", path, e)))?;
+        .map_err(|e| Error::config(format!("Failed to read config file {path}: {e}")))?;
 
     toml::from_str(&content)
-        .map_err(|e| Error::config(format!("Failed to parse config file {}: {}", path, e)))
+        .map_err(|e| Error::config(format!("Failed to parse config file {path}: {e}")))
 }
 
 #[cfg(test)]

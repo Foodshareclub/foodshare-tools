@@ -436,7 +436,7 @@ fn run_simulator(action: &str, device: Option<&str>) -> i32 {
         "list" => {
             match simulator::list_devices() {
                 Ok(devices) => {
-                    println!("{}", "Available Simulators:".to_string());
+                    println!("Available Simulators:");
                     for d in devices.iter().filter(|d| d.is_available) {
                         let status = if d.state == "Booted" { "🟢" } else { "⚪" };
                         println!("  {} {} ({})", status, d.name, d.runtime);
@@ -490,7 +490,7 @@ fn run_doctor(json: bool) -> i32 {
         return exit_codes::SUCCESS;
     }
 
-    println!("{}", "Environment Check".to_string());
+    println!("Environment Check");
     println!();
 
     // Xcode

@@ -47,7 +47,7 @@ impl Default for RateLimitConfig {
 
 impl RateLimitConfig {
     /// Create a strict rate limit (no burst)
-    pub fn strict(max_requests: u32, window: Duration) -> Self {
+    #[must_use] pub fn strict(max_requests: u32, window: Duration) -> Self {
         Self {
             max_requests,
             window,
@@ -56,7 +56,7 @@ impl RateLimitConfig {
     }
 
     /// Create a lenient rate limit with burst
-    pub fn lenient(max_requests: u32, window: Duration, burst: u32) -> Self {
+    #[must_use] pub fn lenient(max_requests: u32, window: Duration, burst: u32) -> Self {
         Self {
             max_requests,
             window,
@@ -65,7 +65,7 @@ impl RateLimitConfig {
     }
 
     /// Per-second rate limit
-    pub fn per_second(max: u32) -> Self {
+    #[must_use] pub fn per_second(max: u32) -> Self {
         Self {
             max_requests: max,
             window: Duration::from_secs(1),
@@ -74,7 +74,7 @@ impl RateLimitConfig {
     }
 
     /// Per-minute rate limit
-    pub fn per_minute(max: u32) -> Self {
+    #[must_use] pub fn per_minute(max: u32) -> Self {
         Self {
             max_requests: max,
             window: Duration::from_secs(60),
@@ -94,7 +94,7 @@ struct TokenBucket {
 impl TokenBucket {
     fn new(config: RateLimitConfig) -> Self {
         Self {
-            tokens: (config.max_requests + config.burst) as f64,
+            tokens: f64::from(config.max_requests + config.burst),
             last_update: Instant::now(),
             config,
         }
@@ -103,8 +103,8 @@ impl TokenBucket {
     fn try_acquire(&mut self, tokens: u32) -> bool {
         self.refill();
 
-        if self.tokens >= tokens as f64 {
-            self.tokens -= tokens as f64;
+        if self.tokens >= f64::from(tokens) {
+            self.tokens -= f64::from(tokens);
             true
         } else {
             false
@@ -114,11 +114,11 @@ impl TokenBucket {
     fn refill(&mut self) {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_update);
-        let refill_rate = self.config.max_requests as f64 / self.config.window.as_secs_f64();
+        let refill_rate = f64::from(self.config.max_requests) / self.config.window.as_secs_f64();
         let new_tokens = elapsed.as_secs_f64() * refill_rate;
 
         self.tokens = (self.tokens + new_tokens)
-            .min((self.config.max_requests + self.config.burst) as f64);
+            .min(f64::from(self.config.max_requests + self.config.burst));
         self.last_update = now;
     }
 
@@ -130,12 +130,12 @@ impl TokenBucket {
     fn time_until_available(&mut self, tokens: u32) -> Duration {
         self.refill();
 
-        if self.tokens >= tokens as f64 {
+        if self.tokens >= f64::from(tokens) {
             return Duration::ZERO;
         }
 
-        let needed = tokens as f64 - self.tokens;
-        let refill_rate = self.config.max_requests as f64 / self.config.window.as_secs_f64();
+        let needed = f64::from(tokens) - self.tokens;
+        let refill_rate = f64::from(self.config.max_requests) / self.config.window.as_secs_f64();
         Duration::from_secs_f64(needed / refill_rate)
     }
 }
@@ -148,7 +148,7 @@ pub struct RateLimiter {
 
 impl RateLimiter {
     /// Create a new rate limiter
-    pub fn new(config: RateLimitConfig) -> Self {
+    #[must_use] pub fn new(config: RateLimitConfig) -> Self {
         Self {
             buckets: Arc::new(RwLock::new(HashMap::new())),
             default_config: config,
@@ -156,12 +156,12 @@ impl RateLimiter {
     }
 
     /// Try to acquire a token for the given key
-    pub fn try_acquire(&self, key: &str) -> bool {
+    #[must_use] pub fn try_acquire(&self, key: &str) -> bool {
         self.try_acquire_n(key, 1)
     }
 
     /// Try to acquire multiple tokens
-    pub fn try_acquire_n(&self, key: &str, tokens: u32) -> bool {
+    #[must_use] pub fn try_acquire_n(&self, key: &str, tokens: u32) -> bool {
         let mut buckets = self.buckets.write().unwrap();
         let bucket = buckets
             .entry(key.to_string())
@@ -170,7 +170,7 @@ impl RateLimiter {
     }
 
     /// Get available tokens for a key
-    pub fn available(&self, key: &str) -> u32 {
+    #[must_use] pub fn available(&self, key: &str) -> u32 {
         let mut buckets = self.buckets.write().unwrap();
         let bucket = buckets
             .entry(key.to_string())
@@ -179,7 +179,7 @@ impl RateLimiter {
     }
 
     /// Get time until tokens are available
-    pub fn time_until_available(&self, key: &str, tokens: u32) -> Duration {
+    #[must_use] pub fn time_until_available(&self, key: &str, tokens: u32) -> Duration {
         let mut buckets = self.buckets.write().unwrap();
         let bucket = buckets
             .entry(key.to_string())
@@ -200,7 +200,7 @@ impl RateLimiter {
     }
 
     /// Get rate limit status
-    pub fn status(&self, key: &str) -> RateLimitStatus {
+    #[must_use] pub fn status(&self, key: &str) -> RateLimitStatus {
         let mut buckets = self.buckets.write().unwrap();
         let bucket = buckets
             .entry(key.to_string())
@@ -233,7 +233,7 @@ pub struct SlidingWindowLimiter {
 
 impl SlidingWindowLimiter {
     /// Create a new sliding window limiter
-    pub fn new(config: RateLimitConfig) -> Self {
+    #[must_use] pub fn new(config: RateLimitConfig) -> Self {
         Self {
             windows: Arc::new(RwLock::new(HashMap::new())),
             config,
@@ -241,12 +241,12 @@ impl SlidingWindowLimiter {
     }
 
     /// Try to acquire permission
-    pub fn try_acquire(&self, key: &str) -> bool {
+    #[must_use] pub fn try_acquire(&self, key: &str) -> bool {
         let mut windows = self.windows.write().unwrap();
-        let window = windows.entry(key.to_string()).or_insert_with(Vec::new);
+        let window = windows.entry(key.to_string()).or_default();
 
         let now = Instant::now();
-        let cutoff = now - self.config.window;
+        let cutoff = now.checked_sub(self.config.window).unwrap();
 
         // Remove old entries
         window.retain(|&t| t > cutoff);
@@ -260,11 +260,11 @@ impl SlidingWindowLimiter {
     }
 
     /// Get current request count in window
-    pub fn current_count(&self, key: &str) -> usize {
+    #[must_use] pub fn current_count(&self, key: &str) -> usize {
         let mut windows = self.windows.write().unwrap();
-        let window = windows.entry(key.to_string()).or_insert_with(Vec::new);
+        let window = windows.entry(key.to_string()).or_default();
 
-        let cutoff = Instant::now() - self.config.window;
+        let cutoff = Instant::now().checked_sub(self.config.window).unwrap();
         window.retain(|&t| t > cutoff);
         window.len()
     }

@@ -166,8 +166,7 @@ impl Cache {
             .as_secs();
 
         let ttl_secs = ttl
-            .map(|d| d.as_secs())
-            .unwrap_or(self.config.default_ttl_secs);
+            .map_or(self.config.default_ttl_secs, |d| d.as_secs());
 
         let entry = CacheEntry {
             created_at: now,
@@ -264,8 +263,7 @@ impl Cache {
         let memory_entries = self.memory
             .as_ref()
             .and_then(|m| m.read().ok())
-            .map(|g| g.len())
-            .unwrap_or(0);
+            .map_or(0, |g| g.len());
 
         Ok(CacheStats {
             total_entries: entry_count,
@@ -335,11 +333,11 @@ impl Cache {
     }
 
     fn entry_path(&self, cache_key: &str) -> PathBuf {
-        self.config.cache_dir.join(format!("{}.meta", cache_key))
+        self.config.cache_dir.join(format!("{cache_key}.meta"))
     }
 
     fn data_path(&self, cache_key: &str) -> PathBuf {
-        self.config.cache_dir.join(format!("{}.data", cache_key))
+        self.config.cache_dir.join(format!("{cache_key}.data"))
     }
 
     fn is_expired(&self, entry: &CacheEntry) -> bool {

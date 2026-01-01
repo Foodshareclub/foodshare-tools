@@ -60,22 +60,22 @@ pub struct ValidationResult {
 
 impl ValidationResult {
     /// Create a new empty result
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Self::default()
     }
 
     /// Check if validation passed
-    pub fn is_valid(&self) -> bool {
+    #[must_use] pub fn is_valid(&self) -> bool {
         self.errors.is_empty()
     }
 
     /// Get all errors
-    pub fn errors(&self) -> &[ValidationError] {
+    #[must_use] pub fn errors(&self) -> &[ValidationError] {
         &self.errors
     }
 
     /// Get all warnings
-    pub fn warnings(&self) -> &[ValidationError] {
+    #[must_use] pub fn warnings(&self) -> &[ValidationError] {
         &self.warnings
     }
 
@@ -100,7 +100,7 @@ impl ValidationResult {
         if self.is_valid() {
             Ok(())
         } else {
-            let messages: Vec<String> = self.errors.iter().map(|e| e.to_string()).collect();
+            let messages: Vec<String> = self.errors.iter().map(std::string::ToString::to_string).collect();
             Err(Error::new(
                 ErrorCode::ValidationError,
                 format!("Validation failed: {}", messages.join("; ")),
@@ -122,14 +122,14 @@ impl Default for Validator {
 
 impl Validator {
     /// Create a new validator
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Self {
             result: ValidationResult::new(),
         }
     }
 
     /// Validate that a field is not empty
-    pub fn required(mut self, field: &str, value: &str) -> Self {
+    #[must_use] pub fn required(mut self, field: &str, value: &str) -> Self {
         if value.trim().is_empty() {
             self.result.add_error(ValidationError {
                 field: field.to_string(),
@@ -143,13 +143,13 @@ impl Validator {
     }
 
     /// Validate minimum length
-    pub fn min_length(mut self, field: &str, value: &str, min: usize) -> Self {
+    #[must_use] pub fn min_length(mut self, field: &str, value: &str, min: usize) -> Self {
         if value.len() < min {
             self.result.add_error(ValidationError {
                 field: field.to_string(),
-                message: format!("Must be at least {} characters", min),
+                message: format!("Must be at least {min} characters"),
                 code: "MIN_LENGTH".to_string(),
-                expected: Some(format!(">= {} chars", min)),
+                expected: Some(format!(">= {min} chars")),
                 actual: Some(format!("{} chars", value.len())),
             });
         }
@@ -157,13 +157,13 @@ impl Validator {
     }
 
     /// Validate maximum length
-    pub fn max_length(mut self, field: &str, value: &str, max: usize) -> Self {
+    #[must_use] pub fn max_length(mut self, field: &str, value: &str, max: usize) -> Self {
         if value.len() > max {
             self.result.add_error(ValidationError {
                 field: field.to_string(),
-                message: format!("Must be at most {} characters", max),
+                message: format!("Must be at most {max} characters"),
                 code: "MAX_LENGTH".to_string(),
-                expected: Some(format!("<= {} chars", max)),
+                expected: Some(format!("<= {max} chars")),
                 actual: Some(format!("{} chars", value.len())),
             });
         }
@@ -171,13 +171,13 @@ impl Validator {
     }
 
     /// Validate against a regex pattern
-    pub fn pattern(mut self, field: &str, value: &str, pattern: &str, description: &str) -> Self {
+    #[must_use] pub fn pattern(mut self, field: &str, value: &str, pattern: &str, description: &str) -> Self {
         match Regex::new(pattern) {
             Ok(re) => {
                 if !re.is_match(value) {
                     self.result.add_error(ValidationError {
                         field: field.to_string(),
-                        message: format!("Must match {}", description),
+                        message: format!("Must match {description}"),
                         code: "PATTERN".to_string(),
                         expected: Some(description.to_string()),
                         actual: Some(value.to_string()),
@@ -198,7 +198,7 @@ impl Validator {
     }
 
     /// Validate that a value is in a list of allowed values
-    pub fn one_of(mut self, field: &str, value: &str, allowed: &[&str]) -> Self {
+    #[must_use] pub fn one_of(mut self, field: &str, value: &str, allowed: &[&str]) -> Self {
         if !allowed.contains(&value) {
             self.result.add_error(ValidationError {
                 field: field.to_string(),
@@ -222,9 +222,9 @@ impl Validator {
         if value < min || value > max {
             self.result.add_error(ValidationError {
                 field: field.to_string(),
-                message: format!("Must be between {} and {}", min, max),
+                message: format!("Must be between {min} and {max}"),
                 code: "RANGE".to_string(),
-                expected: Some(format!("{} - {}", min, max)),
+                expected: Some(format!("{min} - {max}")),
                 actual: Some(value.to_string()),
             });
         }
@@ -232,7 +232,7 @@ impl Validator {
     }
 
     /// Validate that a path exists
-    pub fn path_exists(mut self, field: &str, path: &Path) -> Self {
+    #[must_use] pub fn path_exists(mut self, field: &str, path: &Path) -> Self {
         if !path.exists() {
             self.result.add_error(ValidationError {
                 field: field.to_string(),
@@ -246,7 +246,7 @@ impl Validator {
     }
 
     /// Validate that a path is a file
-    pub fn is_file(mut self, field: &str, path: &Path) -> Self {
+    #[must_use] pub fn is_file(mut self, field: &str, path: &Path) -> Self {
         if !path.is_file() {
             self.result.add_error(ValidationError {
                 field: field.to_string(),
@@ -264,7 +264,7 @@ impl Validator {
     }
 
     /// Validate that a path is a directory
-    pub fn is_directory(mut self, field: &str, path: &Path) -> Self {
+    #[must_use] pub fn is_directory(mut self, field: &str, path: &Path) -> Self {
         if !path.is_dir() {
             self.result.add_error(ValidationError {
                 field: field.to_string(),
@@ -299,7 +299,7 @@ impl Validator {
     }
 
     /// Add a warning (non-blocking)
-    pub fn warn_if<F>(mut self, field: &str, condition: bool, message: &str) -> Self {
+    #[must_use] pub fn warn_if<F>(mut self, field: &str, condition: bool, message: &str) -> Self {
         if condition {
             self.result.add_warning(ValidationError {
                 field: field.to_string(),
@@ -313,13 +313,13 @@ impl Validator {
     }
 
     /// Complete validation and return result
-    pub fn validate(self) -> ValidationResult {
+    #[must_use] pub fn validate(self) -> ValidationResult {
         self.result
     }
 }
 
 /// Validate a commit message format
-pub fn validate_commit_message(message: &str, types: &[&str]) -> ValidationResult {
+#[must_use] pub fn validate_commit_message(message: &str, types: &[&str]) -> ValidationResult {
     let mut validator = Validator::new()
         .required("message", message)
         .max_length("subject", message.lines().next().unwrap_or(""), 72);
@@ -337,7 +337,7 @@ pub fn validate_commit_message(message: &str, types: &[&str]) -> ValidationResul
 }
 
 /// Validate a file path for safety
-pub fn validate_path_safety(path: &Path) -> ValidationResult {
+#[must_use] pub fn validate_path_safety(path: &Path) -> ValidationResult {
     let mut result = ValidationResult::new();
     let path_str = path.to_string_lossy();
 
@@ -378,7 +378,7 @@ pub fn validate_path_safety(path: &Path) -> ValidationResult {
 }
 
 /// Validate configuration schema
-pub fn validate_config(config: &HashMap<String, serde_json::Value>) -> ValidationResult {
+#[must_use] pub fn validate_config(config: &HashMap<String, serde_json::Value>) -> ValidationResult {
     let mut result = ValidationResult::new();
 
     // Check for unknown keys
@@ -396,7 +396,7 @@ pub fn validate_config(config: &HashMap<String, serde_json::Value>) -> Validatio
         if !known_keys.contains(&key.as_str()) {
             result.add_warning(ValidationError {
                 field: key.clone(),
-                message: format!("Unknown configuration key: {}", key),
+                message: format!("Unknown configuration key: {key}"),
                 code: "UNKNOWN_KEY".to_string(),
                 expected: Some(known_keys.join(", ")),
                 actual: Some(key.clone()),

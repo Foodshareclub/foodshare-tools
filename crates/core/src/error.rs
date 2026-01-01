@@ -105,12 +105,12 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// Get the numeric code
-    pub fn code(&self) -> u32 {
+    #[must_use] pub fn code(&self) -> u32 {
         *self as u32
     }
 
     /// Get a human-readable category
-    pub fn category(&self) -> &'static str {
+    #[must_use] pub fn category(&self) -> &'static str {
         match self.code() / 1000 {
             1 => "General",
             2 => "IO",
@@ -151,10 +151,10 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{}] {}", self.code, self.message)?;
         if let Some(ctx) = &self.context {
-            write!(f, "\n  Context: {}", ctx)?;
+            write!(f, "\n  Context: {ctx}")?;
         }
         if let Some(suggestion) = &self.suggestion {
-            write!(f, "\n  Suggestion: {}", suggestion)?;
+            write!(f, "\n  Suggestion: {suggestion}")?;
         }
         Ok(())
     }
@@ -191,7 +191,7 @@ impl Error {
     }
 
     /// Convert to a serializable report
-    pub fn to_report(&self) -> ErrorReport {
+    #[must_use] pub fn to_report(&self) -> ErrorReport {
         ErrorReport {
             code: self.code,
             code_str: self.code.to_string(),
@@ -199,7 +199,7 @@ impl Error {
             message: self.message.clone(),
             context: self.context.clone(),
             suggestion: self.suggestion.clone(),
-            source: self.source.as_ref().map(|e| e.to_string()),
+            source: self.source.as_ref().map(std::string::ToString::to_string),
         }
     }
 
@@ -239,7 +239,7 @@ impl Error {
     }
 
     /// Create a not-a-git-repo error
-    pub fn not_a_git_repo() -> Self {
+    #[must_use] pub fn not_a_git_repo() -> Self {
         Self::new(ErrorCode::NotAGitRepo, "Not a git repository")
             .with_suggestion("Run this command from within a git repository")
     }
@@ -250,12 +250,12 @@ impl Error {
     }
 
     /// Create a command not found error
-    pub fn command_not_found(cmd: &str) -> Self {
+    #[must_use] pub fn command_not_found(cmd: &str) -> Self {
         Self::new(
             ErrorCode::CommandNotFound,
-            format!("Command not found: {}", cmd),
+            format!("Command not found: {cmd}"),
         )
-        .with_suggestion(format!("Install {} and ensure it's in your PATH", cmd))
+        .with_suggestion(format!("Install {cmd} and ensure it's in your PATH"))
     }
 
     /// Create a validation error
@@ -269,10 +269,10 @@ impl Error {
     }
 
     /// Create a secret detected error
-    pub fn secret_detected(file: &str, line: usize) -> Self {
+    #[must_use] pub fn secret_detected(file: &str, line: usize) -> Self {
         Self::new(
             ErrorCode::SecretDetected,
-            format!("Potential secret detected in {} at line {}", file, line),
+            format!("Potential secret detected in {file} at line {line}"),
         )
         .with_suggestion("Remove the secret and use environment variables or a secrets manager")
     }
@@ -338,21 +338,21 @@ impl From<std::io::Error> for Error {
 
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
-        Error::new(ErrorCode::ConfigParseError, format!("JSON parse error: {}", err))
+        Error::new(ErrorCode::ConfigParseError, format!("JSON parse error: {err}"))
             .with_source(err)
     }
 }
 
 impl From<toml::de::Error> for Error {
     fn from(err: toml::de::Error) -> Self {
-        Error::new(ErrorCode::ConfigParseError, format!("TOML parse error: {}", err))
+        Error::new(ErrorCode::ConfigParseError, format!("TOML parse error: {err}"))
             .with_source(err)
     }
 }
 
 impl From<regex::Error> for Error {
     fn from(err: regex::Error) -> Self {
-        Error::new(ErrorCode::InvalidFormat, format!("Regex error: {}", err))
+        Error::new(ErrorCode::InvalidFormat, format!("Regex error: {err}"))
             .with_source(err)
     }
 }

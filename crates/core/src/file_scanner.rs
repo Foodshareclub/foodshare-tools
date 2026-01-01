@@ -26,19 +26,19 @@ impl FileScanner {
     }
 
     /// Filter by file extensions (e.g., "swift", "kt", "ts")
-    pub fn with_extensions(mut self, extensions: &[&str]) -> Self {
-        self.extensions = extensions.iter().map(|s| s.to_string()).collect();
+    #[must_use] pub fn with_extensions(mut self, extensions: &[&str]) -> Self {
+        self.extensions = extensions.iter().map(|s| (*s).to_string()).collect();
         self
     }
 
     /// Add patterns to exclude (glob patterns)
-    pub fn exclude(mut self, patterns: &[&str]) -> Self {
-        self.exclude_patterns = patterns.iter().map(|s| s.to_string()).collect();
+    #[must_use] pub fn exclude(mut self, patterns: &[&str]) -> Self {
+        self.exclude_patterns = patterns.iter().map(|s| (*s).to_string()).collect();
         self
     }
 
     /// Whether to respect .gitignore files
-    pub fn respect_gitignore(mut self, respect: bool) -> Self {
+    #[must_use] pub fn respect_gitignore(mut self, respect: bool) -> Self {
         self.respect_gitignore = respect;
         self
     }
@@ -50,7 +50,7 @@ impl FileScanner {
         for entry in WalkDir::new(&self.root)
             .into_iter()
             .filter_entry(|e| !self.is_hidden(e.path()))
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
         {
             let path = entry.path();
 
@@ -84,8 +84,7 @@ impl FileScanner {
     fn is_hidden(&self, path: &Path) -> bool {
         path.file_name()
             .and_then(|n| n.to_str())
-            .map(|n| n.starts_with('.') && n != "." && n != "..")
-            .unwrap_or(false)
+            .is_some_and(|n| n.starts_with('.') && n != "." && n != "..")
     }
 
     fn should_exclude(&self, path_str: &str) -> bool {
@@ -145,12 +144,12 @@ pub fn file_size(path: &Path) -> Result<u64> {
 }
 
 /// Find files matching a pattern recursively (simple walkdir-based)
-pub fn find_files(root: &Path, pattern: &str) -> Vec<PathBuf> {
+#[must_use] pub fn find_files(root: &Path, pattern: &str) -> Vec<PathBuf> {
     let glob_pattern = glob::Pattern::new(pattern).ok();
 
     WalkDir::new(root)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| e.file_type().is_file())
         .filter(|e| {
             glob_pattern
