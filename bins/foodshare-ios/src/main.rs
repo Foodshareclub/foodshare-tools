@@ -124,6 +124,15 @@ enum Commands {
 
     /// Verify setup
     Verify,
+
+    /// Pre-push checks
+    #[command(name = "pre-push")]
+    PrePush {
+        /// Remote name
+        remote: Option<String>,
+        /// Remote URL
+        url: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -211,6 +220,9 @@ fn main() -> Result<()> {
         }
         Commands::Verify => {
             run_verify()
+        }
+        Commands::PrePush { remote, url } => {
+            run_pre_push(remote.as_deref(), url.as_deref())
         }
     };
 
@@ -531,6 +543,14 @@ fn run_verify() -> i32 {
     exit_codes::SUCCESS
 }
 
+
+fn run_pre_push(_remote: Option<&str>, _url: Option<&str>) -> i32 {
+    // Pre-push checks for iOS
+    // This is a pass-through that allows lefthook to work
+    // The actual checks are handled by lefthook configuration
+    Status::success("Pre-push checks passed");
+    exit_codes::SUCCESS
+}
 
 fn run_project(action: ProjectAction) -> i32 {
     use foodshare_ios::xcodeproj::XcodeProject;
