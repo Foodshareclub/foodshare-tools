@@ -270,8 +270,11 @@ impl GitRepo {
 /// Statistics from a git diff
 #[derive(Debug, Clone)]
 pub struct DiffStats {
+    /// Number of files changed
     pub files_changed: usize,
+    /// Number of lines inserted
     pub insertions: usize,
+    /// Number of lines deleted
     pub deletions: usize,
 }
 

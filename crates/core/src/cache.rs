@@ -26,7 +26,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::RwLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -359,10 +359,15 @@ impl Cache {
 /// Cache statistics
 #[derive(Debug, Clone, Serialize)]
 pub struct CacheStats {
+    /// Total number of cache entries
     pub total_entries: usize,
+    /// Number of expired entries
     pub expired_entries: usize,
+    /// Total size of cached data in bytes
     pub total_size_bytes: u64,
+    /// Number of entries in memory cache
     pub memory_entries: usize,
+    /// Path to the cache directory
     pub cache_dir: PathBuf,
 }
 

@@ -15,55 +15,91 @@ use thiserror::Error;
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
     // General errors (1xxx)
+    /// Unknown or unclassified error
     Unknown = 1000,
+    /// Internal error in the tool
     Internal = 1001,
+    /// Feature not yet implemented
     NotImplemented = 1002,
+    /// Operation timed out
     Timeout = 1003,
 
     // IO errors (2xxx)
+    /// General I/O error
     IoError = 2000,
+    /// File not found
     FileNotFound = 2001,
+    /// Permission denied
     PermissionDenied = 2002,
+    /// Invalid file path
     InvalidPath = 2003,
+    /// Directory not found
     DirectoryNotFound = 2004,
 
     // Configuration errors (3xxx)
+    /// General configuration error
     ConfigError = 3000,
+    /// Configuration file not found
     ConfigNotFound = 3001,
+    /// Failed to parse configuration
     ConfigParseError = 3002,
+    /// Configuration validation failed
     ConfigValidationError = 3003,
+    /// Invalid configuration value
     InvalidConfigValue = 3004,
 
     // Git errors (4xxx)
+    /// General git error
     GitError = 4000,
+    /// Not a git repository
     NotAGitRepo = 4001,
+    /// Git command failed
     GitCommandFailed = 4002,
+    /// No staged files found
     NoStagedFiles = 4003,
+    /// Branch not found
     BranchNotFound = 4004,
+    /// Merge conflict detected
     MergeConflict = 4005,
 
     // Process errors (5xxx)
+    /// General process error
     ProcessError = 5000,
+    /// Command not found
     CommandNotFound = 5001,
+    /// Command execution failed
     CommandFailed = 5002,
+    /// Process timed out
     ProcessTimeout = 5003,
 
     // Validation errors (6xxx)
+    /// General validation error
     ValidationError = 6000,
+    /// Invalid input provided
     InvalidInput = 6001,
+    /// Invalid format
     InvalidFormat = 6002,
+    /// Constraint violation
     ConstraintViolation = 6003,
 
     // Security errors (7xxx)
+    /// General security error
     SecurityError = 7000,
+    /// Secret/credential detected in code
     SecretDetected = 7001,
+    /// Unauthorized access attempt
     UnauthorizedAccess = 7002,
 
     // Platform-specific errors (8xxx)
+    /// General platform error
     PlatformError = 8000,
+    /// Xcode-related error
     XcodeError = 8001,
+    /// Gradle-related error
     GradleError = 8002,
+    /// Swift-related error
     SwiftError = 8003,
+    /// Kotlin-related error
     KotlinError = 8004,
 }
 
@@ -125,7 +161,7 @@ impl fmt::Display for Error {
 }
 
 impl Error {
-    /// Create a new error
+    /// Create a new error with the given code and message
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         Self {
             code,
@@ -169,10 +205,12 @@ impl Error {
 
     // Convenience constructors
 
+    /// Create an I/O error
     pub fn io(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::IoError, message)
     }
 
+    /// Create a file not found error
     pub fn file_not_found(path: impl AsRef<std::path::Path>) -> Self {
         Self::new(
             ErrorCode::FileNotFound,
@@ -181,10 +219,12 @@ impl Error {
         .with_suggestion("Check that the file exists and you have read permissions")
     }
 
+    /// Create a configuration error
     pub fn config(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::ConfigError, message)
     }
 
+    /// Create a config not found error
     pub fn config_not_found(path: impl AsRef<std::path::Path>) -> Self {
         Self::new(
             ErrorCode::ConfigNotFound,
@@ -193,19 +233,23 @@ impl Error {
         .with_suggestion("Create a .foodshare-hooks.toml file or use --config to specify a path")
     }
 
+    /// Create a git error
     pub fn git(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::GitError, message)
     }
 
+    /// Create a not-a-git-repo error
     pub fn not_a_git_repo() -> Self {
         Self::new(ErrorCode::NotAGitRepo, "Not a git repository")
             .with_suggestion("Run this command from within a git repository")
     }
 
+    /// Create a process error
     pub fn process(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::ProcessError, message)
     }
 
+    /// Create a command not found error
     pub fn command_not_found(cmd: &str) -> Self {
         Self::new(
             ErrorCode::CommandNotFound,
@@ -214,14 +258,17 @@ impl Error {
         .with_suggestion(format!("Install {} and ensure it's in your PATH", cmd))
     }
 
+    /// Create a validation error
     pub fn validation(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::ValidationError, message)
     }
 
+    /// Create a security error
     pub fn security(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::SecurityError, message)
     }
 
+    /// Create a secret detected error
     pub fn secret_detected(file: &str, line: usize) -> Self {
         Self::new(
             ErrorCode::SecretDetected,
@@ -234,14 +281,21 @@ impl Error {
 /// Serializable error report for logging and API responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorReport {
+    /// Error code
     pub code: ErrorCode,
+    /// Error code as string
     pub code_str: String,
+    /// Error category
     pub category: String,
+    /// Error message
     pub message: String,
+    /// Additional context
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    /// Recovery suggestion
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggestion: Option<String>,
+    /// Source error message
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
 }
@@ -251,13 +305,21 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Exit codes for CLI commands
 pub mod exit_codes {
+    /// Successful execution
     pub const SUCCESS: i32 = 0;
+    /// General failure
     pub const FAILURE: i32 = 1;
+    /// Validation error
     pub const VALIDATION_ERROR: i32 = 2;
+    /// Configuration error
     pub const CONFIG_ERROR: i32 = 3;
+    /// Git error
     pub const GIT_ERROR: i32 = 4;
+    /// Security error
     pub const SECURITY_ERROR: i32 = 5;
+    /// Command timed out
     pub const TIMEOUT: i32 = 124;
+    /// Command not found
     pub const COMMAND_NOT_FOUND: i32 = 127;
 }
 
@@ -297,7 +359,9 @@ impl From<regex::Error> for Error {
 
 /// Extension trait for adding context to Results
 pub trait ResultExt<T> {
+    /// Add context to an error result
     fn context(self, context: impl Into<String>) -> Result<T>;
+    /// Add a recovery suggestion to an error result
     fn with_suggestion(self, suggestion: impl Into<String>) -> Result<T>;
 }
 

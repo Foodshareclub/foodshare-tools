@@ -28,40 +28,60 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-/// Audit action types
+/// Audit action types for categorizing events
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AuditAction {
     // Command actions
+    /// A command was successfully executed
     CommandExecuted,
+    /// A command failed to execute
     CommandFailed,
+    /// A command was skipped
     CommandSkipped,
 
     // Configuration actions
+    /// Configuration was loaded successfully
     ConfigLoaded,
+    /// Configuration was changed
     ConfigChanged,
+    /// Configuration validation failed
     ConfigValidationFailed,
 
     // Security actions
+    /// A potential secret was detected in code
     SecretDetected,
+    /// Security check passed
     SecurityCheckPassed,
+    /// Security check failed
     SecurityCheckFailed,
+    /// Unauthorized access attempt detected
     UnauthorizedAccess,
 
     // Git actions
+    /// Commit was validated successfully
     CommitValidated,
+    /// Commit was rejected
     CommitRejected,
+    /// Push was allowed
     PushAllowed,
+    /// Push was blocked
     PushBlocked,
 
     // System actions
+    /// Health check passed
     HealthCheckPassed,
+    /// Health check failed
     HealthCheckFailed,
+    /// Cache hit occurred
     CacheHit,
+    /// Cache miss occurred
     CacheMiss,
 
     // Error actions
+    /// An error occurred
     ErrorOccurred,
+    /// An error was recovered from
     ErrorRecovered,
 }
 
@@ -89,9 +109,13 @@ impl AuditAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AuditSeverity {
+    /// Low severity - informational events
     Low,
+    /// Medium severity - warnings or minor issues
     Medium,
+    /// High severity - security or critical issues
     High,
+    /// Critical severity - requires immediate attention
     Critical,
 }
 

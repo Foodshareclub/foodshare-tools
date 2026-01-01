@@ -6,7 +6,7 @@
 //! - File system permissions
 //! - Network connectivity (optional)
 
-use crate::error::{Error, ErrorCode, Result};
+
 use crate::process::{command_exists, run_command};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -17,17 +17,23 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HealthStatus {
+    /// All checks passed
     Healthy,
+    /// Some optional checks failed
     Degraded,
+    /// Required checks failed
     Unhealthy,
+    /// Status could not be determined
     Unknown,
 }
 
 impl HealthStatus {
+    /// Returns true if status is healthy
     pub fn is_healthy(&self) -> bool {
         matches!(self, HealthStatus::Healthy)
     }
 
+    /// Returns true if status is healthy or degraded (still operational)
     pub fn is_operational(&self) -> bool {
         matches!(self, HealthStatus::Healthy | HealthStatus::Degraded)
     }
@@ -36,14 +42,20 @@ impl HealthStatus {
 /// Individual health check result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckResult {
+    /// Name of the check
     pub name: String,
+    /// Status of the check
     pub status: HealthStatus,
+    /// Optional message with details
     pub message: Option<String>,
+    /// Duration of the check in milliseconds
     pub duration_ms: u64,
+    /// Additional details as key-value pairs
     pub details: HashMap<String, String>,
 }
 
 impl CheckResult {
+    /// Create a healthy check result
     pub fn healthy(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -54,6 +66,7 @@ impl CheckResult {
         }
     }
 
+    /// Create an unhealthy check result with a message
     pub fn unhealthy(name: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -64,6 +77,7 @@ impl CheckResult {
         }
     }
 
+    /// Create a degraded check result with a message
     pub fn degraded(name: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -74,28 +88,36 @@ impl CheckResult {
         }
     }
 
+    /// Set the duration of the check
     pub fn with_duration(mut self, duration: Duration) -> Self {
         self.duration_ms = duration.as_millis() as u64;
         self
     }
 
+    /// Add a detail key-value pair
     pub fn with_detail(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.details.insert(key.into(), value.into());
         self
     }
 }
 
-/// Overall health report
+/// Overall health report containing all check results
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthReport {
+    /// Overall status based on all checks
     pub status: HealthStatus,
+    /// Individual check results
     pub checks: Vec<CheckResult>,
+    /// Total duration of all checks in milliseconds
     pub total_duration_ms: u64,
+    /// Timestamp when the report was generated
     pub timestamp: String,
+    /// Version of the tool
     pub version: String,
 }
 
 impl HealthReport {
+    /// Create a new health report from check results
     pub fn new(checks: Vec<CheckResult>, duration: Duration) -> Self {
         let status = if checks.iter().all(|c| c.status == HealthStatus::Healthy) {
             HealthStatus::Healthy
@@ -114,10 +136,12 @@ impl HealthReport {
         }
     }
 
+    /// Returns true if overall status is healthy
     pub fn is_healthy(&self) -> bool {
         self.status.is_healthy()
     }
 
+    /// Get all checks that failed (not healthy)
     pub fn failed_checks(&self) -> Vec<&CheckResult> {
         self.checks
             .iter()
@@ -138,6 +162,7 @@ impl Default for HealthChecker {
 }
 
 impl HealthChecker {
+    /// Create a new health checker with no checks
     pub fn new() -> Self {
         Self { checks: Vec::new() }
     }
@@ -193,6 +218,7 @@ impl HealthChecker {
 
 /// Trait for implementing health checks
 pub trait HealthCheck: Send + Sync {
+    /// Perform the health check and return a result
     fn check(&self) -> CheckResult;
 }
 
@@ -231,6 +257,7 @@ pub struct CommandCheck {
 }
 
 impl CommandCheck {
+    /// Create a required command check
     pub fn new(command: impl Into<String>, version_arg: Option<&str>) -> Self {
         Self {
             command: command.into(),
@@ -239,6 +266,7 @@ impl CommandCheck {
         }
     }
 
+    /// Create an optional command check (degraded if missing, not unhealthy)
     pub fn optional(command: impl Into<String>, version_arg: Option<&str>) -> Self {
         Self {
             command: command.into(),
@@ -286,6 +314,7 @@ pub struct EnvVarCheck {
 }
 
 impl EnvVarCheck {
+    /// Create a required environment variable check
     pub fn new(var_name: impl Into<String>) -> Self {
         Self {
             var_name: var_name.into(),
@@ -293,6 +322,7 @@ impl EnvVarCheck {
         }
     }
 
+    /// Create an optional environment variable check
     pub fn optional(var_name: impl Into<String>) -> Self {
         Self {
             var_name: var_name.into(),
@@ -328,6 +358,7 @@ pub struct DiskSpaceCheck {
 }
 
 impl DiskSpaceCheck {
+    /// Create a disk space check for a path with minimum required bytes
     pub fn new(path: impl Into<String>, min_bytes: u64) -> Self {
         Self {
             path: path.into(),
@@ -377,6 +408,7 @@ pub struct PathCheck {
 }
 
 impl PathCheck {
+    /// Create a check for a readable path
     pub fn readable(path: impl Into<String>) -> Self {
         Self {
             path: path.into(),
@@ -384,6 +416,7 @@ impl PathCheck {
         }
     }
 
+    /// Create a check for a writable path
     pub fn writable(path: impl Into<String>) -> Self {
         Self {
             path: path.into(),

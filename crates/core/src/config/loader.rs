@@ -7,7 +7,9 @@ use std::path::Path;
 /// Configuration wrapper
 #[derive(Debug, Clone)]
 pub struct Config {
+    /// The parsed configuration schema
     pub schema: ConfigSchema,
+    /// Path to the configuration file, if loaded from file
     pub path: Option<String>,
 }
 

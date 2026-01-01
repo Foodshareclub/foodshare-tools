@@ -7,18 +7,23 @@ use serde::{Deserialize, Serialize};
 /// Root configuration schema
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ConfigSchema {
+    /// General project configuration
     #[serde(default)]
     pub general: GeneralConfig,
 
+    /// Commit message validation configuration
     #[serde(default)]
     pub commit_msg: CommitMsgConfig,
 
+    /// Code analysis configuration
     #[serde(default)]
     pub analyze: AnalyzeConfig,
 
+    /// Test configuration
     #[serde(default)]
     pub test: TestConfig,
 
+    /// Secrets scanning configuration
     #[serde(default)]
     pub secrets: SecretsConfig,
 }

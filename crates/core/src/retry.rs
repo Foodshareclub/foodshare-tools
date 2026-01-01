@@ -19,7 +19,7 @@
 use crate::error::{Error, ErrorCode, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::Arc;
+
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -193,8 +193,11 @@ where
 /// Circuit breaker state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CircuitState {
+    /// Circuit is closed, requests flow normally
     Closed,
+    /// Circuit is open, requests are blocked
     Open,
+    /// Circuit is half-open, testing if service recovered
     HalfOpen,
 }
 
@@ -354,7 +357,9 @@ impl CircuitBreaker {
 /// Circuit breaker error
 #[derive(Debug)]
 pub enum CircuitBreakerError<E> {
+    /// Circuit is open and blocking requests
     CircuitOpen,
+    /// Execution failed with the underlying error
     ExecutionFailed(E),
 }
 
