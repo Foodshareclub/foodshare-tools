@@ -1,0 +1,25 @@
+[package]
+name = "foodshare-web"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Web-specific tools for Foodshare (Next.js/React)"
+
+[dependencies]
+foodshare-core.workspace = true
+foodshare-hooks.workspace = true
+foodshare-cli.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+owo-colors.workspace = true
+walkdir.workspace = true
+glob.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

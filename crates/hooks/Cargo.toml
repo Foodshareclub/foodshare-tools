@@ -1,0 +1,24 @@
+[package]
+name = "foodshare-hooks"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Git hooks for Foodshare development tools"
+
+[dependencies]
+foodshare-core.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+owo-colors.workspace = true
+walkdir.workspace = true
+glob.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+proptest.workspace = true

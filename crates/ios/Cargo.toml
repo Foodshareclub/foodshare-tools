@@ -1,0 +1,27 @@
+[package]
+name = "foodshare-ios"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "iOS-specific tools for Foodshare"
+
+[dependencies]
+foodshare-core.workspace = true
+foodshare-hooks.workspace = true
+foodshare-cli.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+owo-colors.workspace = true
+walkdir.workspace = true
+glob.workspace = true
+handlebars.workspace = true
+flate2.workspace = true
+petgraph.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

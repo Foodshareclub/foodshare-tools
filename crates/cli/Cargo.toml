@@ -1,0 +1,18 @@
+[package]
+name = "foodshare-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "CLI utilities for Foodshare development tools"
+
+[dependencies]
+foodshare-core.workspace = true
+clap.workspace = true
+owo-colors.workspace = true
+indicatif.workspace = true
+console.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
