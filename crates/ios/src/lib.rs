@@ -9,3 +9,4 @@
 pub mod simulator;
 pub mod swift_tools;
 pub mod xcode;
+pub mod xcodeproj;

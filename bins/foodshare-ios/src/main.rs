@@ -116,8 +116,57 @@ enum Commands {
         json: bool,
     },
 
+    /// Xcode project management
+    Project {
+        #[command(subcommand)]
+        action: ProjectAction,
+    },
+
     /// Verify setup
     Verify,
+}
+
+#[derive(Subcommand)]
+enum ProjectAction {
+    /// Show project status (missing files, broken refs, duplicates)
+    Status {
+        /// Path to .xcodeproj
+        #[arg(long, default_value = "FoodShare.xcodeproj")]
+        project: PathBuf,
+        /// Target name
+        #[arg(long, default_value = "FoodShare")]
+        target: String,
+        /// Source directory
+        #[arg(long, default_value = "FoodShare")]
+        source_dir: String,
+    },
+    /// Find missing files (on disk but not in build phase)
+    Missing {
+        /// Path to .xcodeproj
+        #[arg(long, default_value = "FoodShare.xcodeproj")]
+        project: PathBuf,
+        /// Target name
+        #[arg(long, default_value = "FoodShare")]
+        target: String,
+        /// Source directory
+        #[arg(long, default_value = "FoodShare")]
+        source_dir: String,
+    },
+    /// Find broken references (in project but file doesn't exist)
+    Broken {
+        /// Path to .xcodeproj
+        #[arg(long, default_value = "FoodShare.xcodeproj")]
+        project: PathBuf,
+    },
+    /// Find duplicate build file references
+    Duplicates {
+        /// Path to .xcodeproj
+        #[arg(long, default_value = "FoodShare.xcodeproj")]
+        project: PathBuf,
+        /// Target name
+        #[arg(long, default_value = "FoodShare")]
+        target: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -156,6 +205,9 @@ fn main() -> Result<()> {
         }
         Commands::Doctor { json } => {
             run_doctor(json)
+        }
+        Commands::Project { action } => {
+            run_project(action)
         }
         Commands::Verify => {
             run_verify()
@@ -477,4 +529,123 @@ fn run_verify() -> i32 {
 
     Status::success("Setup verified");
     exit_codes::SUCCESS
+}
+
+
+fn run_project(action: ProjectAction) -> i32 {
+    use foodshare_ios::xcodeproj::XcodeProject;
+    use owo_colors::OwoColorize;
+
+    match action {
+        ProjectAction::Status { project, target, source_dir } => {
+            Status::info(&format!("Analyzing {}...", project.display()));
+
+            match XcodeProject::open(&project) {
+                Ok(proj) => {
+                    match proj.status(&target, &source_dir) {
+                        Ok(status) => {
+                            println!();
+                            status.print();
+
+                            if status.is_clean() {
+                                println!();
+                                Status::success("Project is clean!");
+                            } else {
+                                println!();
+                                Status::warning("Project has issues. Run subcommands for details.");
+                            }
+                            exit_codes::SUCCESS
+                        }
+                        Err(e) => {
+                            Status::error(&format!("Analysis failed: {}", e));
+                            exit_codes::FAILURE
+                        }
+                    }
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to open project: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProjectAction::Missing { project, target, source_dir } => {
+            match XcodeProject::open(&project) {
+                Ok(proj) => {
+                    match proj.find_missing_files(&target, &source_dir) {
+                        Ok(missing) => {
+                            if missing.is_empty() {
+                                Status::success("No missing files found");
+                            } else {
+                                println!("{}", "Missing files (on disk but not in build phase):".bold());
+                                println!();
+                                for path in &missing {
+                                    println!("  {} {}", "+".green(), path.display());
+                                }
+                                println!();
+                                println!("Total: {} file(s)", missing.len());
+                            }
+                            exit_codes::SUCCESS
+                        }
+                        Err(e) => {
+                            Status::error(&format!("Scan failed: {}", e));
+                            exit_codes::FAILURE
+                        }
+                    }
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to open project: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProjectAction::Broken { project } => {
+            match XcodeProject::open(&project) {
+                Ok(proj) => {
+                    let broken = proj.find_broken_references();
+                    if broken.is_empty() {
+                        Status::success("No broken references found");
+                    } else {
+                        println!("{}", "Broken references (in project but file doesn't exist):".bold());
+                        println!();
+                        for fr in &broken {
+                            println!("  {} {}", "✗".red(), fr.path);
+                        }
+                        println!();
+                        println!("Total: {} reference(s)", broken.len());
+                    }
+                    exit_codes::SUCCESS
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to open project: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProjectAction::Duplicates { project, target } => {
+            match XcodeProject::open(&project) {
+                Ok(proj) => {
+                    let duplicates = proj.find_duplicate_build_files(&target);
+                    if duplicates.is_empty() {
+                        Status::success("No duplicate references found");
+                    } else {
+                        println!("{}", "Duplicate build file references:".bold());
+                        println!();
+                        for (file_ref_id, build_files) in &duplicates {
+                            println!("  File ref {}: {} duplicates", file_ref_id, build_files.len());
+                        }
+                        println!();
+                        println!("Total: {} file(s) with duplicates", duplicates.len());
+                    }
+                    exit_codes::SUCCESS
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to open project: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+    }
 }
