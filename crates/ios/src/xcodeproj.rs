@@ -58,16 +58,13 @@ impl XcodeProject {
     pub fn open(path: &Path) -> Result<Self> {
         let pbxproj_path = path.join("project.pbxproj");
         if !pbxproj_path.exists() {
-            return Err(Error::Other(format!(
-                "project.pbxproj not found at {}",
-                pbxproj_path.display()
-            )));
+            return Err(Error::file_not_found(&pbxproj_path));
         }
 
         let content = fs::read_to_string(&pbxproj_path)?;
         let project_dir = path
             .parent()
-            .ok_or_else(|| Error::Other("Invalid project path".to_string()))?
+            .ok_or_else(|| Error::validation("Invalid project path"))?
             .to_path_buf();
 
         let mut project = Self {

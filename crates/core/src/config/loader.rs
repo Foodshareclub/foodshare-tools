@@ -59,10 +59,10 @@ fn find_config_file() -> Option<String> {
 /// Load and parse a TOML configuration file
 fn load_config_file(path: &str) -> Result<ConfigSchema> {
     let content = std::fs::read_to_string(path)
-        .map_err(|e| Error::Config(format!("Failed to read config file {}: {}", path, e)))?;
+        .map_err(|e| Error::config(format!("Failed to read config file {}: {}", path, e)))?;
 
     toml::from_str(&content)
-        .map_err(|e| Error::Config(format!("Failed to parse config file {}: {}", path, e)))
+        .map_err(|e| Error::config(format!("Failed to parse config file {}: {}", path, e)))
 }
 
 #[cfg(test)]

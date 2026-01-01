@@ -1,17 +1,25 @@
 //! Process execution utilities
 //!
-//! Provides a unified interface for running external commands.
+//! Provides a unified interface for running external commands with:
+//! - Output capture
+//! - Directory context
+//! - Environment variables
+//! - Streaming output
 
 use crate::error::{Error, Result};
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
 /// Result of a command execution
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CommandResult {
+    /// Whether the command succeeded (exit code 0)
     pub success: bool,
+    /// Exit code of the command
     pub exit_code: i32,
+    /// Standard output
     pub stdout: String,
+    /// Standard error
     pub stderr: String,
 }
 
@@ -45,7 +53,7 @@ pub fn run_command(program: &str, args: &[&str]) -> Result<CommandResult> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .map_err(|e| Error::Process(format!("Failed to execute {}: {}", program, e)))?;
+        .map_err(|e| Error::process(format!("Failed to execute {}: {}", program, e)))?;
 
     Ok(CommandResult::from_output(output))
 }
@@ -58,7 +66,7 @@ pub fn run_command_in_dir(program: &str, args: &[&str], dir: &Path) -> Result<Co
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .map_err(|e| Error::Process(format!("Failed to execute {}: {}", program, e)))?;
+        .map_err(|e| Error::process(format!("Failed to execute {}: {}", program, e)))?;
 
     Ok(CommandResult::from_output(output))
 }
@@ -80,14 +88,13 @@ pub fn run_command_with_env(
 
     let output = cmd
         .output()
-        .map_err(|e| Error::Process(format!("Failed to execute {}: {}", program, e)))?;
+        .map_err(|e| Error::process(format!("Failed to execute {}: {}", program, e)))?;
 
     Ok(CommandResult::from_output(output))
 }
 
 /// Check if a command exists in PATH
 pub fn command_exists(program: &str) -> bool {
-    // Use `command -v` on Unix or `where` on Windows
     #[cfg(unix)]
     {
         Command::new("sh")
@@ -151,7 +158,7 @@ pub fn run_command_streaming(program: &str, args: &[&str]) -> Result<i32> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .map_err(|e| Error::Process(format!("Failed to execute {}: {}", program, e)))?;
+        .map_err(|e| Error::process(format!("Failed to execute {}: {}", program, e)))?;
 
     Ok(status.code().unwrap_or(-1))
 }
@@ -164,7 +171,7 @@ pub fn run_command_streaming_in_dir(program: &str, args: &[&str], dir: &Path) ->
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .map_err(|e| Error::Process(format!("Failed to execute {}: {}", program, e)))?;
+        .map_err(|e| Error::process(format!("Failed to execute {}: {}", program, e)))?;
 
     Ok(status.code().unwrap_or(-1))
 }

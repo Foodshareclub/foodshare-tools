@@ -7,26 +7,32 @@ members = [
     "crates/ios",
     "crates/android",
     "crates/web",
+    "crates/telemetry",
     "bins/foodshare-ios",
     "bins/foodshare-android",
     "bins/lefthook-rs",
 ]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
-authors = ["Foodshare Team"]
+authors = ["Foodshare Team <engineering@foodshare.club>"]
 license = "MIT"
 rust-version = "1.75"
+repository = "https://github.com/Foodshareclub/foodshare-tools"
+homepage = "https://github.com/Foodshareclub/foodshare-tools"
+documentation = "https://docs.rs/foodshare-tools"
+keywords = ["cli", "git-hooks", "development-tools", "foodshare"]
+categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
 # CLI Framework
-clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
+clap = { version = "4.4", features = ["derive", "env", "wrap_help", "string"] }
 
 # Terminal Output
 owo-colors = { version = "4.0", features = ["supports-colors"] }
 colored = "2.1"
-indicatif = "0.17"
+indicatif = { version = "0.17", features = ["rayon"] }
 console = "0.15"
 
 # Parallelism
@@ -35,6 +41,7 @@ rayon = "1.8"
 # File System
 walkdir = "2.4"
 glob = "0.3"
+notify = "6.1"
 
 # Pattern Matching
 regex = "1.10"
@@ -44,22 +51,23 @@ once_cell = "1.19"
 toml = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
-# Process Execution
-# which = "5.0"  # Removed due to edition2024 dependency
+config = "0.14"
 
 # Error Handling
 thiserror = "1.0"
 anyhow = "1.0"
+miette = { version = "7.0", features = ["fancy"] }
+
+# Logging & Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
 
 # Date/Time
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 
 # UUID Generation
-uuid = { version = "1.0", features = ["v4"] }
-
-# Git Operations
-# Using command-line git instead of git2 to avoid edition2024 dependency issues
+uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # Shell expansion
 shellexpand = "3.1"
@@ -79,9 +87,22 @@ handlebars = "5.1"
 # Compression (xcactivitylog parsing)
 flate2 = "1.0"
 
-# Pin transitive dependencies to avoid edition2024 issue
-# home = "=0.5.9"
-# globset = "=0.4.14"
+# Async runtime (for telemetry)
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "sync", "time"] }
+
+# HTTP client (for telemetry)
+reqwest = { version = "0.11", default-features = false, features = ["rustls-tls", "json"] }
+
+# Metrics
+metrics = "0.22"
+metrics-exporter-prometheus = "0.13"
+
+# Hashing (for cache keys, checksums)
+sha2 = "0.10"
+hex = "0.4"
+
+# Semver parsing
+semver = "1.0"
 
 # Internal crates
 foodshare-core = { path = "crates/core" }
@@ -90,7 +111,9 @@ foodshare-cli = { path = "crates/cli" }
 foodshare-ios = { path = "crates/ios" }
 foodshare-android = { path = "crates/android" }
 foodshare-web = { path = "crates/web" }
+foodshare-telemetry = { path = "crates/telemetry" }
 
+# Testing
 [workspace.dependencies.proptest]
 version = "1.4"
 
@@ -100,3 +123,32 @@ features = ["html_reports"]
 
 [workspace.dependencies.tokio-test]
 version = "0.4"
+
+[workspace.dependencies.assert_cmd]
+version = "2.0"
+
+[workspace.dependencies.predicates]
+version = "3.0"
+
+[workspace.dependencies.insta]
+version = "1.34"
+features = ["json", "yaml"]
+
+# Profile optimizations
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+opt-level = 3
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.test]
+opt-level = 1
+
+[profile.bench]
+lto = true
+codegen-units = 1

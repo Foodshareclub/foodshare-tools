@@ -18,7 +18,7 @@ impl GitRepo {
         // Verify it's a git repo
         let result = run_command_in_dir("git", &["rev-parse", "--git-dir"], path)?;
         if !result.success {
-            return Err(Error::Other("Not a git repository".to_string()));
+            return Err(Error::not_a_git_repo());
         }
 
         // Get the working directory root
@@ -126,7 +126,7 @@ impl GitRepo {
         if result.success {
             Ok(())
         } else {
-            Err(Error::Other(format!("Failed to stage file: {}", result.stderr)))
+            Err(Error::git(format!("Failed to stage file: {}", result.stderr)))
         }
     }
 
