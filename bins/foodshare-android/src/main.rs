@@ -167,14 +167,17 @@ enum SwiftCoreAction {
         #[arg(long, default_value = "debug")]
         configuration: String,
         /// FoodshareCore project directory
-        #[arg(long, default_value = "../FoodshareCore")]
+        #[arg(long, default_value = "../foodshare-core")]
         project_dir: PathBuf,
         /// Output directory for built libraries
-        #[arg(long, default_value = "android-libs")]
-        output_dir: PathBuf,
-        /// Android API level
-        #[arg(long, default_value = "28")]
+        #[arg(long)]
+        output_dir: Option<PathBuf>,
+        /// Android API level (default: 24 for Swift 6.2)
+        #[arg(long, default_value = "24")]
         api_level: u8,
+        /// Auto-copy to Android project
+        #[arg(long)]
+        copy: bool,
     },
     /// Copy built libraries to Android project
     Copy {
@@ -636,9 +639,7 @@ fn run_verify() -> i32 {
 }
 
 fn run_swift_core(action: SwiftCoreAction) -> i32 {
-    use foodshare_android::swift_core::{
-        self, BuildConfig, SwiftAndroidTarget,
-    };
+    use foodshare_android::swift_core::{self, BuildConfig, SwiftAndroidTarget};
     use owo_colors::OwoColorize;
 
     match action {
@@ -669,8 +670,11 @@ fn run_swift_core(action: SwiftCoreAction) -> i32 {
             project_dir,
             output_dir,
             api_level,
+            copy,
         } => {
             println!("{}", "Building FoodshareCore for Android".bold());
+            println!("Architecture: {}", target);
+            println!("Configuration: {}", configuration);
             println!();
 
             // Check prerequisites first
@@ -688,12 +692,23 @@ fn run_swift_core(action: SwiftCoreAction) -> i32 {
                 }
             }
 
+            // Determine output directory
+            let out_dir = output_dir.unwrap_or_else(|| project_dir.join("android-libs"));
+
+            // Auto-detect Android project for copy
+            let android_project_dir = if copy {
+                swift_core::detect_android_project(&project_dir)
+            } else {
+                None
+            };
+
             let config = BuildConfig {
                 project_dir,
-                output_dir,
+                output_dir: out_dir,
                 api_level,
                 configuration,
-                static_stdlib: true,
+                static_stdlib: false,
+                android_project_dir,
             };
 
             let results = match target.as_str() {
@@ -720,6 +735,8 @@ fn run_swift_core(action: SwiftCoreAction) -> i32 {
 
                     if success_count == total {
                         Status::success(&format!("Built {} target(s) successfully", total));
+                        println!();
+                        println!("{}", "Build complete!".green().bold());
                         exit_codes::SUCCESS
                     } else {
                         for result in &build_results {

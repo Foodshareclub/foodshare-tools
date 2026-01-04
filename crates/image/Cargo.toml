@@ -1,0 +1,34 @@
+[package]
+name = "foodshare-image"
+description = "Image processing utilities for format detection and resizing"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["image", "resize", "format-detection", "metadata", "optimization"]
+categories = ["multimedia::images", "command-line-utilities"]
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+image = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[features]
+default = ["processing"]
+processing = ["image"]
+parallel = ["rayon"]
+
+[[bench]]
+name = "resize"
+harness = false
+
+[lib]
+crate-type = ["rlib"]

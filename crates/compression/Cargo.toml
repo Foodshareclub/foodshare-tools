@@ -1,0 +1,37 @@
+[package]
+name = "foodshare-compression"
+description = "Response compression utilities with Brotli support"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["compression", "brotli", "gzip", "etag", "deflate"]
+categories = ["compression", "encoding", "wasm"]
+exclude = ["pkg/"]
+
+[dependencies]
+thiserror = { workspace = true }
+brotli = { workspace = true }
+flate2 = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# WASM dependencies (feature-gated)
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[features]
+default = []
+wasm = ["wasm-bindgen"]
+
+[[bench]]
+name = "compress"
+harness = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]

@@ -1,0 +1,36 @@
+[package]
+name = "foodshare-search"
+description = "High-performance fuzzy search and text matching"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["search", "fuzzy", "levenshtein", "text-matching", "relevance"]
+categories = ["algorithms", "text-processing", "wasm"]
+exclude = ["pkg/"]
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+unicode-segmentation = { workspace = true }
+once_cell = { workspace = true }
+rayon = { workspace = true, optional = true }
+
+# WASM dependencies (feature-gated)
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+criterion = { workspace = true }
+
+[features]
+default = ["parallel"]
+parallel = ["rayon"]
+wasm = ["wasm-bindgen"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]

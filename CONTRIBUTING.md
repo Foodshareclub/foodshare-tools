@@ -1,86 +1,79 @@
 # Contributing to Foodshare Tools
 
-Thank you for your interest in contributing to Foodshare Tools! This document provides guidelines for contributing.
+Thank you for your interest in contributing! This document provides guidelines for contributing to our Rust crates and WASM packages.
 
 ## Getting Started
 
-1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/foodshare-tools.git`
-3. Create a branch: `git checkout -b feature/your-feature`
-4. Make your changes
-5. Run tests: `cargo test --workspace`
-6. Commit with conventional commits: `git commit -m "feat: add new feature"`
-7. Push and create a Pull Request
-
-## Development Setup
-
 ### Prerequisites
 
-- Rust 1.75+ (install via [rustup](https://rustup.rs/))
-- For iOS development: Xcode, swiftformat, swiftlint
-- For Android development: Android SDK, ktlint, detekt
-- For web development: Node.js
+- Rust 1.75 or later
+- wasm-pack (for WASM builds)
+- Node.js 18+ (for npm packages)
 
-### Building
+### Setup
 
 ```bash
-# Build all crates
-cargo build --workspace
-
-# Build specific binary
-cargo build -p foodshare-ios-cli
-cargo build -p foodshare-android-cli
-cargo build -p lefthook-rs
-
-# Run tests
-cargo test --workspace
-
-# Run clippy
-cargo clippy --workspace -- -D warnings
-
-# Format code
-cargo fmt --all
+git clone https://github.com/Foodshareclub/foodshare-tools.git
+cd foodshare-tools
+cargo build
+cargo test
 ```
 
-## Code Style
+## Development Workflow
 
-- Follow Rust conventions and idioms
-- Use `cargo fmt` before committing
-- Run `cargo clippy` and fix warnings
-- Write tests for new functionality
-- Document public APIs with doc comments
+### 1. Fork and Clone
 
-## Commit Messages
+```bash
+git clone https://github.com/YOUR_USERNAME/foodshare-tools.git
+git remote add upstream https://github.com/Foodshareclub/foodshare-tools.git
+```
 
-We use [Conventional Commits](https://www.conventionalcommits.org/):
+### 2. Create a Branch
 
-- `feat:` - New features
-- `fix:` - Bug fixes
-- `docs:` - Documentation changes
-- `style:` - Code style changes (formatting, etc.)
-- `refactor:` - Code refactoring
-- `test:` - Adding or updating tests
-- `chore:` - Maintenance tasks
+```bash
+git checkout -b feature/your-feature-name
+# or
+git checkout -b fix/your-bug-fix
+```
 
-## Pull Request Process
+### 3. Make Changes
 
-1. Update documentation if needed
-2. Add tests for new functionality
-3. Ensure all tests pass
-4. Update CHANGELOG.md if applicable
-5. Request review from maintainers
+- Follow existing code style
+- Add tests for new functionality
+- Ensure all tests pass: `cargo test`
 
-## Reporting Issues
+### 4. Commit Guidelines
 
-- Use GitHub Issues
-- Include reproduction steps
-- Include Rust version (`rustc --version`)
-- Include OS and platform information
+We follow conventional commits:
 
-## Code of Conduct
+```
+feat: add new distance calculation method
+fix: correct PostGIS WKT parsing edge case
+docs: update README with usage examples
+perf: optimize batch distance calculation
+```
 
-Be respectful and inclusive. We follow the [Rust Code of Conduct](https://www.rust-lang.org/policies/code-of-conduct).
+### 5. Submit Pull Request
+
+1. Push to your fork
+2. Open a Pull Request against `main`
+3. Wait for review
+
+## Testing
+
+```bash
+cargo test                           # All tests
+cargo test -p foodshare-geo          # Specific crate
+cargo bench -p foodshare-geo         # Benchmarks
+```
+
+## Building WASM
+
+```bash
+curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+wasm-pack build crates/geo --target web --features wasm
+```
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under MIT.

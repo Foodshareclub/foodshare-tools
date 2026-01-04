@@ -1,0 +1,23 @@
+[package]
+name = "fs-image"
+description = "CLI tool for image processing and optimization"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+foodshare-image = { workspace = true }
+foodshare-cli = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+walkdir = { workspace = true }
+rayon = { workspace = true }
+indicatif = { workspace = true }
+anyhow = { workspace = true }
+
+[[bin]]
+name = "fs-image"
+path = "src/main.rs"

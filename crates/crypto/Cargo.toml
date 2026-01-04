@@ -1,0 +1,32 @@
+[package]
+name = "foodshare-crypto"
+description = "Cryptographic utilities for webhook verification and HMAC"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["hmac", "sha256", "webhook", "crypto", "security"]
+categories = ["cryptography", "authentication", "wasm"]
+exclude = ["pkg/"]
+
+[dependencies]
+thiserror = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+sha1 = { workspace = true }
+subtle = { workspace = true }
+base64 = { workspace = true }
+hex = { workspace = true }
+
+# WASM dependencies (feature-gated)
+wasm-bindgen = { workspace = true, optional = true }
+
+[features]
+default = []
+wasm = ["wasm-bindgen"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]

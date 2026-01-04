@@ -1,11 +1,28 @@
 //! FoodshareCore Swift build for Android
 //!
-//! Rust implementation of the build-android.sh and setup-android-sdk.sh scripts.
+//! Rust implementation of the build-android.sh script from foodshare-core.
+//! Builds FoodshareCore Swift library for Android using Swift SDK.
+//!
+//! # Usage
+//!
+//! ```bash
+//! # Build for all architectures (debug)
+//! foodshare-android swift-core build --target all
+//!
+//! # Build for ARM64 only (release)
+//! foodshare-android swift-core build --target arm64 --configuration release
+//!
+//! # Check prerequisites
+//! foodshare-android swift-core check
+//! ```
 
 use foodshare_core::error::Result;
 use foodshare_core::process::{command_exists, run_command, run_command_in_dir};
 use owo_colors::OwoColorize;
 use std::path::{Path, PathBuf};
+
+/// Default Android API level for Swift SDK (matches Swift 6.2 SDK)
+pub const DEFAULT_API_LEVEL: u8 = 24;
 
 /// Target architecture for Swift cross-compilation
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -17,7 +34,7 @@ pub enum SwiftAndroidTarget {
 }
 
 impl SwiftAndroidTarget {
-    /// Get the Swift SDK identifier
+    /// Get the Swift SDK identifier for Swift 6.2
     pub fn sdk_id(&self, api_level: u8) -> String {
         match self {
             Self::Arm64 => format!("aarch64-unknown-linux-android{}", api_level),
@@ -40,6 +57,11 @@ impl SwiftAndroidTarget {
             Self::X86_64 => "x86_64",
         }
     }
+
+    /// Get all supported targets
+    pub fn all() -> &'static [SwiftAndroidTarget] {
+        &[SwiftAndroidTarget::Arm64, SwiftAndroidTarget::X86_64]
+    }
 }
 
 /// Build configuration
@@ -50,6 +72,8 @@ pub struct BuildConfig {
     pub api_level: u8,
     pub configuration: String,
     pub static_stdlib: bool,
+    /// Path to Android project for auto-copy (optional)
+    pub android_project_dir: Option<PathBuf>,
 }
 
 impl Default for BuildConfig {
@@ -57,9 +81,10 @@ impl Default for BuildConfig {
         Self {
             project_dir: PathBuf::from("."),
             output_dir: PathBuf::from("android-libs"),
-            api_level: 28,
+            api_level: DEFAULT_API_LEVEL,
             configuration: "debug".to_string(),
-            static_stdlib: true,
+            static_stdlib: false, // Match shell script behavior
+            android_project_dir: None,
         }
     }
 }
@@ -151,11 +176,7 @@ pub fn build_for_target(
         sdk_id
     );
 
-    let mut args = vec![
-        "build",
-        "--swift-sdk",
-        &sdk_id,
-    ];
+    let mut args = vec!["build", "--swift-sdk", &sdk_id];
 
     if config.static_stdlib {
         args.push("--static-swift-stdlib");
@@ -166,7 +187,14 @@ pub fn build_for_target(
         args.push("release");
     }
 
-    let result = run_command_in_dir("swift", &args, &config.project_dir)?;
+    // Use /usr/bin/swift to ensure we use the system Swift (matches shell script)
+    let swift_cmd = if Path::new("/usr/bin/swift").exists() {
+        "/usr/bin/swift"
+    } else {
+        "swift"
+    };
+
+    let result = run_command_in_dir(swift_cmd, &args, &config.project_dir)?;
 
     if !result.success {
         return Ok(BuildResult {
@@ -177,58 +205,85 @@ pub fn build_for_target(
         });
     }
 
-    // Find and copy the output library
-    let build_config_dir = &config.configuration;
-    let lib_name = "libFoodshareCore.so";
-    let build_path = config.project_dir
-        .join(".build")
-        .join(&sdk_id)
-        .join(build_config_dir)
-        .join(lib_name);
+    // Find the output library using glob pattern (matches shell script behavior)
+    let output_path = find_and_copy_library(target, config, &sdk_id)?;
 
-    let output_arch_dir = config.output_dir.join(target.jni_arch());
-    std::fs::create_dir_all(&output_arch_dir)?;
-
-    let output_path = output_arch_dir.join(lib_name);
-
-    if build_path.exists() {
-        std::fs::copy(&build_path, &output_path)?;
-        println!(
-            "  {} Built: {}",
-            "OK".green(),
-            output_path.display()
-        );
-        Ok(BuildResult {
-            target,
-            success: true,
-            output_path: Some(output_path),
-            error: None,
-        })
-    } else {
-        // Try .dylib extension
-        let dylib_path = build_path.with_extension("dylib");
-        if dylib_path.exists() {
-            std::fs::copy(&dylib_path, &output_path)?;
-            println!(
-                "  {} Built: {}",
-                "OK".green(),
-                output_path.display()
-            );
+    match output_path {
+        Some(path) => {
+            println!("  {} Built: {}", "✓".green(), path.display());
             Ok(BuildResult {
                 target,
                 success: true,
-                output_path: Some(output_path),
+                output_path: Some(path),
                 error: None,
             })
-        } else {
+        }
+        None => {
+            println!("  {} Library not found for {}", "⚠".yellow(), target.jni_arch());
             Ok(BuildResult {
                 target,
                 success: false,
                 output_path: None,
-                error: Some(format!("Library not found at: {}", build_path.display())),
+                error: Some(format!("Library not found for {}", target.jni_arch())),
             })
         }
     }
+}
+
+/// Find and copy the built library to output directory
+fn find_and_copy_library(
+    target: SwiftAndroidTarget,
+    config: &BuildConfig,
+    sdk_id: &str,
+) -> Result<Option<PathBuf>> {
+    let lib_name = "libFoodshareCore.so";
+    let build_dir = config.project_dir.join(".build");
+
+    // Search for the library in the build directory (matches shell script: find .build -name "libFoodshareCore.so" -path "*$sdk*")
+    let lib_path = find_library_in_build(&build_dir, lib_name, sdk_id)?;
+
+    if let Some(source_path) = lib_path {
+        let output_arch_dir = config.output_dir.join(target.jni_arch());
+        std::fs::create_dir_all(&output_arch_dir)?;
+
+        let output_path = output_arch_dir.join(lib_name);
+        std::fs::copy(&source_path, &output_path)?;
+
+        return Ok(Some(output_path));
+    }
+
+    Ok(None)
+}
+
+/// Recursively find library in build directory matching SDK pattern
+fn find_library_in_build(
+    build_dir: &Path,
+    lib_name: &str,
+    sdk_pattern: &str,
+) -> Result<Option<PathBuf>> {
+    if !build_dir.exists() {
+        return Ok(None);
+    }
+
+    for entry in walkdir::WalkDir::new(build_dir)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if path.is_file() {
+            if let Some(name) = path.file_name() {
+                if name == lib_name {
+                    // Check if path contains the SDK pattern
+                    if path.to_string_lossy().contains(sdk_pattern) {
+                        return Ok(Some(path.to_path_buf()));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 /// Build result
@@ -242,8 +297,43 @@ pub struct BuildResult {
 
 /// Build for all targets
 pub fn build_all(config: &BuildConfig) -> Result<Vec<BuildResult>> {
-    let targets = [SwiftAndroidTarget::Arm64, SwiftAndroidTarget::X86_64];
     let mut results = Vec::new();
+
+    // Clean output directory (matches shell script: rm -rf "$OUTPUT_DIR")
+    if config.output_dir.exists() {
+        std::fs::remove_dir_all(&config.output_dir)?;
+    }
+    std::fs::create_dir_all(&config.output_dir)?;
+
+    for target in SwiftAndroidTarget::all() {
+        let result = build_for_target(*target, config)?;
+        results.push(result);
+    }
+
+    // Auto-copy to Android project if configured (matches shell script behavior)
+    if let Some(ref android_dir) = config.android_project_dir {
+        if android_dir.exists() {
+            println!();
+            println!("  {} Copying to Android project...", "->".blue());
+            copy_to_android_project(&config.output_dir, android_dir)?;
+        }
+    }
+
+    Ok(results)
+}
+
+/// Build for a single target by name
+pub fn build_single(target_name: &str, config: &BuildConfig) -> Result<BuildResult> {
+    let target = match target_name.to_lowercase().as_str() {
+        "arm64" | "arm64-v8a" | "aarch64" => SwiftAndroidTarget::Arm64,
+        "x86_64" | "x86-64" => SwiftAndroidTarget::X86_64,
+        _ => {
+            return Err(foodshare_core::error::Error::new(
+                foodshare_core::error::ErrorCode::InvalidInput,
+                format!("Unknown target: {}. Use arm64 or x86_64", target_name),
+            ));
+        }
+    };
 
     // Clean output directory
     if config.output_dir.exists() {
@@ -251,12 +341,20 @@ pub fn build_all(config: &BuildConfig) -> Result<Vec<BuildResult>> {
     }
     std::fs::create_dir_all(&config.output_dir)?;
 
-    for target in targets {
-        let result = build_for_target(target, config)?;
-        results.push(result);
+    let result = build_for_target(target, config)?;
+
+    // Auto-copy to Android project if configured
+    if result.success {
+        if let Some(ref android_dir) = config.android_project_dir {
+            if android_dir.exists() {
+                println!();
+                println!("  {} Copying to Android project...", "->".blue());
+                copy_to_android_project(&config.output_dir, android_dir)?;
+            }
+        }
     }
 
-    Ok(results)
+    Ok(result)
 }
 
 /// Copy built libraries to Android project
@@ -283,7 +381,7 @@ pub fn copy_to_android_project(
                     std::fs::copy(&lib_path, &dest_path)?;
                     println!(
                         "  {} Copied to: {}",
-                        "OK".green(),
+                        "✓".green(),
                         dest_path.display()
                     );
                 }
@@ -294,12 +392,22 @@ pub fn copy_to_android_project(
     Ok(())
 }
 
+/// Detect Android project relative to FoodshareCore
+pub fn detect_android_project(project_dir: &Path) -> Option<PathBuf> {
+    // Check ../foodshare-android (matches shell script)
+    let android_dir = project_dir.join("../foodshare-android");
+    if android_dir.exists() {
+        return Some(android_dir);
+    }
+    None
+}
+
 /// Print setup instructions
 pub fn print_setup_instructions() {
     println!();
     println!("{}", "Swift SDK for Android Setup".bold());
     println!();
-    println!("1. Install snapshot toolchain:");
+    println!("1. Install Swift 6.2+ toolchain:");
     println!("   swiftly install main-snapshot-2025-12-17");
     println!("   swiftly use main-snapshot-2025-12-17");
     println!();
@@ -313,6 +421,45 @@ pub fn print_setup_instructions() {
     println!("4. Build FoodshareCore:");
     println!("   foodshare-android swift-core build --target all");
     println!();
+    println!("   Or from foodshare-core directory:");
+    println!("   foodshare-android swift-core build --target all --project-dir .");
+    println!();
+}
+
+/// Main entry point matching shell script behavior
+///
+/// Equivalent to: ./scripts/build-android.sh [arm64|x86_64|all] [debug|release]
+pub fn build_android(
+    arch: &str,
+    configuration: &str,
+    project_dir: &Path,
+) -> Result<Vec<BuildResult>> {
+    println!("{}", "Building FoodshareCore for Android...".bold());
+    println!("Architecture: {}", arch);
+    println!("Configuration: {}", configuration);
+    println!();
+
+    let output_dir = project_dir.join("android-libs");
+    let android_project_dir = detect_android_project(project_dir);
+
+    let config = BuildConfig {
+        project_dir: project_dir.to_path_buf(),
+        output_dir,
+        api_level: DEFAULT_API_LEVEL,
+        configuration: configuration.to_string(),
+        static_stdlib: false,
+        android_project_dir,
+    };
+
+    let results = match arch.to_lowercase().as_str() {
+        "all" => build_all(&config)?,
+        target => vec![build_single(target, &config)?],
+    };
+
+    println!();
+    println!("{}", "Build complete!".green().bold());
+
+    Ok(results)
 }
 
 #[cfg(test)]
@@ -322,12 +469,12 @@ mod tests {
     #[test]
     fn test_swift_android_target_sdk_id() {
         assert_eq!(
-            SwiftAndroidTarget::Arm64.sdk_id(28),
-            "aarch64-unknown-linux-android28"
+            SwiftAndroidTarget::Arm64.sdk_id(24),
+            "aarch64-unknown-linux-android24"
         );
         assert_eq!(
-            SwiftAndroidTarget::X86_64.sdk_id(28),
-            "x86_64-unknown-linux-android28"
+            SwiftAndroidTarget::X86_64.sdk_id(24),
+            "x86_64-unknown-linux-android24"
         );
     }
 
@@ -340,8 +487,23 @@ mod tests {
     #[test]
     fn test_build_config_default() {
         let config = BuildConfig::default();
-        assert_eq!(config.api_level, 28);
+        assert_eq!(config.api_level, DEFAULT_API_LEVEL);
         assert_eq!(config.configuration, "debug");
-        assert!(config.static_stdlib);
+        assert!(!config.static_stdlib); // Matches shell script
+        assert!(config.android_project_dir.is_none());
+    }
+
+    #[test]
+    fn test_all_targets() {
+        let targets = SwiftAndroidTarget::all();
+        assert_eq!(targets.len(), 2);
+        assert!(targets.contains(&SwiftAndroidTarget::Arm64));
+        assert!(targets.contains(&SwiftAndroidTarget::X86_64));
+    }
+
+    #[test]
+    fn test_target_display_names() {
+        assert_eq!(SwiftAndroidTarget::Arm64.display_name(), "ARM64");
+        assert_eq!(SwiftAndroidTarget::X86_64.display_name(), "x86_64");
     }
 }
