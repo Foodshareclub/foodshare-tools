@@ -1,0 +1,3 @@
+[submodule "crates/motherduck-sync"]
+	path = crates/motherduck-sync
+	url = https://github.com/Foodshareclub/motherduck-sync.git
