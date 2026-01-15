@@ -1,0 +1,50 @@
+[package]
+name = "foodshare-i18n"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Enterprise-grade translation management CLI for Foodshare"
+keywords = ["i18n", "localization", "translations", "cli"]
+categories = ["command-line-utilities", "internationalization"]
+
+[[bin]]
+name = "foodshare-i18n"
+path = "src/main.rs"
+
+[dependencies]
+# CLI Framework
+clap = { workspace = true }
+
+# Terminal Output
+owo-colors = { workspace = true }
+indicatif = { workspace = true }
+console = { workspace = true }
+
+# Async Runtime
+tokio = { workspace = true }
+
+# HTTP Client
+reqwest = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error Handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Date/Time
+chrono = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+tokio-test = { workspace = true }
