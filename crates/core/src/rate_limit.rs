@@ -162,7 +162,8 @@ impl RateLimiter {
 
     /// Try to acquire multiple tokens
     #[must_use] pub fn try_acquire_n(&self, key: &str, tokens: u32) -> bool {
-        let mut buckets = self.buckets.write().unwrap();
+        // Handle poisoned lock by recovering the data (still valid even after panic)
+        let mut buckets = self.buckets.write().unwrap_or_else(|e| e.into_inner());
         let bucket = buckets
             .entry(key.to_string())
             .or_insert_with(|| TokenBucket::new(self.default_config.clone()));
@@ -171,7 +172,7 @@ impl RateLimiter {
 
     /// Get available tokens for a key
     #[must_use] pub fn available(&self, key: &str) -> u32 {
-        let mut buckets = self.buckets.write().unwrap();
+        let mut buckets = self.buckets.write().unwrap_or_else(|e| e.into_inner());
         let bucket = buckets
             .entry(key.to_string())
             .or_insert_with(|| TokenBucket::new(self.default_config.clone()));
@@ -180,7 +181,7 @@ impl RateLimiter {
 
     /// Get time until tokens are available
     #[must_use] pub fn time_until_available(&self, key: &str, tokens: u32) -> Duration {
-        let mut buckets = self.buckets.write().unwrap();
+        let mut buckets = self.buckets.write().unwrap_or_else(|e| e.into_inner());
         let bucket = buckets
             .entry(key.to_string())
             .or_insert_with(|| TokenBucket::new(self.default_config.clone()));
@@ -189,19 +190,19 @@ impl RateLimiter {
 
     /// Reset rate limit for a key
     pub fn reset(&self, key: &str) {
-        let mut buckets = self.buckets.write().unwrap();
+        let mut buckets = self.buckets.write().unwrap_or_else(|e| e.into_inner());
         buckets.remove(key);
     }
 
     /// Reset all rate limits
     pub fn reset_all(&self) {
-        let mut buckets = self.buckets.write().unwrap();
+        let mut buckets = self.buckets.write().unwrap_or_else(|e| e.into_inner());
         buckets.clear();
     }
 
     /// Get rate limit status
     #[must_use] pub fn status(&self, key: &str) -> RateLimitStatus {
-        let mut buckets = self.buckets.write().unwrap();
+        let mut buckets = self.buckets.write().unwrap_or_else(|e| e.into_inner());
         let bucket = buckets
             .entry(key.to_string())
             .or_insert_with(|| TokenBucket::new(self.default_config.clone()));
@@ -242,11 +243,12 @@ impl SlidingWindowLimiter {
 
     /// Try to acquire permission
     #[must_use] pub fn try_acquire(&self, key: &str) -> bool {
-        let mut windows = self.windows.write().unwrap();
+        let mut windows = self.windows.write().unwrap_or_else(|e| e.into_inner());
         let window = windows.entry(key.to_string()).or_default();
 
         let now = Instant::now();
-        let cutoff = now.checked_sub(self.config.window).unwrap();
+        // Use saturating subtraction to avoid panic on underflow
+        let cutoff = now.checked_sub(self.config.window).unwrap_or(Instant::now());
 
         // Remove old entries
         window.retain(|&t| t > cutoff);
@@ -261,17 +263,17 @@ impl SlidingWindowLimiter {
 
     /// Get current request count in window
     #[must_use] pub fn current_count(&self, key: &str) -> usize {
-        let mut windows = self.windows.write().unwrap();
+        let mut windows = self.windows.write().unwrap_or_else(|e| e.into_inner());
         let window = windows.entry(key.to_string()).or_default();
 
-        let cutoff = Instant::now().checked_sub(self.config.window).unwrap();
+        let cutoff = Instant::now().checked_sub(self.config.window).unwrap_or(Instant::now());
         window.retain(|&t| t > cutoff);
         window.len()
     }
 
     /// Reset for a key
     pub fn reset(&self, key: &str) {
-        let mut windows = self.windows.write().unwrap();
+        let mut windows = self.windows.write().unwrap_or_else(|e| e.into_inner());
         windows.remove(key);
     }
 }

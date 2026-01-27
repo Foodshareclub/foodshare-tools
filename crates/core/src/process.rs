@@ -7,8 +7,9 @@
 //! - Streaming output
 
 use crate::error::{Error, Result};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use which::which as which_binary;
 
 /// Result of a command execution
 #[derive(Debug, Clone)]
@@ -93,62 +94,43 @@ pub fn run_command_with_env(
     Ok(CommandResult::from_output(output))
 }
 
-/// Check if a command exists in PATH
-#[must_use] pub fn command_exists(program: &str) -> bool {
-    #[cfg(unix)]
-    {
-        Command::new("sh")
-            .args(["-c", &format!("command -v {program} >/dev/null 2>&1")])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-    }
-    #[cfg(windows)]
-    {
-        Command::new("where")
-            .arg(program)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-    }
+/// Characters that could enable shell injection attacks.
+const SHELL_METACHARACTERS: &[char] = &[
+    ';', '&', '|', '$', '`', '(', ')', '{', '}', '[', ']',
+    '<', '>', '\n', '\r', '\'', '"', '\\', ' ', '\t',
+];
+
+/// Check if a command exists in PATH.
+///
+/// Returns `false` for:
+/// - Empty program names
+/// - Names containing shell metacharacters
+/// - Programs not found in PATH
+///
+/// # Example
+/// ```
+/// use foodshare_core::process::command_exists;
+/// assert!(command_exists("ls"));
+/// assert!(!command_exists("nonexistent_cmd_xyz"));
+/// assert!(!command_exists("ls; rm -rf /")); // Rejected: shell metacharacters
+/// ```
+#[must_use]
+pub fn command_exists(program: &str) -> bool {
+    is_safe_program_name(program) && which_binary(program).is_ok()
 }
 
-/// Get the path to a command
-#[must_use] pub fn which_command(program: &str) -> Option<std::path::PathBuf> {
-    #[cfg(unix)]
-    {
-        let output = Command::new("sh")
-            .args(["-c", &format!("command -v {program}")])
-            .output()
-            .ok()?;
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                return Some(std::path::PathBuf::from(path));
-            }
-        }
-        None
-    }
-    #[cfg(windows)]
-    {
-        let output = Command::new("where")
-            .arg(program)
-            .output()
-            .ok()?;
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .next()?
-                .trim()
-                .to_string();
-            if !path.is_empty() {
-                return Some(std::path::PathBuf::from(path));
-            }
-        }
-        None
-    }
+/// Get the absolute path to a command.
+///
+/// Returns `None` for invalid program names or if not found in PATH.
+#[must_use]
+pub fn which_command(program: &str) -> Option<PathBuf> {
+    is_safe_program_name(program).then(|| which_binary(program).ok()).flatten()
+}
+
+/// Validate program name is safe (non-empty, no shell metacharacters).
+#[inline]
+fn is_safe_program_name(program: &str) -> bool {
+    !program.is_empty() && !program.contains(SHELL_METACHARACTERS)
 }
 
 /// Run a command and stream output to stdout/stderr (for interactive use)
@@ -191,6 +173,45 @@ mod tests {
     }
 
     #[test]
+    fn test_command_exists_common_tools() {
+        // Test common Unix tools that should exist
+        assert!(command_exists("ls"));
+        assert!(command_exists("cat"));
+    }
+
+    #[test]
+    fn test_command_exists_prevents_injection() {
+        // These should return false, not execute malicious commands
+        assert!(!command_exists("test; echo pwned"));
+        assert!(!command_exists("test && echo pwned"));
+        assert!(!command_exists("test || echo pwned"));
+        assert!(!command_exists("$(echo pwned)"));
+        assert!(!command_exists("`echo pwned`"));
+    }
+
+    #[test]
+    fn test_which_command_returns_path() {
+        let path = which_command("echo");
+        assert!(path.is_some());
+        let path = path.unwrap();
+        assert!(path.exists());
+        assert!(path.to_string_lossy().contains("echo"));
+    }
+
+    #[test]
+    fn test_which_command_nonexistent() {
+        assert!(which_command("nonexistent_command_12345").is_none());
+    }
+
+    #[test]
+    fn test_which_command_prevents_injection() {
+        // These should return None, not execute malicious commands
+        assert!(which_command("test; echo pwned").is_none());
+        assert!(which_command("test && echo pwned").is_none());
+        assert!(which_command("test || echo pwned").is_none());
+    }
+
+    #[test]
     fn test_run_command_echo() {
         let result = run_command("echo", &["hello"]).unwrap();
         assert!(result.success);
@@ -207,5 +228,27 @@ mod tests {
         };
         assert!(result.combined_output().contains("out"));
         assert!(result.combined_output().contains("err"));
+    }
+
+    #[test]
+    fn test_command_result_combined_output_empty_stderr() {
+        let result = CommandResult {
+            success: true,
+            exit_code: 0,
+            stdout: "only stdout".to_string(),
+            stderr: String::new(),
+        };
+        assert_eq!(result.combined_output(), "only stdout");
+    }
+
+    #[test]
+    fn test_command_result_combined_output_empty_stdout() {
+        let result = CommandResult {
+            success: true,
+            exit_code: 0,
+            stdout: String::new(),
+            stderr: "only stderr".to_string(),
+        };
+        assert_eq!(result.combined_output(), "only stderr");
     }
 }

@@ -15,10 +15,17 @@ regex.workspace = true
 once_cell.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 owo-colors.workspace = true
 walkdir.workspace = true
 glob.workspace = true
+rayon.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
 proptest.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "secrets_bench"
+harness = false
