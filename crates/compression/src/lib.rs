@@ -5,6 +5,8 @@
 //! - Gzip/Deflate compression
 //! - ETag generation
 
+#![warn(missing_docs)]
+
 mod brotli_impl;
 mod gzip;
 mod etag;

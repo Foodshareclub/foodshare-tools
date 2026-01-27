@@ -15,6 +15,9 @@ name = "foodshare-i18n"
 path = "src/main.rs"
 
 [dependencies]
+# Internal crates
+foodshare-api-client = { workspace = true }
+
 # CLI Framework
 clap = { workspace = true }
 
@@ -26,7 +29,7 @@ console = { workspace = true }
 # Async Runtime
 tokio = { workspace = true }
 
-# HTTP Client
+# HTTP Client (still needed for some raw operations)
 reqwest = { workspace = true }
 
 # Serialization

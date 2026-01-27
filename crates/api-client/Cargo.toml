@@ -1,0 +1,41 @@
+[package]
+name = "foodshare-api-client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Centralized API client for Foodshare backend services with resilience patterns"
+keywords = ["api-client", "http", "supabase", "foodshare"]
+categories = ["web-programming::http-client"]
+
+[dependencies]
+# Internal crates
+foodshare-core = { workspace = true }
+
+# HTTP Client
+reqwest = { workspace = true }
+
+# Async Runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error Handling
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# UUID for request correlation
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+
+[features]
+default = []
+integration = []

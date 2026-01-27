@@ -1,10 +1,29 @@
 //! Configuration for the i18n CLI
+//!
+//! URLs and environment configuration are now managed by `foodshare-api-client`.
+//! This module retains locale metadata for the CLI.
 
-/// Base URL for Supabase functions
-pub const BASE_URL: &str = "https://iazmjdjwnkilycbjwpzp.supabase.co/functions/v1";
+use foodshare_api_client::ClientConfig;
 
-/// BFF endpoint URL
-pub const BFF_URL: &str = "https://iazmjdjwnkilycbjwpzp.supabase.co/functions/v1/bff";
+/// Get the base URL from configuration
+///
+/// Delegates to `foodshare-api-client` for environment-based URL resolution.
+#[must_use]
+pub fn base_url() -> String {
+    ClientConfig::from_env()
+        .map(|c| c.base_url)
+        .unwrap_or_else(|_| "https://iazmjdjwnkilycbjwpzp.supabase.co/functions/v1".to_string())
+}
+
+/// Get the BFF URL from configuration
+///
+/// Delegates to `foodshare-api-client` for environment-based URL resolution.
+#[must_use]
+pub fn bff_url() -> String {
+    ClientConfig::from_env()
+        .map(|c| c.bff_url)
+        .unwrap_or_else(|_| "https://iazmjdjwnkilycbjwpzp.supabase.co/functions/v1/bff".to_string())
+}
 
 /// Supported locales
 pub const SUPPORTED_LOCALES: &[&str] = &[

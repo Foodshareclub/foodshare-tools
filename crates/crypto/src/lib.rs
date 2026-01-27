@@ -5,6 +5,8 @@
 //! - Constant-time comparison for security
 //! - Provider-specific webhook verification (Meta, Stripe, GitHub)
 
+#![warn(missing_docs)]
+
 mod hmac_impl;
 mod timing;
 mod error;

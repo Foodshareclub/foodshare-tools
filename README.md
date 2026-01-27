@@ -252,3 +252,85 @@ MIT - see [LICENSE](LICENSE) for details.
 - 📖 [Documentation](https://github.com/Foodshareclub/foodshare-tools/wiki)
 - 🐛 [Issue Tracker](https://github.com/Foodshareclub/foodshare-tools/issues)
 - 💬 [Discussions](https://github.com/Foodshareclub/foodshare-tools/discussions)
+
+
+---
+
+## Swift Version Management Scripts
+
+This directory also contains Swift version management scripts for the Foodshare monorepo:
+
+### Available Scripts
+
+#### `use-swift-6.3.sh`
+Configure your environment to use Swift 6.3 development snapshot.
+
+```bash
+source foodshare-tools/use-swift-6.3.sh
+```
+
+Sets:
+- `TOOLCHAINS=swift`
+- Adds Swift 6.3 toolchain to PATH
+- Verifies Swift version
+
+#### `verify-swift-version.sh`
+Verify Swift version consistency across the project.
+
+```bash
+./foodshare-tools/verify-swift-version.sh
+```
+
+Checks:
+- Installed Swift version
+- Package.swift files
+- Xcode project configuration
+- Reports mismatches
+
+#### `verify-swift-6.3.sh`
+Detailed verification specifically for Swift 6.3 migration.
+
+```bash
+./foodshare-tools/verify-swift-6.3.sh
+```
+
+Verifies:
+- Swift 6.3 toolchain installation
+- Package manifests
+- Xcode project settings
+- CI scripts
+- Documentation
+
+#### `revert-to-swift-6.2.sh`
+Rollback script to revert to Swift 6.2 if needed.
+
+```bash
+./foodshare-tools/revert-to-swift-6.2.sh
+```
+
+Reverts:
+- All Package.swift files to 6.2
+- Xcode project to 6.2
+- Documentation references
+- Cleans build artifacts
+
+### Swift 6.3 Migration
+
+For complete Swift 6.3 migration documentation, see:
+- `../SWIFT_6.3_MIGRATION_COMPLETE.md` - Complete migration guide
+- `../SWIFT_VERSION_STRATEGY.md` - Strategic decision document
+- `../.swift-version` - Project version specification
+
+### Quick Start with Swift 6.3
+
+```bash
+# 1. Configure environment
+source foodshare-tools/use-swift-6.3.sh
+
+# 2. Verify setup
+./foodshare-tools/verify-swift-version.sh
+
+# 3. Build projects
+swift build --package-path foodshare-core
+xcodebuild -project foodshare-ios/FoodShare.xcodeproj -scheme FoodShare
+```

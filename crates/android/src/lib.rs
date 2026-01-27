@@ -7,6 +7,8 @@
 //! - Swift cross-compilation for Android
 //! - FoodshareCore build scripts
 
+#![warn(missing_docs)]
+
 pub mod emulator;
 pub mod gradle;
 pub mod kotlin_tools;

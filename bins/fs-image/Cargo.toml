@@ -17,6 +17,7 @@ walkdir = { workspace = true }
 rayon = { workspace = true }
 indicatif = { workspace = true }
 anyhow = { workspace = true }
+image = { workspace = true }
 
 [[bin]]
 name = "fs-image"

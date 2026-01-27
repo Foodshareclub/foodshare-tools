@@ -7,6 +7,7 @@ use clap::{Parser, Subcommand};
 use foodshare_cli::output::Status;
 use foodshare_core::config::Config;
 use foodshare_core::error::exit_codes;
+use owo_colors::OwoColorize;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -36,17 +37,38 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Format Swift code
+    /// Format Swift code with enterprise-grade safety features
     Format {
         /// Files to format
         #[arg(trailing_var_arg = true)]
         files: Vec<PathBuf>,
-        /// Check only, don't modify
+        /// Check only, don't modify (legacy flag, use --preview)
         #[arg(long)]
         check: bool,
         /// Format only staged files
         #[arg(long)]
         staged: bool,
+        /// Preview mode: show what would change without modifying files
+        #[arg(long)]
+        preview: bool,
+        /// Create a stash backup before formatting (default: true)
+        #[arg(long, default_value = "true")]
+        backup: bool,
+        /// Disable backup (equivalent to --backup=false)
+        #[arg(long)]
+        no_backup: bool,
+        /// Show detailed diff of changes
+        #[arg(long, default_value = "true")]
+        show_diff: bool,
+        /// Enable audit logging
+        #[arg(long, default_value = "true")]
+        audit: bool,
+        /// Create a snapshot before formatting (Code Protection System, default: true)
+        #[arg(long, default_value = "true")]
+        snapshot: bool,
+        /// Disable snapshot creation
+        #[arg(long)]
+        no_snapshot: bool,
     },
 
     /// Lint Swift code
@@ -100,6 +122,22 @@ enum Commands {
         coverage: bool,
     },
 
+    /// Build, install, and run the app on simulator
+    Run {
+        /// Clean before building
+        #[arg(long)]
+        clean: bool,
+        /// Stream app logs after launch
+        #[arg(long)]
+        logs: bool,
+        /// Use release configuration
+        #[arg(long)]
+        release: bool,
+        /// Device name or UDID
+        #[arg(long)]
+        device: Option<String>,
+    },
+
     /// List simulators
     Simulator {
         /// Action: list, boot, shutdown
@@ -125,19 +163,125 @@ enum Commands {
     /// Verify setup
     Verify,
 
-    /// Pre-push checks
+    /// Pre-push checks - validates build, lint, and tests before push
     #[command(name = "pre-push")]
     PrePush {
         /// Remote name
         remote: Option<String>,
         /// Remote URL
         url: Option<String>,
-        /// Fail fast on first error
-        #[arg(long)]
+        /// Fail fast on first error (default: true)
+        #[arg(long, default_value = "true")]
         fail_fast: bool,
-        /// Use release build
+        /// Use release build for validation
         #[arg(long)]
         release: bool,
+        /// Quick mode: skip optional checks (tests)
+        #[arg(long)]
+        quick: bool,
+        /// Skip specific checks (comma-separated: lint,build,test)
+        #[arg(long, value_delimiter = ',')]
+        skip: Vec<String>,
+        /// Show detailed output for pre-push checks
+        #[arg(long)]
+        detailed: bool,
+    },
+
+    /// Manage Swift package dependencies
+    Deps {
+        #[command(subcommand)]
+        action: DepsAction,
+    },
+
+    /// Code protection system - snapshots, recovery, and safety guards
+    Protect {
+        #[command(subcommand)]
+        action: ProtectAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ProtectAction {
+    /// List all code snapshots
+    List {
+        /// Maximum number of snapshots to show
+        #[arg(long, default_value = "20")]
+        limit: usize,
+    },
+
+    /// Create a manual snapshot of current state
+    Snapshot {
+        /// Description of why this snapshot was created
+        #[arg(long, default_value = "Manual snapshot")]
+        description: String,
+        /// Specific files to snapshot (default: all modified)
+        #[arg(trailing_var_arg = true)]
+        files: Vec<PathBuf>,
+    },
+
+    /// Restore files from a snapshot
+    Restore {
+        /// Restore from the latest snapshot
+        #[arg(long)]
+        latest: bool,
+        /// Snapshot ID to restore from
+        #[arg(long)]
+        snapshot: Option<String>,
+        /// Specific files to restore (default: all files in snapshot)
+        #[arg(long)]
+        file: Option<PathBuf>,
+        /// Preview what would be restored without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Show what would be committed (Commit Guard)
+    #[command(name = "commit-guard")]
+    CommitGuard,
+
+    /// Show what would be pushed (Push Guard)
+    #[command(name = "push-guard")]
+    PushGuard {
+        /// Remote name (default: origin)
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        /// Branch name (default: current branch)
+        #[arg(long)]
+        branch: Option<String>,
+    },
+
+    /// Verify build after changes (Build Verification)
+    #[command(name = "verify-build")]
+    VerifyBuild {
+        /// Quick syntax check only
+        #[arg(long)]
+        quick: bool,
+    },
+
+    /// Show operation history
+    History {
+        /// Number of recent operations to show
+        #[arg(long, default_value = "20")]
+        limit: usize,
+    },
+
+    /// Show protection status and configuration
+    Status,
+}
+
+#[derive(Subcommand)]
+enum DepsAction {
+    /// Resolve package dependencies
+    Resolve {
+        /// Package directory (default: current directory)
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
+    /// Update package dependencies to latest versions
+    Update {
+        /// Package directory (default: current directory)
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
     },
 }
 
@@ -182,6 +326,24 @@ enum ProjectAction {
         #[arg(long, default_value = "FoodShare")]
         target: String,
     },
+    /// Add files to the Xcode project
+    Add {
+        /// Files to add to the project
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        /// Path to .xcodeproj
+        #[arg(long, default_value = "FoodShare.xcodeproj")]
+        project: PathBuf,
+        /// Target name to add source files to
+        #[arg(long, default_value = "FoodShare")]
+        target: String,
+        /// Group path (e.g., "FoodShare/Core/Design")
+        #[arg(long)]
+        group: Option<String>,
+        /// Preview changes without modifying the project
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -194,8 +356,8 @@ fn main() -> Result<()> {
     let config = Config::load(cli.config.as_deref().map(|p| p.to_str().unwrap()))?;
 
     let exit_code = match cli.command {
-        Commands::Format { files, check, staged } => {
-            run_format(&files, check, staged)
+        Commands::Format { files, check, staged, preview, backup, no_backup, show_diff, audit, snapshot, no_snapshot } => {
+            run_format(&files, check || preview, staged, preview, backup && !no_backup, show_diff, audit, snapshot && !no_snapshot)
         }
         Commands::Lint { files, strict, fix } => {
             run_lint(&files, strict, fix)
@@ -215,6 +377,9 @@ fn main() -> Result<()> {
         Commands::Test { coverage } => {
             run_test(coverage)
         }
+        Commands::Run { clean, logs, release, device } => {
+            run_app(clean, logs, release, device.as_deref())
+        }
         Commands::Simulator { action, device } => {
             run_simulator(&action, device.as_deref())
         }
@@ -227,15 +392,22 @@ fn main() -> Result<()> {
         Commands::Verify => {
             run_verify()
         }
-        Commands::PrePush { remote, url, fail_fast, release } => {
-            run_pre_push(remote.as_deref(), url.as_deref(), fail_fast, release)
+        Commands::PrePush { remote, url, fail_fast, release, quick, skip, detailed } => {
+            run_pre_push(remote.as_deref(), url.as_deref(), fail_fast, release, quick, skip, detailed)
+        }
+        Commands::Deps { action } => {
+            run_deps(action)
+        }
+        Commands::Protect { action } => {
+            run_protect(action)
         }
     };
 
     std::process::exit(exit_code);
 }
 
-fn run_format(files: &[PathBuf], check: bool, staged: bool) -> i32 {
+fn run_format(files: &[PathBuf], check: bool, staged: bool, preview: bool, backup: bool, show_diff: bool, audit: bool, create_snapshot: bool) -> i32 {
+    use foodshare_ios::hooks::{SafeFormat, SafeFormatConfig, print_format_summary};
     use foodshare_ios::swift_tools;
 
     if !swift_tools::has_swiftformat() {
@@ -243,6 +415,7 @@ fn run_format(files: &[PathBuf], check: bool, staged: bool) -> i32 {
         return exit_codes::FAILURE;
     }
 
+    // Determine target files
     let target_files = if staged {
         match foodshare_core::git::GitRepo::open_current()
             .and_then(|r| r.staged_swift_files())
@@ -254,7 +427,9 @@ fn run_format(files: &[PathBuf], check: bool, staged: bool) -> i32 {
             }
         }
     } else if files.is_empty() {
-        vec![PathBuf::from("FoodShare")]
+        // Scan for Swift files in FoodShare directory
+        foodshare_core::file_scanner::scan_swift_files(std::path::Path::new("FoodShare"))
+            .unwrap_or_default()
     } else {
         files.to_vec()
     };
@@ -264,14 +439,52 @@ fn run_format(files: &[PathBuf], check: bool, staged: bool) -> i32 {
         return exit_codes::SUCCESS;
     }
 
-    match swift_tools::format_directory(&target_files[0], check) {
+    // Legacy check mode - just run swiftformat --lint
+    if check && !preview {
+        return run_legacy_format_check(&target_files);
+    }
+
+    // Enterprise-grade safe format
+    let config = SafeFormatConfig {
+        preview,
+        backup,
+        show_diff,
+        audit,
+        create_snapshot,
+        ..Default::default()
+    };
+
+    let safe_format = match SafeFormat::new(config) {
+        Ok(sf) => sf,
+        Err(e) => {
+            Status::error(&format!("Failed to initialize SafeFormat: {}", e));
+            return exit_codes::FAILURE;
+        }
+    };
+
+    println!();
+    println!("{}", "Safe Format".bold());
+    println!("{}", "═".repeat(50));
+    println!();
+
+    if preview {
+        println!("  {} Preview mode enabled - no files will be modified", "👁".yellow());
+    }
+    if create_snapshot {
+        println!("  {} Snapshot protection enabled", "📸".green());
+    }
+    if backup {
+        println!("  {} Stash backup enabled", "💾".green());
+    }
+    println!();
+
+    match safe_format.format(&target_files) {
         Ok(result) => {
-            if result.success {
-                Status::success("Formatting complete");
+            print_format_summary(&result);
+
+            if result.failed_files.is_empty() {
                 exit_codes::SUCCESS
             } else {
-                Status::error("Formatting failed");
-                eprintln!("{}", result.stderr);
                 exit_codes::FAILURE
             }
         }
@@ -280,6 +493,33 @@ fn run_format(files: &[PathBuf], check: bool, staged: bool) -> i32 {
             exit_codes::FAILURE
         }
     }
+}
+
+/// Legacy format check (swiftformat --lint)
+fn run_legacy_format_check(files: &[PathBuf]) -> i32 {
+    use foodshare_ios::swift_tools;
+
+    Status::info("Running format check (legacy mode)...");
+
+    for file in files {
+        if file.is_dir() {
+            match swift_tools::format_directory(file, true) {
+                Ok(result) => {
+                    if !result.success {
+                        Status::error("Format check failed - files need formatting");
+                        return exit_codes::FAILURE;
+                    }
+                }
+                Err(e) => {
+                    Status::error(&format!("Format check error: {}", e));
+                    return exit_codes::FAILURE;
+                }
+            }
+        }
+    }
+
+    Status::success("Format check passed");
+    exit_codes::SUCCESS
 }
 
 fn run_lint(files: &[PathBuf], strict: bool, fix: bool) -> i32 {
@@ -429,6 +669,129 @@ fn run_test(coverage: bool) -> i32 {
     }
 }
 
+fn run_app(clean: bool, logs: bool, release: bool, device: Option<&str>) -> i32 {
+    use foodshare_ios::{simulator, xcode};
+
+    let device_name = device.unwrap_or("iPhone 17 Pro Max");
+    let configuration = if release { "Release" } else { "Debug" };
+    let destination = format!("platform=iOS Simulator,name={}", device_name);
+
+    // Step 1: Build
+    Status::info(&format!("Building {} configuration...", configuration));
+    match xcode::build("FoodShare", configuration, &destination, clean) {
+        Ok(result) => {
+            if !result.success {
+                Status::error("Build failed");
+                eprintln!("{}", result.stderr);
+                return exit_codes::FAILURE;
+            }
+            Status::success("Build succeeded");
+        }
+        Err(e) => {
+            Status::error(&format!("Build error: {}", e));
+            return exit_codes::FAILURE;
+        }
+    }
+
+    // Step 2: Get booted device or boot one
+    let device_udid = match simulator::get_booted_device() {
+        Ok(Some(udid)) => udid,
+        Ok(None) => {
+            Status::info(&format!("Booting {}...", device_name));
+            if let Err(e) = simulator::boot(device_name) {
+                Status::error(&format!("Failed to boot simulator: {}", e));
+                return exit_codes::FAILURE;
+            }
+            // Wait a moment for boot
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            match simulator::get_booted_device() {
+                Ok(Some(udid)) => udid,
+                _ => {
+                    Status::error("Failed to get booted device");
+                    return exit_codes::FAILURE;
+                }
+            }
+        }
+        Err(e) => {
+            Status::error(&format!("Failed to check simulator status: {}", e));
+            return exit_codes::FAILURE;
+        }
+    };
+
+    // Step 3: Find the built app
+    let derived_data = std::env::current_dir()
+        .unwrap_or_default()
+        .join("build")
+        .join("Build")
+        .join("Products")
+        .join(format!("{}-iphonesimulator", configuration))
+        .join("FoodShare.app");
+
+    if !derived_data.exists() {
+        Status::error(&format!("App not found at: {}", derived_data.display()));
+        return exit_codes::FAILURE;
+    }
+
+    // Step 4: Install
+    Status::info("Installing app...");
+    match simulator::install_app(&device_udid, derived_data.to_str().unwrap()) {
+        Ok(result) => {
+            if !result.success {
+                Status::error("Install failed");
+                eprintln!("{}", result.stderr);
+                return exit_codes::FAILURE;
+            }
+            Status::success("App installed");
+        }
+        Err(e) => {
+            Status::error(&format!("Install error: {}", e));
+            return exit_codes::FAILURE;
+        }
+    }
+
+    // Step 5: Launch
+    Status::info("Launching app...");
+    match simulator::launch_app(&device_udid, "com.flutterflow.foodshare") {
+        Ok(result) => {
+            if !result.success {
+                Status::error("Launch failed");
+                eprintln!("{}", result.stderr);
+                return exit_codes::FAILURE;
+            }
+            Status::success("App launched");
+        }
+        Err(e) => {
+            Status::error(&format!("Launch error: {}", e));
+            return exit_codes::FAILURE;
+        }
+    }
+
+    // Step 6: Stream logs if requested
+    if logs {
+        Status::info("Streaming logs (Ctrl+C to stop)...");
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("xcrun")
+            .args([
+                "simctl",
+                "spawn",
+                "booted",
+                "log",
+                "stream",
+                "--predicate",
+                "subsystem == \"com.flutterflow.foodshare\"",
+                "--level",
+                "info",
+            ])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("Failed to spawn log stream");
+        let _ = child.wait();
+    }
+
+    exit_codes::SUCCESS
+}
+
 fn run_simulator(action: &str, device: Option<&str>) -> i32 {
     use foodshare_ios::simulator;
 
@@ -550,12 +913,108 @@ fn run_verify() -> i32 {
 }
 
 
-fn run_pre_push(_remote: Option<&str>, _url: Option<&str>, _fail_fast: bool, _release: bool) -> i32 {
-    // Pre-push checks for iOS
-    // This is a pass-through that allows lefthook to work
-    // The actual checks are handled by lefthook configuration
-    Status::success("Pre-push checks passed");
-    exit_codes::SUCCESS
+fn run_pre_push(
+    _remote: Option<&str>,
+    _url: Option<&str>,
+    fail_fast: bool,
+    release: bool,
+    quick: bool,
+    skip: Vec<String>,
+    detailed: bool,
+) -> i32 {
+    use foodshare_ios::hooks::{run_pre_push_checks, print_pre_push_summary, PrePushConfig};
+
+    // Check for quick mode environment variable
+    let quick_mode = quick || std::env::var("FOODSHARE_QUICK_MODE").is_ok();
+
+    let config = PrePushConfig {
+        fail_fast,
+        release,
+        quick_mode,
+        skip_checks: skip,
+    };
+
+    if detailed {
+        println!("Pre-push configuration:");
+        println!("  fail_fast: {}", config.fail_fast);
+        println!("  release: {}", config.release);
+        println!("  quick_mode: {}", config.quick_mode);
+        println!("  skip_checks: {:?}", config.skip_checks);
+        println!();
+    }
+
+    let results = run_pre_push_checks(&config);
+    print_pre_push_summary(&results)
+}
+
+fn run_deps(action: DepsAction) -> i32 {
+    use foodshare_ios::swift_tools;
+
+    // Extract path and determine action type
+    let (path, is_update) = match &action {
+        DepsAction::Resolve { path } => (path, false),
+        DepsAction::Update { path } => (path, true),
+    };
+
+    // Check for Package.swift before proceeding
+    let package_swift = path.join("Package.swift");
+    if !package_swift.exists() {
+        Status::error(&format!(
+            "No Package.swift found in {}",
+            if path.as_os_str() == "." {
+                "current directory".to_string()
+            } else {
+                path.display().to_string()
+            }
+        ));
+        Status::info("Run this command from a Swift package directory");
+        return exit_codes::FAILURE;
+    }
+
+    // Check for Package.resolved (optional warning)
+    let package_resolved = path.join("Package.resolved");
+    if !package_resolved.exists() && !is_update {
+        Status::warning("No Package.resolved found - dependencies are not locked");
+    }
+
+    if is_update {
+        Status::info("Updating Swift package dependencies...");
+        Status::warning("This will modify Package.resolved");
+        match swift_tools::update_dependencies(path) {
+            Ok(result) => {
+                if result.success {
+                    Status::success("Dependencies updated");
+                    exit_codes::SUCCESS
+                } else {
+                    Status::error("Failed to update dependencies");
+                    eprintln!("{}", result.combined_output());
+                    exit_codes::FAILURE
+                }
+            }
+            Err(e) => {
+                Status::error(&format!("Update error: {}", e));
+                exit_codes::FAILURE
+            }
+        }
+    } else {
+        Status::info("Resolving Swift package dependencies...");
+        match swift_tools::resolve_dependencies(path) {
+            Ok(result) => {
+                if result.success {
+                    Status::success("Dependencies resolved");
+                    exit_codes::SUCCESS
+                } else {
+                    Status::error("Failed to resolve dependencies");
+                    eprintln!("{}", result.combined_output());
+                    exit_codes::FAILURE
+                }
+            }
+            Err(e) => {
+                Status::error(&format!("Resolve error: {}", e));
+                exit_codes::FAILURE
+            }
+        }
+    }
 }
 
 fn run_project(action: ProjectAction) -> i32 {
@@ -672,6 +1131,384 @@ fn run_project(action: ProjectAction) -> i32 {
                     exit_codes::FAILURE
                 }
             }
+        }
+
+        ProjectAction::Add { files, project, target, group, dry_run } => {
+            if dry_run {
+                Status::info("Dry run mode - no changes will be made");
+            }
+
+            match XcodeProject::open(&project) {
+                Ok(mut proj) => {
+                    let mut added = 0;
+                    let mut skipped = 0;
+                    let mut failed = 0;
+
+                    for file in &files {
+                        match proj.add_file(file, &target, group.as_deref()) {
+                            Ok(result) => {
+                                if result.already_exists {
+                                    println!("  {} {} (already in project)", "~".yellow(), file.display());
+                                    skipped += 1;
+                                } else {
+                                    println!("  {} {}", "+".green(), file.display());
+                                    added += 1;
+                                }
+                            }
+                            Err(e) => {
+                                println!("  {} {} - {}", "✗".red(), file.display(), e);
+                                failed += 1;
+                            }
+                        }
+                    }
+
+                    println!();
+                    println!("Added: {}, Skipped: {}, Failed: {}", added, skipped, failed);
+
+                    if !dry_run && added > 0 {
+                        match proj.save() {
+                            Ok(()) => {
+                                Status::success("Project saved (backup created at project.pbxproj.backup)");
+                            }
+                            Err(e) => {
+                                Status::error(&format!("Failed to save project: {}", e));
+                                return exit_codes::FAILURE;
+                            }
+                        }
+                    } else if dry_run && added > 0 {
+                        Status::info("Run without --dry-run to apply changes");
+                    }
+
+                    if failed > 0 {
+                        exit_codes::FAILURE
+                    } else {
+                        exit_codes::SUCCESS
+                    }
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to open project: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// CODE PROTECTION COMMANDS
+// ============================================================================
+
+fn run_protect(action: ProtectAction) -> i32 {
+    use foodshare_ios::code_protection::{
+        CommitGuard, OperationHistory, ProtectionConfig, PushGuard, SnapshotManager,
+        SnapshotTrigger, print_pending_commit, print_pending_push, print_restore_result,
+        print_snapshot_list, verify_build,
+    };
+
+    let config = ProtectionConfig::default();
+
+    match action {
+        ProtectAction::List { limit } => {
+            let manager = match SnapshotManager::new(config) {
+                Ok(m) => m,
+                Err(e) => {
+                    Status::error(&format!("Failed to initialize snapshot manager: {}", e));
+                    return exit_codes::FAILURE;
+                }
+            };
+
+            match manager.list_snapshots() {
+                Ok(snapshots) => {
+                    let limited: Vec<_> = snapshots.into_iter().take(limit).collect();
+                    print_snapshot_list(&limited);
+                    exit_codes::SUCCESS
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to list snapshots: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProtectAction::Snapshot { description, files } => {
+            let manager = match SnapshotManager::new(config) {
+                Ok(m) => m,
+                Err(e) => {
+                    Status::error(&format!("Failed to initialize snapshot manager: {}", e));
+                    return exit_codes::FAILURE;
+                }
+            };
+
+            // Get files to snapshot
+            let target_files = if files.is_empty() {
+                // Snapshot all modified files
+                match foodshare_core::git::GitRepo::open_current()
+                    .and_then(|r| r.uncommitted_files())
+                {
+                    Ok(f) => f,
+                    Err(e) => {
+                        Status::error(&format!("Failed to get modified files: {}", e));
+                        return exit_codes::FAILURE;
+                    }
+                }
+            } else {
+                files
+            };
+
+            if target_files.is_empty() {
+                Status::info("No files to snapshot");
+                return exit_codes::SUCCESS;
+            }
+
+            println!();
+            println!("{}", "Creating snapshot...".bold());
+
+            match manager.create_snapshot(&target_files, SnapshotTrigger::Manual, &description) {
+                Ok(snapshot) => {
+                    println!();
+                    Status::success(&format!(
+                        "Snapshot created: {} ({} files)",
+                        snapshot.id,
+                        snapshot.files.len()
+                    ));
+                    println!();
+                    println!("  Recovery command:");
+                    println!("    {} protect restore --snapshot {}", "foodshare-ios".cyan(), snapshot.id);
+                    println!();
+                    exit_codes::SUCCESS
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to create snapshot: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProtectAction::Restore { latest, snapshot, file, dry_run } => {
+            let manager = match SnapshotManager::new(config) {
+                Ok(m) => m,
+                Err(e) => {
+                    Status::error(&format!("Failed to initialize snapshot manager: {}", e));
+                    return exit_codes::FAILURE;
+                }
+            };
+
+            // Get the snapshot to restore from
+            let snap = if latest {
+                match manager.get_latest_snapshot() {
+                    Ok(Some(s)) => s,
+                    Ok(None) => {
+                        Status::error("No snapshots found");
+                        return exit_codes::FAILURE;
+                    }
+                    Err(e) => {
+                        Status::error(&format!("Failed to get latest snapshot: {}", e));
+                        return exit_codes::FAILURE;
+                    }
+                }
+            } else if let Some(id) = snapshot {
+                match manager.get_snapshot(&id) {
+                    Ok(Some(s)) => s,
+                    Ok(None) => {
+                        Status::error(&format!("Snapshot not found: {}", id));
+                        return exit_codes::FAILURE;
+                    }
+                    Err(e) => {
+                        Status::error(&format!("Failed to get snapshot: {}", e));
+                        return exit_codes::FAILURE;
+                    }
+                }
+            } else {
+                Status::error("Please specify --latest or --snapshot <ID>");
+                return exit_codes::FAILURE;
+            };
+
+            println!();
+            println!("{}", format!("Restoring from snapshot: {}", snap.id).bold());
+            println!("  Created: {}", snap.timestamp);
+            println!("  Trigger: {}", snap.trigger);
+            println!("  Files: {}", snap.files.len());
+            println!();
+
+            let files_to_restore = file.map(|f| vec![f]);
+            match manager.restore_snapshot(&snap, files_to_restore.as_deref(), dry_run) {
+                Ok(result) => {
+                    print_restore_result(&result);
+
+                    if result.failed_files.is_empty() {
+                        exit_codes::SUCCESS
+                    } else {
+                        exit_codes::FAILURE
+                    }
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to restore: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProtectAction::CommitGuard => {
+            let guard = match CommitGuard::new() {
+                Ok(g) => g,
+                Err(e) => {
+                    Status::error(&format!("Failed to initialize commit guard: {}", e));
+                    return exit_codes::FAILURE;
+                }
+            };
+
+            match guard.show_pending_commit() {
+                Ok(pending) => {
+                    if pending.files.is_empty() {
+                        Status::info("No staged changes to commit");
+                    } else {
+                        print_pending_commit(&pending);
+                    }
+                    exit_codes::SUCCESS
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to analyze pending commit: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProtectAction::PushGuard { remote, branch } => {
+            let guard = match PushGuard::new() {
+                Ok(g) => g,
+                Err(e) => {
+                    Status::error(&format!("Failed to initialize push guard: {}", e));
+                    return exit_codes::FAILURE;
+                }
+            };
+
+            let branch_name = branch.unwrap_or_else(|| {
+                foodshare_core::git::GitRepo::open_current()
+                    .and_then(|r| r.current_branch())
+                    .unwrap_or_else(|_| "main".to_string())
+            });
+
+            match guard.show_pending_push(&remote, &branch_name) {
+                Ok(pending) => {
+                    if pending.commits.is_empty() {
+                        Status::info("Nothing to push - up to date with remote");
+                    } else {
+                        print_pending_push(&pending);
+                    }
+                    exit_codes::SUCCESS
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to analyze pending push: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProtectAction::VerifyBuild { quick } => {
+            match verify_build(quick) {
+                Ok(result) => {
+                    if result.success {
+                        exit_codes::SUCCESS
+                    } else {
+                        println!();
+                        println!("{}", "Build errors:".red().bold());
+                        for error in result.errors.iter().take(10) {
+                            println!("  {}", error);
+                        }
+                        exit_codes::FAILURE
+                    }
+                }
+                Err(e) => {
+                    Status::error(&format!("Build verification failed: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProtectAction::History { limit } => {
+            let data_dir = std::path::Path::new(".foodshare-hooks");
+            let history = match OperationHistory::new(data_dir) {
+                Ok(h) => h,
+                Err(e) => {
+                    Status::error(&format!("Failed to load history: {}", e));
+                    return exit_codes::FAILURE;
+                }
+            };
+
+            match history.recent(limit) {
+                Ok(records) => {
+                    println!();
+                    println!("{}", "═".repeat(70));
+                    println!("{}", "OPERATION HISTORY".bold());
+                    println!("{}", "═".repeat(70));
+                    println!();
+
+                    if records.is_empty() {
+                        println!("  No operations recorded yet.");
+                    } else {
+                        for record in &records {
+                            let status = if record.success {
+                                "✓".green().to_string()
+                            } else {
+                                "✗".red().to_string()
+                            };
+                            println!(
+                                "  {} {} {} - {} ({} files)",
+                                status,
+                                record.timestamp.format("%Y-%m-%d %H:%M"),
+                                record.operation.to_string().cyan(),
+                                record.details,
+                                record.affected_files.len()
+                            );
+                        }
+                    }
+                    println!();
+                    exit_codes::SUCCESS
+                }
+                Err(e) => {
+                    Status::error(&format!("Failed to load history: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProtectAction::Status => {
+            println!();
+            println!("{}", "═".repeat(60));
+            println!("{}", "CODE PROTECTION STATUS".bold());
+            println!("{}", "═".repeat(60));
+            println!();
+
+            let config = ProtectionConfig::default();
+            println!("  Configuration:");
+            let snap_status = if config.snapshots_enabled { "✓".green().to_string() } else { "✗".red().to_string() };
+            let build_status = if config.verify_build { "✓".green().to_string() } else { "✗".red().to_string() };
+            let interactive_status = if config.interactive_approval { "✓".green().to_string() } else { "○".dimmed().to_string() };
+            println!("    Snapshots enabled: {}", snap_status);
+            println!("    Build verification: {}", build_status);
+            println!("    Interactive approval: {}", interactive_status);
+            println!("    Max snapshots: {}", config.max_snapshots);
+            println!();
+
+            println!("  Protected paths:");
+            for path in &config.protected_paths {
+                println!("    {} {}", "•".dimmed(), path);
+            }
+            println!();
+
+            // Count snapshots
+            if let Ok(manager) = SnapshotManager::new(config.clone()) {
+                if let Ok(snapshots) = manager.list_snapshots() {
+                    println!("  Snapshots: {} stored", snapshots.len());
+                    if let Some(latest) = snapshots.first() {
+                        println!("  Latest: {} ({})", latest.id, latest.timestamp.format("%Y-%m-%d %H:%M"));
+                    }
+                }
+            }
+
+            println!();
+            println!("{}", "═".repeat(60));
+            exit_codes::SUCCESS
         }
     }
 }

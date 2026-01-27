@@ -6,6 +6,8 @@
 //! - Accessibility checks
 //! - Import organization
 
+#![warn(missing_docs)]
+
 pub mod accessibility;
 pub mod bundle_size;
 pub mod nextjs_security;

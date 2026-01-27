@@ -49,7 +49,7 @@ final class FoodItemTests: XCTestCase {
     }
 
     func testHasLocation() {
-        let itemWithLocation = createFoodItem(latitude: 37.7749, longitude: -122.4194)
+        let itemWithLocation = createFoodItem(latitude: 38.5816, longitude: -121.4944)
         XCTAssertTrue(itemWithLocation.hasLocation)
 
         let itemWithoutLocation = createFoodItem(latitude: nil, longitude: nil)
@@ -72,8 +72,8 @@ final class FoodItemTests: XCTestCase {
         isActive: Bool = true,
         isArranged: Bool = false,
         distanceMeters: Double? = nil,
-        latitude: Double? = 37.7749,
-        longitude: Double? = -122.4194
+        latitude: Double? = 38.5816,
+        longitude: Double? = -121.4944
     ) -> FoodItem {
         FoodItem(
             id: 1,
@@ -118,8 +118,8 @@ final class FoodItemTests: XCTestCase {
             availableHours: nil,
             postAddress: "123 Test St",
             postStrippedAddress: nil,
-            latitude: 37.7749,
-            longitude: -122.4194,
+            latitude: 38.5816,
+            longitude: -121.4944,
             images: nil,
             isActive: true,
             isArranged: false,

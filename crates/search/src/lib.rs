@@ -6,6 +6,8 @@
 //! - Unicode-aware tokenization
 //! - Thread-safe caching
 
+#![warn(missing_docs)]
+
 mod relevance;
 mod fuzzy;
 mod error;

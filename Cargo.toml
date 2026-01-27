@@ -14,11 +14,14 @@ members = [
     "crates/compression",
     "crates/image",
     "crates/motherduck-sync",
+    "crates/swift-toolchain",
+    "crates/api-client",
     "bins/foodshare-ios",
     "bins/foodshare-android",
     "bins/lefthook-rs",
     "bins/fs-image",
     "bins/foodshare-i18n",
+    "bins/foodshare-swift",
 ]
 
 [workspace.package]
@@ -83,6 +86,9 @@ shellexpand = "3.1"
 # Home directory
 dirs = "5.0"
 
+# Safe command lookup (replaces shell-based which)
+which = "6.0"
+
 # Temp files
 tempfile = "3.10"
 
@@ -124,7 +130,7 @@ hmac = "0.12"
 subtle = "2.5"
 base64 = "0.22"
 
-# Image processing (pinned for Rust 1.75 compatibility)
+# Image processing (0.24 series for stability; update to 0.25+ when dependencies allow)
 image = { version = "0.24", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
 
 # Compression
@@ -146,6 +152,8 @@ foodshare-crypto = { path = "crates/crypto" }
 foodshare-search = { path = "crates/search" }
 foodshare-compression = { path = "crates/compression" }
 foodshare-image = { path = "crates/image" }
+foodshare-swift-toolchain = { path = "crates/swift-toolchain" }
+foodshare-api-client = { path = "crates/api-client" }
 
 # Testing
 [workspace.dependencies.proptest]

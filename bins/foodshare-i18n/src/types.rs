@@ -220,3 +220,43 @@ pub struct LocaleAudit {
     pub coverage: f64,
     pub missing_keys: Option<Vec<String>>,
 }
+
+/// Generate InfoPlist.strings response
+#[derive(Debug, Deserialize)]
+pub struct GenerateInfoPlistStringsResponse {
+    pub success: bool,
+    pub version: Option<String>,
+    pub locales: HashMap<String, HashMap<String, String>>,
+    pub files: HashMap<String, String>,
+    #[serde(rename = "lprojFolders")]
+    pub lproj_folders: HashMap<String, String>,
+    pub stats: Option<InfoPlistStats>,
+    pub errors: Option<Vec<String>>,
+}
+
+/// InfoPlist.strings generation statistics
+#[derive(Debug, Deserialize, Serialize)]
+pub struct InfoPlistStats {
+    #[serde(rename = "totalLocales")]
+    pub total_locales: usize,
+    #[serde(rename = "totalStrings")]
+    pub total_strings: usize,
+    #[serde(rename = "translatedCount")]
+    pub translated_count: usize,
+    #[serde(rename = "failedCount")]
+    pub failed_count: usize,
+    #[serde(rename = "durationMs")]
+    pub duration_ms: u64,
+}
+
+/// JSON output for generate-infoplist command
+#[derive(Debug, Serialize)]
+pub struct JsonGenerateInfoPlistOutput {
+    pub success: bool,
+    pub dry_run: bool,
+    pub locales_generated: usize,
+    pub strings_per_locale: usize,
+    pub files_written: Option<Vec<String>>,
+    pub stats: Option<InfoPlistStats>,
+    pub errors: Option<Vec<String>>,
+}
