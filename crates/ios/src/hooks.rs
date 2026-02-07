@@ -520,6 +520,7 @@ pub struct PrePushCheckResult {
     pub duration: Duration,
     pub output: Option<String>,
     pub skipped: bool,
+    pub required: bool,
 }
 
 /// Configuration for pre-push checks
@@ -577,6 +578,7 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
                 duration: Duration::ZERO,
                 output: None,
                 skipped: true,
+                required: check.required,
             });
             println!("  {} {} {}", "⊘".dimmed(), check.name.dimmed(), "(skipped)".dimmed());
             continue;
@@ -590,6 +592,7 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
                 duration: Duration::ZERO,
                 output: None,
                 skipped: true,
+                required: check.required,
             });
             println!("  {} {} {}", "⊘".dimmed(), check.name.dimmed(), "(quick mode)".dimmed());
             continue;
@@ -618,6 +621,7 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
             duration,
             output: output.clone(),
             skipped: false,
+            required: check.required,
         });
 
         // Clear line and print result
@@ -629,6 +633,20 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
                 check.description,
                 format!("({:.1}s)", duration.as_secs_f32()).dimmed()
             );
+        } else if !check.required {
+            println!(
+                "  {} {} {} {}",
+                "⚠".yellow(),
+                check.description.yellow(),
+                format!("({:.1}s)", duration.as_secs_f32()).dimmed(),
+                "(non-blocking)".dimmed()
+            );
+
+            if let Some(ref err) = output {
+                for line in err.lines().take(3) {
+                    println!("    {}", line.dimmed());
+                }
+            }
         } else {
             println!(
                 "  {} {} {}",
@@ -707,26 +725,39 @@ pub fn print_pre_push_summary(results: &[PrePushCheckResult]) -> i32 {
     println!("{}", "─".repeat(50));
 
     let passed = results.iter().filter(|r| r.success && !r.skipped).count();
-    let failed = results.iter().filter(|r| !r.success).count();
+    let failed_required = results.iter().filter(|r| !r.success && r.required).count();
+    let warned = results.iter().filter(|r| !r.success && !r.required).count();
     let skipped = results.iter().filter(|r| r.skipped).count();
     let total_time: Duration = results.iter().map(|r| r.duration).sum();
 
-    if failed == 0 {
-        println!(
-            "{} All checks passed ({} passed, {} skipped) in {:.1}s",
-            "✓".green().bold(),
-            passed,
-            skipped,
-            total_time.as_secs_f32()
-        );
+    if failed_required == 0 {
+        if warned > 0 {
+            println!(
+                "{} Checks passed with {} warning(s) ({} passed, {} skipped) in {:.1}s",
+                "✓".green().bold(),
+                warned,
+                passed,
+                skipped,
+                total_time.as_secs_f32()
+            );
+        } else {
+            println!(
+                "{} All checks passed ({} passed, {} skipped) in {:.1}s",
+                "✓".green().bold(),
+                passed,
+                skipped,
+                total_time.as_secs_f32()
+            );
+        }
         println!();
         exit_codes::SUCCESS
     } else {
         println!(
-            "{} {} check(s) failed ({} passed, {} skipped)",
+            "{} {} check(s) failed ({} passed, {} warned, {} skipped)",
             "✗".red().bold(),
-            failed,
+            failed_required,
             passed,
+            warned,
             skipped
         );
         println!();
