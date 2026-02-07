@@ -52,7 +52,6 @@ pub fn lint(files: &[&str], strict: bool, fix: bool) -> Result<CommandResult> {
     }
 
     for file in files {
-        args.push("--path");
         args.push(file);
     }
 

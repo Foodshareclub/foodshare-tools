@@ -658,7 +658,7 @@ fn check_lint(_config: &PrePushConfig) -> std::result::Result<(), String> {
         return Ok(()); // Skip if not installed
     }
 
-    let result = swift_tools::lint_directory(Path::new("FoodShare"), false, false)
+    let result = swift_tools::lint(&["FoodShare"], false, false)
         .map_err(|e| e.to_string())?;
 
     if result.success {
