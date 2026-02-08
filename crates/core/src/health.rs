@@ -197,7 +197,7 @@ impl HealthChecker {
     /// Add web-specific checks
     #[must_use] pub fn with_web_checks(self) -> Self {
         self.add_check(CommandCheck::new("node", Some("--version")))
-            .add_check(CommandCheck::new("npm", Some("--version")))
+            .add_check(CommandCheck::new("bun", Some("--version")))
     }
 
     /// Run all health checks

@@ -81,7 +81,7 @@ foodshare-android doctor
 
 Required tools:
 - Node.js 18+
-- npm or bun
+- bun
 
 ```bash
 # Verify environment

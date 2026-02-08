@@ -212,7 +212,7 @@ fn check_environment() -> Result<()> {
 
 /// Apply database migrations using Supabase CLI
 fn apply_db_migrations() -> Result<()> {
-    let output = Command::new("npx")
+    let output = Command::new("bunx")
         .args(["supabase", "db", "push"])
         .current_dir(find_supabase_dir()?)
         .output()
@@ -236,7 +236,7 @@ fn deploy_edge_functions() -> Result<()> {
     for func in functions {
         println!("  Deploying {}...", func.cyan());
 
-        let output = Command::new("npx")
+        let output = Command::new("bunx")
             .args(["supabase", "functions", "deploy", func, "--no-verify-jwt"])
             .current_dir(&supabase_dir)
             .output()

@@ -198,6 +198,69 @@ enum Commands {
         #[command(subcommand)]
         action: ProtectAction,
     },
+
+    /// Supabase backend operations
+    Supabase {
+        #[command(subcommand)]
+        action: SupabaseAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum SupabaseAction {
+    /// Fix auth hook configuration (resolves "Hook requires authorization token" error)
+    #[command(name = "auth-fix")]
+    AuthFix {
+        /// Webhook secret from Supabase Dashboard (starts with v1,whsec_)
+        #[arg(long)]
+        secret: Option<String>,
+        /// Skip confirmation prompts
+        #[arg(long)]
+        yes: bool,
+        /// Only verify current configuration without making changes
+        #[arg(long)]
+        check: bool,
+        /// Backend directory path
+        #[arg(long, default_value = "../foodshare-backend/supabase")]
+        backend_path: PathBuf,
+    },
+
+    /// Check Supabase secrets status
+    #[command(name = "secrets")]
+    Secrets {
+        /// List all configured secrets
+        #[arg(long)]
+        list: bool,
+        /// Backend directory path
+        #[arg(long, default_value = "../foodshare-backend/supabase")]
+        backend_path: PathBuf,
+    },
+
+    /// Deploy Edge Functions
+    #[command(name = "deploy")]
+    Deploy {
+        /// Function name (deploys all if not specified)
+        function: Option<String>,
+        /// Backend directory path
+        #[arg(long, default_value = "../foodshare-backend/supabase")]
+        backend_path: PathBuf,
+    },
+
+    /// View Edge Function logs
+    #[command(name = "logs")]
+    Logs {
+        /// Function name
+        function: String,
+        /// Follow logs in real-time
+        #[arg(long)]
+        tail: bool,
+        /// Number of log entries to show
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// Backend directory path
+        #[arg(long, default_value = "../foodshare-backend/supabase")]
+        backend_path: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -401,6 +464,9 @@ fn main() -> Result<()> {
         Commands::Protect { action } => {
             run_protect(action)
         }
+        Commands::Supabase { action } => {
+            run_supabase(action)
+        }
     };
 
     std::process::exit(exit_code);
@@ -588,13 +654,8 @@ fn run_secrets(all: bool, config: &Config) -> i32 {
             .unwrap_or_default()
     };
 
-    match secrets::scan_files(&files, &config.schema.secrets) {
-        Ok(matches) => secrets::print_results(&matches),
-        Err(e) => {
-            Status::error(&format!("Scan error: {}", e));
-            exit_codes::FAILURE
-        }
-    }
+    let matches = secrets::scan_files(&files, &config.schema.secrets);
+    secrets::print_results(&matches)
 }
 
 fn run_migrations(dir: &PathBuf) -> i32 {
@@ -1511,4 +1572,348 @@ fn run_protect(action: ProtectAction) -> i32 {
             exit_codes::SUCCESS
         }
     }
+}
+
+// =============================================================================
+// Supabase Operations
+// =============================================================================
+
+fn run_supabase(action: SupabaseAction) -> i32 {
+    match action {
+        SupabaseAction::AuthFix { secret, yes, check, backend_path } => {
+            run_supabase_auth_fix(secret, yes, check, &backend_path)
+        }
+        SupabaseAction::Secrets { list, backend_path } => {
+            run_supabase_secrets(list, &backend_path)
+        }
+        SupabaseAction::Deploy { function, backend_path } => {
+            run_supabase_deploy(function.as_deref(), &backend_path)
+        }
+        SupabaseAction::Logs { function, tail, limit, backend_path } => {
+            run_supabase_logs(&function, tail, limit, &backend_path)
+        }
+    }
+}
+
+/// Fix auth hook configuration - resolves "Hook requires authorization token" error
+fn run_supabase_auth_fix(secret: Option<String>, yes: bool, check: bool, backend_path: &PathBuf) -> i32 {
+    use std::io::{self, Write};
+
+    println!();
+    println!("{}", "═".repeat(60));
+    println!("{}", "SUPABASE AUTH HOOK FIX".bold());
+    println!("{}", "═".repeat(60));
+    println!();
+    println!("  {} Resolves: \"Hook requires authorization token\" error", "🔧".yellow());
+    println!("  {} Caused by: Missing BEFORE_USER_CREATED_HOOK_SECRET", "📋".dimmed());
+    println!();
+
+    // Check if Supabase CLI is available
+    if !has_supabase_cli() {
+        Status::error("Supabase CLI not found. Install with: bun add -g supabase");
+        return exit_codes::FAILURE;
+    }
+
+    // Verify backend path exists
+    if !backend_path.exists() {
+        Status::error(&format!("Backend path not found: {}", backend_path.display()));
+        println!();
+        println!("  Hint: Make sure you're running from the iOS project directory");
+        println!("  Or specify: --backend-path /path/to/foodshare-backend/supabase");
+        return exit_codes::FAILURE;
+    }
+
+    // Check mode - just verify current configuration
+    if check {
+        return run_supabase_auth_check(backend_path);
+    }
+
+    // Get the secret
+    let webhook_secret = if let Some(s) = secret {
+        s
+    } else {
+        println!("{}", "Step 1: Get webhook secret from Supabase Dashboard".cyan().bold());
+        println!();
+        println!("  1. Open: https://supabase.com/dashboard/project/iazmjdjwnkilycbjwpzp/auth/hooks");
+        println!("  2. Find the 'Before User Created' hook");
+        println!("  3. Copy the webhook secret (starts with {})","v1,whsec_...".green());
+        println!();
+
+        if yes {
+            Status::error("Cannot auto-confirm without --secret. Provide the secret or run interactively.");
+            return exit_codes::FAILURE;
+        }
+
+        print!("  Paste webhook secret: ");
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        if io::stdin().read_line(&mut input).is_err() {
+            Status::error("Failed to read input");
+            return exit_codes::FAILURE;
+        }
+
+        input.trim().to_string()
+    };
+
+    if webhook_secret.is_empty() {
+        Status::error("No secret provided");
+        return exit_codes::FAILURE;
+    }
+
+    // Validate secret format
+    if !webhook_secret.starts_with("v1,whsec_") {
+        println!();
+        println!("  {} Secret doesn't start with 'v1,whsec_'", "⚠️".yellow());
+        println!("  Make sure you copied the full secret from Supabase Dashboard.");
+
+        if !yes {
+            print!("  Continue anyway? (y/n): ");
+            io::stdout().flush().unwrap();
+
+            let mut confirm = String::new();
+            if io::stdin().read_line(&mut confirm).is_err() {
+                Status::error("Failed to read confirmation");
+                return exit_codes::FAILURE;
+            }
+
+            if !confirm.trim().eq_ignore_ascii_case("y") {
+                Status::info("Aborted");
+                return exit_codes::SUCCESS;
+            }
+        }
+    }
+
+    println!();
+    println!("{}", "Step 2: Setting secret in Supabase Edge Functions".cyan().bold());
+    println!();
+
+    // Run supabase secrets set
+    let output = std::process::Command::new("bunx")
+        .args([
+            "supabase",
+            "secrets",
+            "set",
+            &format!("BEFORE_USER_CREATED_HOOK_SECRET={}", webhook_secret),
+        ])
+        .current_dir(backend_path)
+        .output();
+
+    match output {
+        Ok(result) => {
+            if result.status.success() {
+                println!("  {} Secret configured successfully", "✓".green());
+            } else {
+                Status::error("Failed to set secret");
+                eprintln!("{}", String::from_utf8_lossy(&result.stderr));
+                return exit_codes::FAILURE;
+            }
+        }
+        Err(e) => {
+            Status::error(&format!("Failed to run supabase CLI: {}", e));
+            return exit_codes::FAILURE;
+        }
+    }
+
+    println!();
+    println!("{}", "Step 3: Deploying geolocate-user Edge Function".cyan().bold());
+    println!();
+
+    // Deploy the function
+    let deploy_output = std::process::Command::new("bunx")
+        .args(["supabase", "functions", "deploy", "geolocate-user"])
+        .current_dir(backend_path)
+        .output();
+
+    match deploy_output {
+        Ok(result) => {
+            if result.status.success() {
+                println!("  {} Function deployed successfully", "✓".green());
+            } else {
+                Status::error("Failed to deploy function");
+                eprintln!("{}", String::from_utf8_lossy(&result.stderr));
+                return exit_codes::FAILURE;
+            }
+        }
+        Err(e) => {
+            Status::error(&format!("Failed to deploy function: {}", e));
+            return exit_codes::FAILURE;
+        }
+    }
+
+    println!();
+    println!("{}", "═".repeat(60));
+    println!("{}", "FIX COMPLETE!".green().bold());
+    println!("{}", "═".repeat(60));
+    println!();
+    println!("  Next steps:");
+    println!("    1. Test Apple Sign In on a physical device");
+    println!("    2. Test Email/Password sign up");
+    println!("    3. Test Google Sign In");
+    println!("    4. If all tests pass, resubmit to App Store");
+    println!();
+    println!("  Monitor logs:");
+    println!("    {} supabase logs geolocate-user --tail", "foodshare-hooks".dimmed());
+    println!();
+
+    exit_codes::SUCCESS
+}
+
+/// Check current auth hook configuration
+fn run_supabase_auth_check(backend_path: &PathBuf) -> i32 {
+    println!("{}", "Checking auth hook configuration...".cyan());
+    println!();
+
+    // Check if secret is set
+    let output = std::process::Command::new("bunx")
+        .args(["supabase", "secrets", "list"])
+        .current_dir(backend_path)
+        .output();
+
+    match output {
+        Ok(result) => {
+            let stdout = String::from_utf8_lossy(&result.stdout);
+
+            if stdout.contains("BEFORE_USER_CREATED_HOOK_SECRET") {
+                println!("  {} BEFORE_USER_CREATED_HOOK_SECRET is configured", "✓".green());
+            } else {
+                println!("  {} BEFORE_USER_CREATED_HOOK_SECRET is NOT configured", "✗".red());
+                println!();
+                println!("  Run {} to fix this", "foodshare-hooks supabase auth-fix".cyan());
+                return exit_codes::FAILURE;
+            }
+        }
+        Err(e) => {
+            Status::error(&format!("Failed to check secrets: {}", e));
+            return exit_codes::FAILURE;
+        }
+    }
+
+    println!();
+    Status::success("Auth hook configuration looks good");
+    exit_codes::SUCCESS
+}
+
+fn run_supabase_secrets(list: bool, backend_path: &PathBuf) -> i32 {
+    if !has_supabase_cli() {
+        Status::error("Supabase CLI not found");
+        return exit_codes::FAILURE;
+    }
+
+    if !backend_path.exists() {
+        Status::error(&format!("Backend path not found: {}", backend_path.display()));
+        return exit_codes::FAILURE;
+    }
+
+    if list {
+        Status::info("Listing Supabase secrets...");
+        let output = std::process::Command::new("bunx")
+            .args(["supabase", "secrets", "list"])
+            .current_dir(backend_path)
+            .status();
+
+        match output {
+            Ok(status) if status.success() => exit_codes::SUCCESS,
+            Ok(_) => exit_codes::FAILURE,
+            Err(e) => {
+                Status::error(&format!("Failed to list secrets: {}", e));
+                exit_codes::FAILURE
+            }
+        }
+    } else {
+        Status::info("Use --list to view configured secrets");
+        exit_codes::SUCCESS
+    }
+}
+
+fn run_supabase_deploy(function: Option<&str>, backend_path: &PathBuf) -> i32 {
+    if !has_supabase_cli() {
+        Status::error("Supabase CLI not found");
+        return exit_codes::FAILURE;
+    }
+
+    if !backend_path.exists() {
+        Status::error(&format!("Backend path not found: {}", backend_path.display()));
+        return exit_codes::FAILURE;
+    }
+
+    let mut args = vec!["supabase", "functions", "deploy"];
+    if let Some(name) = function {
+        args.push(name);
+        Status::info(&format!("Deploying function: {}", name));
+    } else {
+        Status::info("Deploying all functions...");
+    }
+
+    let output = std::process::Command::new("bunx")
+        .args(&args)
+        .current_dir(backend_path)
+        .status();
+
+    match output {
+        Ok(status) if status.success() => {
+            Status::success("Deployment complete");
+            exit_codes::SUCCESS
+        }
+        Ok(_) => {
+            Status::error("Deployment failed");
+            exit_codes::FAILURE
+        }
+        Err(e) => {
+            Status::error(&format!("Failed to deploy: {}", e));
+            exit_codes::FAILURE
+        }
+    }
+}
+
+fn run_supabase_logs(function: &str, tail: bool, limit: usize, backend_path: &PathBuf) -> i32 {
+    if !has_supabase_cli() {
+        Status::error("Supabase CLI not found");
+        return exit_codes::FAILURE;
+    }
+
+    if !backend_path.exists() {
+        Status::error(&format!("Backend path not found: {}", backend_path.display()));
+        return exit_codes::FAILURE;
+    }
+
+    let mut args = vec!["supabase", "functions", "logs", function];
+
+    if tail {
+        args.push("--tail");
+    } else {
+        args.push("--limit");
+        // Need to convert limit to string and keep it alive
+    }
+
+    Status::info(&format!("Fetching logs for: {}", function));
+
+    let limit_str = limit.to_string();
+    if !tail {
+        args.push(&limit_str);
+    }
+
+    let output = std::process::Command::new("bunx")
+        .args(&args)
+        .current_dir(backend_path)
+        .status();
+
+    match output {
+        Ok(status) if status.success() => exit_codes::SUCCESS,
+        Ok(_) => exit_codes::FAILURE,
+        Err(e) => {
+            Status::error(&format!("Failed to fetch logs: {}", e));
+            exit_codes::FAILURE
+        }
+    }
+}
+
+fn has_supabase_cli() -> bool {
+    std::process::Command::new("bunx")
+        .args(["supabase", "--version"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
