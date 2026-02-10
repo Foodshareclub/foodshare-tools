@@ -22,6 +22,8 @@ members = [
     "bins/fs-image",
     "bins/foodshare-i18n",
     "bins/foodshare-swift",
+    "crates/migrate",
+    "bins/foodshare-migrate",
 ]
 
 [workspace.package]
@@ -154,6 +156,7 @@ foodshare-compression = { path = "crates/compression" }
 foodshare-image = { path = "crates/image" }
 foodshare-swift-toolchain = { path = "crates/swift-toolchain" }
 foodshare-api-client = { path = "crates/api-client" }
+foodshare-migrate = { path = "crates/migrate" }
 
 # Testing
 [workspace.dependencies.proptest]

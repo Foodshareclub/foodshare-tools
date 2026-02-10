@@ -1,0 +1,21 @@
+[package]
+name = "foodshare-migrate"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Secret migration tool for self-hosted Supabase vault and env files"
+keywords = ["migration", "vault", "secrets", "supabase"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+foodshare-core = { workspace = true }
+foodshare-cli = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

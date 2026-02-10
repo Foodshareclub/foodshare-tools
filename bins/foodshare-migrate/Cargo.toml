@@ -1,0 +1,30 @@
+[package]
+name = "foodshare-migrate-bin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "CLI for migrating secrets to self-hosted Supabase vault and env files"
+keywords = ["migration", "vault", "secrets", "supabase", "cli"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "foodshare-migrate"
+path = "src/main.rs"
+
+[dependencies]
+# Internal crates
+foodshare-migrate = { workspace = true }
+foodshare-cli = { workspace = true }
+
+# CLI Framework
+clap = { workspace = true }
+
+# Terminal Output
+owo-colors = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
