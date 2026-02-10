@@ -10,7 +10,7 @@ use std::env;
 use std::time::Duration;
 
 /// Default production Supabase URL
-const DEFAULT_SUPABASE_URL: &str = "https://iazmjdjwnkilycbjwpzp.supabase.co/functions/v1";
+const DEFAULT_SUPABASE_URL: &str = "https://api.foodshare.club/functions/v1";
 
 /// Environment types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

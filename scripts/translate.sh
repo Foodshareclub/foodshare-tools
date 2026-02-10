@@ -13,7 +13,7 @@
 
 set -e
 
-BASE_URL="https://iazmjdjwnkilycbjwpzp.supabase.co/functions/v1"
+BASE_URL="https://api.foodshare.club/functions/v1"
 BFF_URL="${BASE_URL}/bff"
 SUPPORTED_LOCALES="cs de es fr pt ru uk zh hi ar it pl nl ja ko tr vi id th sv"
 

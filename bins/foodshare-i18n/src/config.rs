@@ -12,7 +12,7 @@ use foodshare_api_client::ClientConfig;
 pub fn base_url() -> String {
     ClientConfig::from_env()
         .map(|c| c.base_url)
-        .unwrap_or_else(|_| "https://iazmjdjwnkilycbjwpzp.supabase.co/functions/v1".to_string())
+        .unwrap_or_else(|_| "https://api.foodshare.club/functions/v1".to_string())
 }
 
 /// Get the BFF URL from configuration
@@ -22,7 +22,7 @@ pub fn base_url() -> String {
 pub fn bff_url() -> String {
     ClientConfig::from_env()
         .map(|c| c.bff_url)
-        .unwrap_or_else(|_| "https://iazmjdjwnkilycbjwpzp.supabase.co/functions/v1/bff".to_string())
+        .unwrap_or_else(|_| "https://api.foodshare.club/functions/v1/bff".to_string())
 }
 
 /// Supported locales

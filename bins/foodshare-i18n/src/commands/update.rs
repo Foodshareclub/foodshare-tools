@@ -212,7 +212,7 @@ async fn run_batch_json(locales: &[String]) -> Result<()> {
 /// Send translations to the API
 async fn update_locale(locale: &str, translations: &serde_json::Value) -> Result<UpdateResponse> {
     let base_url = std::env::var("SUPABASE_URL")
-        .unwrap_or_else(|_| "https://iazmjdjwnkilycbjwpzp.supabase.co".to_string());
+        .unwrap_or_else(|_| "https://api.foodshare.club".to_string());
 
     let service_key = std::env::var("SUPABASE_SERVICE_ROLE_KEY")
         .or_else(|_| std::env::var("SUPABASE_ANON_KEY"))

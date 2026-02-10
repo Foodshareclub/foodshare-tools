@@ -265,7 +265,7 @@ echo -e "${BLUE}â•‘         Translation System End-to-End Test                â•
 e
 
 # Configuration
-SUPABASE_URL="${SUPABASE_URL:-https://iazmjdjwnkilycbjwpzp.supabase.co}"
+SUPABASE_URL="${SUPABASE_URL:-https://api.foodshare.club}"
 SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"
 SUPABASE_SERVICE_KEY="${SUPABASE_SERVICE_ROLE_KEY}"
 

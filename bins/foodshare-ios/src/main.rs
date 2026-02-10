@@ -1634,7 +1634,7 @@ fn run_supabase_auth_fix(secret: Option<String>, yes: bool, check: bool, backend
     } else {
         println!("{}", "Step 1: Get webhook secret from Supabase Dashboard".cyan().bold());
         println!();
-        println!("  1. Open: https://supabase.com/dashboard/project/iazmjdjwnkilycbjwpzp/auth/hooks");
+        println!("  1. Open: https://studio.foodshare.club/project/default/auth/hooks");
         println!("  2. Find the 'Before User Created' hook");
         println!("  3. Copy the webhook secret (starts with {})","v1,whsec_...".green());
         println!();
