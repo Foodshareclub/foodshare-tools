@@ -8,19 +8,27 @@ use owo_colors::OwoColorize;
 use regex::Regex;
 use std::path::Path;
 
-/// Accessibility issue
+/// Accessibility issue found in a file
 #[derive(Debug)]
 pub struct A11yIssue {
+    /// Path to the file containing the issue
     pub file: String,
+    /// Line number where the issue was found
     pub line: usize,
+    /// Name of the accessibility rule that was violated
     pub rule: String,
+    /// Detailed message explaining the issue and how to fix it
     pub message: String,
+    /// Severity level of the issue
     pub severity: A11ySeverity,
 }
 
+/// Severity level of an accessibility issue
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum A11ySeverity {
+    /// Critical issue that must be fixed to ensure basic accessibility
     Error,
+    /// Potential issue that should be reviewed for better accessibility
     Warning,
 }
 
@@ -59,7 +67,8 @@ static PATTERNS: Lazy<Vec<A11yPattern>> = Lazy::new(|| {
         // role="presentation" or role="none" on interactive elements
         A11yPattern {
             name: "no-interactive-element-to-noninteractive-role",
-            pattern: Regex::new(r#"<(button|a|input)[^>]*role=["'](presentation|none)["']"#).unwrap(),
+            pattern: Regex::new(r#"<(button|a|input)[^>]*role=["'](presentation|none)["']"#)
+                .unwrap(),
             message: "Interactive elements should not have presentation/none role",
             severity: A11ySeverity::Error,
         },
@@ -105,7 +114,12 @@ pub fn check_files(paths: &[std::path::PathBuf]) -> anyhow::Result<Vec<A11yIssue
             match check_file(path) {
                 Ok(issues) => all_issues.extend(issues),
                 Err(e) => {
-                    eprintln!("{}: Failed to check {}: {}", "warning".yellow(), path.display(), e);
+                    eprintln!(
+                        "{}: Failed to check {}: {}",
+                        "warning".yellow(),
+                        path.display(),
+                        e
+                    );
                 }
             }
         }
@@ -121,8 +135,14 @@ pub fn print_results(issues: &[A11yIssue]) -> i32 {
         return exit_codes::SUCCESS;
     }
 
-    let errors = issues.iter().filter(|i| i.severity == A11ySeverity::Error).count();
-    let warnings = issues.iter().filter(|i| i.severity == A11ySeverity::Warning).count();
+    let errors = issues
+        .iter()
+        .filter(|i| i.severity == A11ySeverity::Error)
+        .count();
+    let warnings = issues
+        .iter()
+        .filter(|i| i.severity == A11ySeverity::Warning)
+        .count();
 
     eprintln!(
         "{} Found {} accessibility issue(s): {} errors, {} warnings",

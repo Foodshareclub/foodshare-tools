@@ -16,7 +16,7 @@ impl SwiftVersion {
     /// Parse Swift version from string
     pub fn parse(version_str: &str) -> Result<Self> {
         let version_str = version_str.trim();
-        
+
         // Handle "Apple Swift version 6.3-dev" format
         let version_part = version_str
             .split_whitespace()
@@ -27,7 +27,7 @@ impl SwiftVersion {
         let clean_version = version_part.split('-').next().unwrap_or(version_part);
 
         let parts: Vec<&str> = clean_version.split('.').collect();
-        
+
         if parts.len() < 2 {
             return Err(SwiftError::ParseError(version_str.to_string()));
         }
@@ -92,8 +92,7 @@ impl SwiftToolchain {
         let version = SwiftVersion::parse(&version_str)?;
 
         // Try to find the swift binary path
-        let swift_path = which::which("swift")
-            .map_err(|_| SwiftError::SwiftNotFound)?;
+        let swift_path = which::which("swift").map_err(|_| SwiftError::SwiftNotFound)?;
 
         let is_xcode = swift_path.to_string_lossy().contains("Xcode.app");
 
@@ -107,7 +106,7 @@ impl SwiftToolchain {
     /// Find Swift toolchain at specific path
     pub fn from_path(toolchain_path: &Path) -> Result<Self> {
         let swift_bin = toolchain_path.join("usr/bin/swift");
-        
+
         if !swift_bin.exists() {
             return Err(SwiftError::ToolchainNotFound(
                 toolchain_path.display().to_string(),
@@ -180,7 +179,10 @@ mod tests {
 
     #[test]
     fn test_parse_swift_version() {
-        let version = SwiftVersion::parse("Apple Swift version 6.3-dev (LLVM 478f55c39d6bc2c, Swift a15423cb66d4749)").unwrap();
+        let version = SwiftVersion::parse(
+            "Apple Swift version 6.3-dev (LLVM 478f55c39d6bc2c, Swift a15423cb66d4749)",
+        )
+        .unwrap();
         assert_eq!(version.major, 6);
         assert_eq!(version.minor, 3);
         assert!(version.is_dev);
@@ -188,7 +190,10 @@ mod tests {
 
     #[test]
     fn test_parse_stable_version() {
-        let version = SwiftVersion::parse("Apple Swift version 6.2.3 (swiftlang-6.2.3.3.21 clang-1700.6.3.2)").unwrap();
+        let version = SwiftVersion::parse(
+            "Apple Swift version 6.2.3 (swiftlang-6.2.3.3.21 clang-1700.6.3.2)",
+        )
+        .unwrap();
         assert_eq!(version.major, 6);
         assert_eq!(version.minor, 2);
         assert_eq!(version.patch, Some(3));

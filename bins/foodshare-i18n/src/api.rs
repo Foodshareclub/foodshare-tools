@@ -28,6 +28,7 @@ impl ApiClient {
     }
 
     /// Create a client with custom configuration
+    #[allow(dead_code)]
     pub fn with_config(config: ClientConfig) -> Result<Self> {
         let client = FoodshareClient::with_config(config)
             .map_err(|e| anyhow::anyhow!("Failed to create client: {}", e))?;
@@ -37,6 +38,7 @@ impl ApiClient {
 
     /// Get the underlying client for advanced usage
     #[must_use]
+    #[allow(dead_code)]
     pub fn inner(&self) -> &FoodshareClient {
         &self.client
     }

@@ -31,9 +31,7 @@ impl HealthApi {
     pub async fn check_endpoint(&self, url: &str) -> ApiResult<EndpointStatus> {
         let start = std::time::Instant::now();
 
-        let request = self
-            .client
-            .request_builder(reqwest::Method::GET, url);
+        let request = self.client.request_builder(reqwest::Method::GET, url);
 
         let response = self.client.execute_raw(request).await?;
         let elapsed = start.elapsed();

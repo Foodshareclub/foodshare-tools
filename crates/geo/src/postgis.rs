@@ -103,12 +103,19 @@ fn parse_wkt_point(wkt: &str) -> Result<Coordinate> {
     let wkt = wkt.trim();
 
     if !wkt.starts_with("POINT(") && !wkt.starts_with("POINT (") {
-        return Err(GeoError::InvalidWkt(format!("Expected POINT, got: {}", wkt)));
+        return Err(GeoError::InvalidWkt(format!(
+            "Expected POINT, got: {}",
+            wkt
+        )));
     }
 
     // Find the coordinates between parentheses
-    let start = wkt.find('(').ok_or_else(|| GeoError::InvalidWkt("Missing '('".into()))?;
-    let end = wkt.find(')').ok_or_else(|| GeoError::InvalidWkt("Missing ')'".into()))?;
+    let start = wkt
+        .find('(')
+        .ok_or_else(|| GeoError::InvalidWkt("Missing '('".into()))?;
+    let end = wkt
+        .find(')')
+        .ok_or_else(|| GeoError::InvalidWkt("Missing ')'".into()))?;
 
     if start >= end {
         return Err(GeoError::InvalidWkt("Invalid parentheses".into()));

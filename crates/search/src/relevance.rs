@@ -65,21 +65,33 @@ mod tests {
 
     #[test]
     fn test_exact_match() {
-        assert_eq!(calculate_relevance("Hello", "hello"), RelevanceScore::Exact as u32);
+        assert_eq!(
+            calculate_relevance("Hello", "hello"),
+            RelevanceScore::Exact as u32
+        );
     }
 
     #[test]
     fn test_starts_with() {
-        assert_eq!(calculate_relevance("Hello World", "hello"), RelevanceScore::StartsWith as u32);
+        assert_eq!(
+            calculate_relevance("Hello World", "hello"),
+            RelevanceScore::StartsWith as u32
+        );
     }
 
     #[test]
     fn test_word_boundary() {
-        assert_eq!(calculate_relevance("Say Hello", "hello"), RelevanceScore::WordBoundary as u32);
+        assert_eq!(
+            calculate_relevance("Say Hello", "hello"),
+            RelevanceScore::WordBoundary as u32
+        );
     }
 
     #[test]
     fn test_contains() {
-        assert_eq!(calculate_relevance("SayHelloWorld", "hello"), RelevanceScore::Contains as u32);
+        assert_eq!(
+            calculate_relevance("SayHelloWorld", "hello"),
+            RelevanceScore::Contains as u32
+        );
     }
 }

@@ -1,6 +1,6 @@
 //! ETag generation for HTTP caching.
 
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 /// Generate an ETag for content.
 ///
@@ -29,6 +29,7 @@ pub fn generate_etag(content: &[u8]) -> String {
 ///
 /// # Returns
 /// Weak ETag string
+#[allow(dead_code)]
 pub fn generate_weak_etag(content: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content);

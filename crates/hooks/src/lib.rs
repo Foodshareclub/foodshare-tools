@@ -24,36 +24,29 @@ pub mod migrations;
 pub mod pre_push;
 pub mod secrets;
 
-pub use foodshare_core::error::{exit_codes, Result};
+pub use foodshare_core::error::{Result, exit_codes};
 
 // Enterprise API exports
 pub use secrets::{
+    // Constants
+    CONFIG_API_VERSION,
     // Core types
     Finding,
+    PATTERN_VERSION,
     PatternCategory,
     PatternDef,
     ScanError,
-    ScannerConfig,
     ScanOutput,
     ScanResult,
+    ScannerConfig,
     SecretScanner,
     Severity,
-    // Constants
-    CONFIG_API_VERSION,
-    PATTERN_VERSION,
     // Functions
     builtin_patterns,
 };
 
 // Legacy API exports (for backwards compatibility)
 pub use secrets::{
-    print_results,
-    print_results_with_stats,
-    scan_content,
-    scan_content_with_entropy,
-    scan_file,
-    scan_files,
-    scan_files_with_stats,
-    ScanStats,
-    SecretMatch,
+    ScanStats, SecretMatch, print_results, print_results_with_stats, scan_content,
+    scan_content_with_entropy, scan_file, scan_files, scan_files_with_stats,
 };

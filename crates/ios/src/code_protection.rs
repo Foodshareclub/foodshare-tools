@@ -116,10 +116,15 @@ pub struct Snapshot {
 /// What triggered a snapshot
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SnapshotTrigger {
+    /// Snapshot before source formatting
     PreFormat,
+    /// Snapshot before a git commit
     PreCommit,
+    /// Snapshot before a git push
     PrePush,
+    /// Snapshot before a git rebase
     PreRebase,
+    /// Snapshot triggered manually by the user
     Manual,
 }
 
@@ -207,7 +212,10 @@ impl SnapshotManager {
     ) -> Result<Snapshot> {
         let id = generate_snapshot_id();
         let timestamp = Utc::now();
-        let branch = self.repo.current_branch().unwrap_or_else(|_| "unknown".to_string());
+        let branch = self
+            .repo
+            .current_branch()
+            .unwrap_or_else(|_| "unknown".to_string());
         let commit = get_head_commit().unwrap_or_else(|_| "unknown".to_string());
 
         let mut file_snapshots = Vec::new();
@@ -419,22 +427,31 @@ impl SnapshotManager {
     }
 }
 
-/// Index entry for quick snapshot lookup
+/// Index entry for quick snapshot lookup and listing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotIndexEntry {
+    /// Unique identifier for the snapshot
     pub id: String,
+    /// When the snapshot was created
     pub timestamp: DateTime<Utc>,
+    /// What triggered the snapshot creation
     pub trigger: SnapshotTrigger,
+    /// Optional user-provided description
     pub description: String,
+    /// Number of files captured in the snapshot
     pub file_count: usize,
 }
 
-/// Result of a restore operation
+/// Result of a code restoration operation
 #[derive(Debug)]
 pub struct RestoreResult {
+    /// Files successfully restored to their snapshot state
     pub restored_files: Vec<PathBuf>,
+    /// Files that already matched the snapshot content
     pub skipped_files: Vec<PathBuf>,
+    /// Files that failed to restore with error messages
     pub failed_files: Vec<(PathBuf, String)>,
+    /// Whether this was a dry-run (no files modified)
     pub dry_run: bool,
 }
 
@@ -452,8 +469,10 @@ pub fn verify_build(quick: bool) -> Result<BuildVerification> {
     let args = if quick {
         // Quick syntax check only
         vec![
-            "-scheme", "FoodShare",
-            "-destination", "platform=iOS Simulator,name=iPhone 17 Pro Max",
+            "-scheme",
+            "FoodShare",
+            "-destination",
+            "platform=iOS Simulator,name=iPhone 17 Pro Max",
             "build",
             "-quiet",
             "ONLY_ACTIVE_ARCH=YES",
@@ -462,8 +481,10 @@ pub fn verify_build(quick: bool) -> Result<BuildVerification> {
     } else {
         // Full build
         vec![
-            "-scheme", "FoodShare",
-            "-destination", "platform=iOS Simulator,name=iPhone 17 Pro Max",
+            "-scheme",
+            "FoodShare",
+            "-destination",
+            "platform=iOS Simulator,name=iPhone 17 Pro Max",
             "build",
         ]
     };
@@ -507,11 +528,14 @@ pub fn verify_build(quick: bool) -> Result<BuildVerification> {
     }
 }
 
-/// Result of build verification
+/// Result of build verification via xcodebuild
 #[derive(Debug)]
 pub struct BuildVerification {
+    /// Whether the build succeeded
     pub success: bool,
+    /// Duration of the build process
     pub duration: Duration,
+    /// List of error strings extracted from xcodebuild output
     pub errors: Vec<String>,
 }
 
@@ -553,7 +577,10 @@ pub fn get_interactive_approval(changes: &[FileChange]) -> Result<ApprovalDecisi
                 }
             }
             if change.preview.len() > 5 {
-                println!("    {} more lines...", format!("... {} ", change.preview.len() - 5).dimmed());
+                println!(
+                    "    {} more lines...",
+                    format!("... {} ", change.preview.len() - 5).dimmed()
+                );
             }
         }
         println!();
@@ -578,30 +605,42 @@ pub fn get_interactive_approval(changes: &[FileChange]) -> Result<ApprovalDecisi
     }
 }
 
-/// A file change for approval
+/// Information about a single file change for user approval
 #[derive(Debug)]
 pub struct FileChange {
+    /// Path to the changed file
     pub path: PathBuf,
+    /// Type of change (Modified, Added, Deleted)
     pub change_type: ChangeType,
+    /// Number of added lines
     pub insertions: usize,
+    /// Number of removed lines
     pub deletions: usize,
+    /// Preview strings of the changes (diff hunks)
     pub preview: Vec<String>,
 }
 
-/// Type of change
+/// Classification of source code changes
 #[derive(Debug)]
 pub enum ChangeType {
+    /// File content was modified
     Modified,
+    /// New file was created
     Added,
+    /// File was removed
     Deleted,
 }
 
-/// User's decision on changes
+/// User's decision when prompted for change approval
 #[derive(Debug, PartialEq)]
 pub enum ApprovalDecision {
+    /// Proceed with the changes
     Approve,
+    /// Abort the operation
     Reject,
+    /// Show a full diff of all changes
     PreviewAll,
+    /// Discard current changes and return to the previous state
     Revert,
 }
 
@@ -615,6 +654,7 @@ pub struct CommitGuard {
 }
 
 impl CommitGuard {
+    /// Create a new CommitGuard instance for the current repository
     pub fn new() -> Result<Self> {
         Ok(Self {
             repo: GitRepo::open_current()?,
@@ -684,7 +724,10 @@ impl CommitGuard {
         let message = lines.get(1).map(|s| s.to_string()).unwrap_or_default();
 
         // Get files in last commit
-        let files_result = run_command("git", &["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])?;
+        let files_result = run_command(
+            "git",
+            &["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+        )?;
         let files: Vec<PathBuf> = files_result
             .stdout
             .lines()
@@ -700,19 +743,29 @@ impl CommitGuard {
     }
 }
 
+/// Summary of a commit that is about to be made
 #[derive(Debug)]
 pub struct PendingCommit {
+    /// List of individual staged file changes
     pub files: Vec<StagedFile>,
+    /// Aggregated insertion count
     pub total_insertions: usize,
+    /// Aggregated deletion count
     pub total_deletions: usize,
+    /// Current development branch name
     pub branch: String,
 }
 
+/// Details of a single file staged for commit
 #[derive(Debug)]
 pub struct StagedFile {
+    /// Relative path to the file
     pub path: PathBuf,
+    /// Number of new lines in this file
     pub insertions: usize,
+    /// Number of removed lines in this file
     pub deletions: usize,
+    /// Whether this is a newly created file
     pub is_new: bool,
 }
 
@@ -723,10 +776,14 @@ struct FileDiffStats {
     is_new: bool,
 }
 
+/// Outcomes of a commit verification check
 #[derive(Debug)]
 pub struct CommitVerification {
+    /// Full SHA-1 hash of the commit
     pub hash: String,
+    /// Commit message summary
     pub message: String,
+    /// List of paths modified in this commit
     pub files: Vec<PathBuf>,
 }
 
@@ -736,13 +793,14 @@ pub struct CommitVerification {
 
 /// Guard that shows exactly what will be pushed
 pub struct PushGuard {
-    repo: GitRepo,
+    _repo: GitRepo,
 }
 
 impl PushGuard {
+    /// Create a new PushGuard instance for the current repository
     pub fn new() -> Result<Self> {
         Ok(Self {
-            repo: GitRepo::open_current()?,
+            _repo: GitRepo::open_current()?,
         })
     }
 
@@ -786,19 +844,29 @@ impl PushGuard {
     }
 }
 
+/// Aggregated information for a pending git push
 #[derive(Debug)]
 pub struct PendingPush {
+    /// Remote name (e.g. "origin")
     pub remote: String,
+    /// Remote branch name
     pub branch: String,
+    /// List of commit summaries that will be pushed
     pub commits: Vec<CommitSummary>,
+    /// Total number of unique files modified
     pub files_changed: usize,
+    /// Total lines inserted across all commits
     pub insertions: usize,
+    /// Total lines deleted across all commits
     pub deletions: usize,
 }
 
+/// High-level summary of a git commit
 #[derive(Debug)]
 pub struct CommitSummary {
+    /// Short or full commit hash
     pub hash: String,
+    /// The subject line of the commit message
     pub message: String,
 }
 
@@ -845,25 +913,39 @@ struct DiffStats {
 // OPERATION HISTORY
 // ============================================================================
 
-/// Tracks all hook operations for audit and undo
+/// Persistent record of a hook operation for auditing and rollback
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperationRecord {
+    /// Unique operation ID
     pub id: String,
+    /// When the operation occurred
     pub timestamp: DateTime<Utc>,
+    /// Classification of the operation performed
     pub operation: OperationType,
+    /// Paths affected by this operation
     pub affected_files: Vec<PathBuf>,
+    /// Optional snapshot created as part of this operation
     pub snapshot_id: Option<String>,
+    /// Whether the operation succeeded
     pub success: bool,
+    /// Detailed status or error message
     pub details: String,
 }
 
+/// Supported operation types for the hook system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OperationType {
+    /// Swift source formatting
     Format,
+    /// Swift structure/lint validation
     Lint,
+    /// Local git commit
     Commit,
+    /// Remote git push
     Push,
+    /// Data restoration from snapshot
     Restore,
+    /// Reverting a sequence of operations
     Rollback,
 }
 
@@ -886,6 +968,7 @@ pub struct OperationHistory {
 }
 
 impl OperationHistory {
+    /// Initialize the operation history manager with a data directory
     pub fn new(data_dir: &Path) -> Result<Self> {
         let history_file = data_dir.join("operation-history.json");
         fs::create_dir_all(data_dir)?;
@@ -1086,7 +1169,11 @@ pub fn print_restore_result(result: &RestoreResult) {
     if !result.restored_files.is_empty() {
         println!(
             "{} {} file(s):",
-            if result.dry_run { "Would restore" } else { "Restored" },
+            if result.dry_run {
+                "Would restore"
+            } else {
+                "Restored"
+            },
             result.restored_files.len()
         );
         for file in &result.restored_files {
@@ -1096,7 +1183,10 @@ pub fn print_restore_result(result: &RestoreResult) {
 
     if !result.skipped_files.is_empty() {
         println!();
-        println!("Skipped {} file(s) (no changes):", result.skipped_files.len());
+        println!(
+            "Skipped {} file(s) (no changes):",
+            result.skipped_files.len()
+        );
         for file in &result.skipped_files {
             println!("  {} {}", "○".dimmed(), file.display());
         }

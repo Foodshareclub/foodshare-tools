@@ -88,10 +88,7 @@ pub const VAULT_SECRETS: &[VaultSecretDef] = &[
 ];
 
 /// PG functions that read from vault and should be verified after migration.
-pub const VERIFY_FUNCTIONS: &[&str] = &[
-    "get_openai_api_key",
-    "get_resend_api_key",
-];
+pub const VERIFY_FUNCTIONS: &[&str] = &["get_openai_api_key", "get_resend_api_key"];
 
 #[cfg(test)]
 mod tests {
@@ -104,8 +101,14 @@ mod tests {
 
     #[test]
     fn airtable_alias_uses_same_env_key() {
-        let token = VAULT_SECRETS.iter().find(|s| s.vault_name == "AIRTABLE_API_TOKEN").unwrap();
-        let key = VAULT_SECRETS.iter().find(|s| s.vault_name == "AIRTABLE_API_KEY").unwrap();
+        let token = VAULT_SECRETS
+            .iter()
+            .find(|s| s.vault_name == "AIRTABLE_API_TOKEN")
+            .unwrap();
+        let key = VAULT_SECRETS
+            .iter()
+            .find(|s| s.vault_name == "AIRTABLE_API_KEY")
+            .unwrap();
         assert_eq!(token.env_key, key.env_key);
     }
 

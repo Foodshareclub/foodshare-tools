@@ -35,7 +35,8 @@ impl GitRepo {
     }
 
     /// Get the repository working directory
-    #[must_use] pub fn workdir(&self) -> &Path {
+    #[must_use]
+    pub fn workdir(&self) -> &Path {
         &self.workdir
     }
 
@@ -85,11 +86,7 @@ impl GitRepo {
 
     /// Get modified files (not yet staged)
     pub fn modified_files(&self) -> Result<Vec<PathBuf>> {
-        let result = run_command_in_dir(
-            "git",
-            &["diff", "--name-only"],
-            &self.workdir,
-        )?;
+        let result = run_command_in_dir("git", &["diff", "--name-only"], &self.workdir)?;
 
         Ok(result
             .stdout
@@ -117,16 +114,15 @@ impl GitRepo {
 
     /// Stage a file
     pub fn stage_file(&self, path: &Path) -> Result<()> {
-        let result = run_command_in_dir(
-            "git",
-            &["add", &path.to_string_lossy()],
-            &self.workdir,
-        )?;
+        let result = run_command_in_dir("git", &["add", &path.to_string_lossy()], &self.workdir)?;
 
         if result.success {
             Ok(())
         } else {
-            Err(Error::git(format!("Failed to stage file: {}", result.stderr)))
+            Err(Error::git(format!(
+                "Failed to stage file: {}",
+                result.stderr
+            )))
         }
     }
 
@@ -140,22 +136,16 @@ impl GitRepo {
 
     /// Get the current branch name
     pub fn current_branch(&self) -> Result<String> {
-        let result = run_command_in_dir(
-            "git",
-            &["rev-parse", "--abbrev-ref", "HEAD"],
-            &self.workdir,
-        )?;
+        let result =
+            run_command_in_dir("git", &["rev-parse", "--abbrev-ref", "HEAD"], &self.workdir)?;
 
         Ok(result.stdout.trim().to_string())
     }
 
     /// Get the latest tag
     pub fn latest_tag(&self) -> Result<Option<String>> {
-        let result = run_command_in_dir(
-            "git",
-            &["describe", "--tags", "--abbrev=0"],
-            &self.workdir,
-        )?;
+        let result =
+            run_command_in_dir("git", &["describe", "--tags", "--abbrev=0"], &self.workdir)?;
 
         if result.success && !result.stdout.trim().is_empty() {
             Ok(Some(result.stdout.trim().to_string()))
@@ -182,22 +172,14 @@ impl GitRepo {
 
     /// Check if there are uncommitted changes
     pub fn has_uncommitted_changes(&self) -> Result<bool> {
-        let result = run_command_in_dir(
-            "git",
-            &["status", "--porcelain"],
-            &self.workdir,
-        )?;
+        let result = run_command_in_dir("git", &["status", "--porcelain"], &self.workdir)?;
 
         Ok(!result.stdout.trim().is_empty())
     }
 
     /// Get diff statistics
     pub fn diff_stats(&self) -> Result<DiffStats> {
-        let result = run_command_in_dir(
-            "git",
-            &["diff", "--stat", "--shortstat"],
-            &self.workdir,
-        )?;
+        let result = run_command_in_dir("git", &["diff", "--stat", "--shortstat"], &self.workdir)?;
 
         // Parse shortstat output: " 3 files changed, 10 insertions(+), 5 deletions(-)"
         let mut stats = DiffStats {
@@ -233,7 +215,8 @@ impl GitRepo {
     }
 
     /// Check if a path is ignored by git
-    #[must_use] pub fn is_ignored(&self, path: &Path) -> bool {
+    #[must_use]
+    pub fn is_ignored(&self, path: &Path) -> bool {
         let result = run_command_in_dir(
             "git",
             &["check-ignore", "-q", &path.to_string_lossy()],
@@ -245,11 +228,7 @@ impl GitRepo {
 
     /// Get uncommitted files (both staged and unstaged)
     pub fn uncommitted_files(&self) -> Result<Vec<PathBuf>> {
-        let result = run_command_in_dir(
-            "git",
-            &["status", "--porcelain"],
-            &self.workdir,
-        )?;
+        let result = run_command_in_dir("git", &["status", "--porcelain"], &self.workdir)?;
 
         Ok(result
             .stdout
@@ -279,14 +258,16 @@ pub struct DiffStats {
 }
 
 /// Check if we're in a git repository
-#[must_use] pub fn is_git_repo(path: &Path) -> bool {
+#[must_use]
+pub fn is_git_repo(path: &Path) -> bool {
     run_command_in_dir("git", &["rev-parse", "--git-dir"], path)
         .map(|r| r.success)
         .unwrap_or(false)
 }
 
 /// Get the git root directory
-#[must_use] pub fn git_root(path: &Path) -> Option<PathBuf> {
+#[must_use]
+pub fn git_root(path: &Path) -> Option<PathBuf> {
     run_command_in_dir("git", &["rev-parse", "--show-toplevel"], path)
         .ok()
         .filter(|r| r.success)

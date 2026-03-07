@@ -17,10 +17,11 @@ pub use detect::{SwiftToolchain, SwiftVersion};
 pub use error::{Result, SwiftError};
 pub use verify::VerificationReport;
 
-/// Swift version requirements for the project
+/// Required Swift version for the project (e.g. 6.3)
 pub const REQUIRED_SWIFT_VERSION: &str = "6.3";
+/// Default Swift tools version for Package.swift files
 pub const SWIFT_TOOLS_VERSION: &str = "6.3";
 
-/// Default toolchain path on macOS
+/// Default toolchain path on macOS for development
 pub const DEFAULT_TOOLCHAIN_PATH: &str =
     "/Users/organic/Library/Developer/Toolchains/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-16-a.xctoolchain";

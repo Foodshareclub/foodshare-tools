@@ -26,7 +26,8 @@ pub struct CommandResult {
 
 impl CommandResult {
     /// Create from `std::process::Output`
-    #[must_use] pub fn from_output(output: Output) -> Self {
+    #[must_use]
+    pub fn from_output(output: Output) -> Self {
         Self {
             success: output.status.success(),
             exit_code: output.status.code().unwrap_or(-1),
@@ -36,7 +37,8 @@ impl CommandResult {
     }
 
     /// Get combined output (stdout + stderr)
-    #[must_use] pub fn combined_output(&self) -> String {
+    #[must_use]
+    pub fn combined_output(&self) -> String {
         if self.stderr.is_empty() {
             self.stdout.clone()
         } else if self.stdout.is_empty() {
@@ -79,9 +81,7 @@ pub fn run_command_with_env(
     env: &[(&str, &str)],
 ) -> Result<CommandResult> {
     let mut cmd = Command::new(program);
-    cmd.args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
 
     for (key, value) in env {
         cmd.env(key, value);
@@ -96,8 +96,8 @@ pub fn run_command_with_env(
 
 /// Characters that could enable shell injection attacks.
 const SHELL_METACHARACTERS: &[char] = &[
-    ';', '&', '|', '$', '`', '(', ')', '{', '}', '[', ']',
-    '<', '>', '\n', '\r', '\'', '"', '\\', ' ', '\t',
+    ';', '&', '|', '$', '`', '(', ')', '{', '}', '[', ']', '<', '>', '\n', '\r', '\'', '"', '\\',
+    ' ', '\t',
 ];
 
 /// Check if a command exists in PATH.
@@ -124,7 +124,9 @@ pub fn command_exists(program: &str) -> bool {
 /// Returns `None` for invalid program names or if not found in PATH.
 #[must_use]
 pub fn which_command(program: &str) -> Option<PathBuf> {
-    is_safe_program_name(program).then(|| which_binary(program).ok()).flatten()
+    is_safe_program_name(program)
+        .then(|| which_binary(program).ok())
+        .flatten()
 }
 
 /// Validate program name is safe (non-empty, no shell metacharacters).

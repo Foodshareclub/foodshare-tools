@@ -1,9 +1,9 @@
 //! Gzip and Deflate compression implementations.
 
-use crate::{CompressionError, Result};
-use flate2::read::{GzDecoder, DeflateDecoder};
-use flate2::write::{GzEncoder, DeflateEncoder};
+use crate::Result;
 use flate2::Compression;
+use flate2::read::{DeflateDecoder, GzDecoder};
+use flate2::write::{DeflateEncoder, GzEncoder};
 use std::io::{Read, Write};
 
 /// Compress data using Gzip.

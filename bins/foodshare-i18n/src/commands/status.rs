@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 use std::collections::HashMap;
 
 /// Run status check
+#[allow(dead_code)]
 pub async fn run(format: &str) -> Result<()> {
     let client = ApiClient::new()?;
 
@@ -17,14 +18,12 @@ pub async fn run(format: &str) -> Result<()> {
     println!();
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!("  {}", "📊 Translation System Status".blue().bold());
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!();
 
@@ -94,6 +93,7 @@ pub async fn run(format: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn run_json(client: &ApiClient) -> Result<()> {
     let (health, _) = client.health_check().await?;
     let (bff, _) = client.bff_info().await?;
@@ -126,6 +126,7 @@ async fn run_json(client: &ApiClient) -> Result<()> {
 }
 
 /// Count keys in a nested JSON object
+#[allow(dead_code)]
 fn count_keys(value: &serde_json::Value) -> usize {
     match value {
         serde_json::Value::Object(map) => {

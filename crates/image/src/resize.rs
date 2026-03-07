@@ -1,6 +1,6 @@
 //! Image resizing with the image crate.
 
-use crate::{ImageError, Result, ImageFormat, detect_format, smart_width::calculate_dimensions};
+use crate::{ImageError, ImageFormat, Result, detect_format, smart_width::calculate_dimensions};
 use image::{DynamicImage, ImageOutputFormat};
 use std::io::Cursor;
 
@@ -41,7 +41,8 @@ pub fn resize_image(data: &[u8], options: &ResizeOptions) -> Result<Vec<u8>> {
     let current_height = img.height();
 
     // Calculate new dimensions
-    let (new_width, new_height) = calculate_dimensions(current_width, current_height, options.width);
+    let (new_width, new_height) =
+        calculate_dimensions(current_width, current_height, options.width);
 
     // Resize if needed
     let resized = if new_width != current_width {
@@ -64,7 +65,12 @@ fn encode_image(img: &DynamicImage, format: ImageFormat, quality: u8) -> Result<
         ImageFormat::Png => ImageOutputFormat::Png,
         ImageFormat::Gif => ImageOutputFormat::Gif,
         ImageFormat::WebP => ImageOutputFormat::WebP,
-        _ => return Err(ImageError::ResizeError(format!("Unsupported output format: {:?}", format))),
+        _ => {
+            return Err(ImageError::ResizeError(format!(
+                "Unsupported output format: {:?}",
+                format
+            )));
+        }
     };
 
     img.write_to(&mut buffer, output_format)?;

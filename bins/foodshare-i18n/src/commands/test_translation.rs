@@ -19,6 +19,7 @@ pub struct TestTranslationArgs {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Post {
     id: i64,
     post_name: String,
@@ -26,6 +27,7 @@ struct Post {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct TranslationResponse {
     success: bool,
     translations: serde_json::Value,
@@ -40,11 +42,13 @@ struct TranslationResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct BFFResponse {
     listings: Vec<BFFListing>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct BFFListing {
     id: String,
     title: String,
@@ -53,6 +57,7 @@ struct BFFListing {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct TranslateBatchRequest {
     content_type: String,
     content_id: String,
@@ -60,18 +65,21 @@ struct TranslateBatchRequest {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct TranslationField {
     name: String,
     text: String,
 }
 
+#[allow(dead_code)]
 pub async fn execute(args: TestTranslationArgs) -> Result<()> {
-    println!("{}", "=== Translation System Test ===".bright_green().bold());
+    println!(
+        "{}",
+        "=== Translation System Test ===".bright_green().bold()
+    );
     println!();
 
-    let client = Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()?;
+    let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
 
     // Test 1: Check database schema
     println!("{}", "Test 1: Checking database schema...".yellow());
@@ -82,8 +90,11 @@ pub async fn execute(args: TestTranslationArgs) -> Result<()> {
     // Test 2: Fetch sample posts
     println!("{}", "Test 2: Fetching sample posts...".yellow());
     let posts = fetch_sample_posts(&client, &args).await?;
-    println!("{}", format!("✓ Found {} active posts", posts.len()).green());
-    
+    println!(
+        "{}",
+        format!("✓ Found {} active posts", posts.len()).green()
+    );
+
     if args.verbose {
         for post in &posts {
             println!("  - Post {}: {}", post.id, post.post_name);
@@ -98,7 +109,10 @@ pub async fn execute(args: TestTranslationArgs) -> Result<()> {
             trigger_translation(&client, &args, post).await?;
         }
         println!("{}", "✓ Translations triggered".green());
-        println!("{}", "  Waiting 30 seconds for translations to complete...".cyan());
+        println!(
+            "{}",
+            "  Waiting 30 seconds for translations to complete...".cyan()
+        );
         tokio::time::sleep(Duration::from_secs(30)).await;
         println!();
     } else if args.skip_trigger {
@@ -110,16 +124,20 @@ pub async fn execute(args: TestTranslationArgs) -> Result<()> {
     }
 
     // Test 4: Fetch translations
-    println!("{}", format!("Test 4: Fetching {} translations...", args.locale).yellow());
+    println!(
+        "{}",
+        format!("Test 4: Fetching {} translations...", args.locale).yellow()
+    );
     let translation_response = fetch_translations(&client, &args, &posts).await?;
-    
+
     let from_redis = translation_response.from_redis.unwrap_or(0);
     let from_db = translation_response.from_database.unwrap_or(0);
     let on_demand = translation_response.on_demand.unwrap_or(0);
     let not_found = translation_response.not_found.unwrap_or(0);
-    
+
     println!("{}", "✓ Translations fetched".green());
-    println!("  Cache: Redis={}, DB={}, LLM={}, NotFound={}", 
+    println!(
+        "  Cache: Redis={}, DB={}, LLM={}, NotFound={}",
         from_redis.to_string().cyan(),
         from_db.to_string().cyan(),
         on_demand.to_string().cyan(),
@@ -130,12 +148,14 @@ pub async fn execute(args: TestTranslationArgs) -> Result<()> {
     // Test 5: Test BFF feed
     println!("{}", "Test 5: Testing BFF feed with locale...".yellow());
     let bff_response = test_bff_feed(&client, &args).await?;
-    
+
     let total = bff_response.listings.len();
-    let translated = bff_response.listings.iter()
+    let translated = bff_response
+        .listings
+        .iter()
         .filter(|l| l.title_translated.is_some())
         .count();
-    
+
     println!("{}", "✓ BFF feed endpoint working".green());
     println!("  Total listings: {}", total.to_string().cyan());
     println!("  Translated: {}", translated.to_string().cyan());
@@ -147,20 +167,24 @@ pub async fn execute(args: TestTranslationArgs) -> Result<()> {
     println!("{}", "✓ Translation endpoint working".green());
     println!("{}", "✓ BFF integration working".green());
     println!("{}", "✓ End-to-end flow complete".green());
-    
+
     if not_found > 0 {
         println!();
-        println!("{}", format!("⚠ {} posts not translated yet", not_found).yellow());
+        println!(
+            "{}",
+            format!("⚠ {} posts not translated yet", not_found).yellow()
+        );
         println!("  Run without --skip-trigger to translate them");
     }
 
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn test_schema(client: &Client, args: &TestTranslationArgs) -> Result<()> {
     // Check if content_translations table exists by querying it directly
     let url = format!("{}/rest/v1/content_translations?limit=1", args.supabase_url);
-    
+
     let response = client
         .get(&url)
         .header("apikey", &args.anon_key)
@@ -172,18 +196,23 @@ async fn test_schema(client: &Client, args: &TestTranslationArgs) -> Result<()> 
     if !response.status().is_success() {
         let status = response.status();
         let text = response.text().await?;
-        anyhow::bail!("Schema check failed ({}): {}. The content_translations table may not exist.", status, text);
+        anyhow::bail!(
+            "Schema check failed ({}): {}. The content_translations table may not exist.",
+            status,
+            text
+        );
     }
 
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn fetch_sample_posts(client: &Client, args: &TestTranslationArgs) -> Result<Vec<Post>> {
     let url = format!(
         "{}/rest/v1/posts?select=id,post_name,post_description&is_active=eq.true&limit={}",
         args.supabase_url, args.limit
     );
-    
+
     let response = client
         .get(&url)
         .header("apikey", &args.anon_key)
@@ -199,7 +228,7 @@ async fn fetch_sample_posts(client: &Client, args: &TestTranslationArgs) -> Resu
     }
 
     let posts: Vec<Post> = response.json().await?;
-    
+
     if posts.is_empty() {
         anyhow::bail!("No active posts found in database");
     }
@@ -207,19 +236,27 @@ async fn fetch_sample_posts(client: &Client, args: &TestTranslationArgs) -> Resu
     Ok(posts)
 }
 
-async fn trigger_translation(client: &Client, args: &TestTranslationArgs, post: &Post) -> Result<()> {
-    let service_key = args.service_key.as_ref()
+#[allow(dead_code)]
+async fn trigger_translation(
+    client: &Client,
+    args: &TestTranslationArgs,
+    post: &Post,
+) -> Result<()> {
+    let service_key = args
+        .service_key
+        .as_ref()
         .context("Service key required to trigger translations")?;
-    
-    let url = format!("{}/functions/v1/localization/translate-batch", args.supabase_url);
-    
-    let mut fields = vec![
-        TranslationField {
-            name: "title".to_string(),
-            text: post.post_name.clone(),
-        }
-    ];
-    
+
+    let url = format!(
+        "{}/functions/v1/localization/translate-batch",
+        args.supabase_url
+    );
+
+    let mut fields = vec![TranslationField {
+        name: "title".to_string(),
+        text: post.post_name.clone(),
+    }];
+
     if let Some(desc) = &post.post_description {
         if !desc.is_empty() {
             fields.push(TranslationField {
@@ -228,13 +265,13 @@ async fn trigger_translation(client: &Client, args: &TestTranslationArgs, post: 
             });
         }
     }
-    
+
     let request = TranslateBatchRequest {
         content_type: "post".to_string(),
         content_id: post.id.to_string(),
         fields,
     };
-    
+
     let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", service_key))
@@ -245,9 +282,12 @@ async fn trigger_translation(client: &Client, args: &TestTranslationArgs, post: 
         .context("Failed to trigger translation")?;
 
     if !response.status().is_success() {
-        let status = response.status();
+        let _status = response.status();
         let text = response.text().await?;
-        eprintln!("  ⚠ Failed to trigger translation for post {}: {}", post.id, text);
+        eprintln!(
+            "  ⚠ Failed to trigger translation for post {}: {}",
+            post.id, text
+        );
     } else if args.verbose {
         println!("  ✓ Triggered translation for post {}", post.id);
     }
@@ -255,15 +295,19 @@ async fn trigger_translation(client: &Client, args: &TestTranslationArgs, post: 
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn fetch_translations(
     client: &Client,
     args: &TestTranslationArgs,
     posts: &[Post],
 ) -> Result<TranslationResponse> {
-    let url = format!("{}/functions/v1/localization/get-translations", args.supabase_url);
-    
+    let url = format!(
+        "{}/functions/v1/localization/get-translations",
+        args.supabase_url
+    );
+
     let content_ids: Vec<String> = posts.iter().map(|p| p.id.to_string()).collect();
-    
+
     let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", args.anon_key))
@@ -288,9 +332,10 @@ async fn fetch_translations(
     Ok(translation_response)
 }
 
+#[allow(dead_code)]
 async fn test_bff_feed(client: &Client, args: &TestTranslationArgs) -> Result<BFFResponse> {
     let url = format!("{}/functions/v1/bff/feed", args.supabase_url);
-    
+
     let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", args.anon_key))

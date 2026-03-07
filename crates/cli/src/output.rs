@@ -30,11 +30,7 @@ impl Status {
 
     /// Print a step message (for multi-step operations)
     pub fn step(step: usize, total: usize, message: &str) {
-        println!(
-            "{} {}",
-            format!("[{}/{}]", step, total).dimmed(),
-            message
-        );
+        println!("{} {}", format!("[{}/{}]", step, total).dimmed(), message);
     }
 
     /// Print a header

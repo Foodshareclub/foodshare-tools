@@ -202,45 +202,36 @@ fn main() -> Result<()> {
     let config = Config::load(cli.config.as_deref().map(|p| p.to_str().unwrap()))?;
 
     let exit_code = match cli.command {
-        Commands::Format { files, check, staged, lang } => {
-            run_format(&files, check, staged, &lang)
-        }
-        Commands::Lint { files, strict, fix, lang } => {
-            run_lint(&files, strict, fix, &lang)
-        }
-        Commands::CommitMsg { file } => {
-            run_commit_msg(&file, &config)
-        }
-        Commands::Secrets { all } => {
-            run_secrets(all, &config)
-        }
-        Commands::Migrations { dir } => {
-            run_migrations(&dir)
-        }
-        Commands::Build { configuration, clean, bundle } => {
-            run_build(&configuration, clean, bundle)
-        }
-        Commands::Test { coverage } => {
-            run_test(coverage)
-        }
-        Commands::Emulator { action, name } => {
-            run_emulator(&action, name.as_deref())
-        }
-        Commands::SwiftBuild { target, configuration } => {
-            run_swift_build(&target, &configuration)
-        }
-        Commands::SwiftJava { action } => {
-            run_swift_java(&action)
-        }
-        Commands::SwiftCore { action } => {
-            run_swift_core(action)
-        }
-        Commands::Doctor { json } => {
-            run_doctor(json)
-        }
-        Commands::Verify => {
-            run_verify()
-        }
+        Commands::Format {
+            files,
+            check,
+            staged,
+            lang,
+        } => run_format(&files, check, staged, &lang),
+        Commands::Lint {
+            files,
+            strict,
+            fix,
+            lang,
+        } => run_lint(&files, strict, fix, &lang),
+        Commands::CommitMsg { file } => run_commit_msg(&file, &config),
+        Commands::Secrets { all } => run_secrets(all, &config),
+        Commands::Migrations { dir } => run_migrations(&dir),
+        Commands::Build {
+            configuration,
+            clean,
+            bundle,
+        } => run_build(&configuration, clean, bundle),
+        Commands::Test { coverage } => run_test(coverage),
+        Commands::Emulator { action, name } => run_emulator(&action, name.as_deref()),
+        Commands::SwiftBuild {
+            target,
+            configuration,
+        } => run_swift_build(&target, &configuration),
+        Commands::SwiftJava { action } => run_swift_java(&action),
+        Commands::SwiftCore { action } => run_swift_core(action),
+        Commands::Doctor { json } => run_doctor(json),
+        Commands::Verify => run_verify(),
     };
 
     std::process::exit(exit_code);
@@ -345,13 +336,8 @@ fn run_secrets(all: bool, config: &Config) -> i32 {
             .unwrap_or_default()
     };
 
-    match secrets::scan_files(&files, &config.schema.secrets) {
-        Ok(matches) => secrets::print_results(&matches),
-        Err(e) => {
-            Status::error(&format!("Scan error: {}", e));
-            exit_codes::FAILURE
-        }
-    }
+    let matches = secrets::scan_files(&files, &config.schema.secrets);
+    secrets::print_results(&matches)
 }
 
 fn run_migrations(dir: &std::path::Path) -> i32 {
@@ -379,7 +365,8 @@ fn run_build(configuration: &str, clean: bool, bundle: bool) -> i32 {
         }
     }
 
-    Status::info(&format!("Building {} {}...", 
+    Status::info(&format!(
+        "Building {} {}...",
         configuration,
         if bundle { "bundle" } else { "APK" }
     ));
@@ -441,21 +428,19 @@ fn run_emulator(action: &str, name: Option<&str>) -> i32 {
     use foodshare_android::emulator;
 
     match action {
-        "list" => {
-            match emulator::list_avds() {
-                Ok(avds) => {
-                    println!("Available AVDs:");
-                    for avd in avds {
-                        println!("  - {}", avd);
-                    }
-                    exit_codes::SUCCESS
+        "list" => match emulator::list_avds() {
+            Ok(avds) => {
+                println!("Available AVDs:");
+                for avd in avds {
+                    println!("  - {}", avd);
                 }
-                Err(e) => {
-                    Status::error(&format!("Failed to list AVDs: {}", e));
-                    exit_codes::FAILURE
-                }
+                exit_codes::SUCCESS
             }
-        }
+            Err(e) => {
+                Status::error(&format!("Failed to list AVDs: {}", e));
+                exit_codes::FAILURE
+            }
+        },
         "boot" => {
             let avd_name = name.unwrap_or("Pixel_7_API_34");
             Status::info(&format!("Booting {}...", avd_name));
@@ -470,18 +455,16 @@ fn run_emulator(action: &str, name: Option<&str>) -> i32 {
                 }
             }
         }
-        "shutdown" => {
-            match emulator::shutdown_all() {
-                Ok(_) => {
-                    Status::success("Shutdown all emulators");
-                    exit_codes::SUCCESS
-                }
-                Err(e) => {
-                    Status::error(&format!("Failed to shutdown: {}", e));
-                    exit_codes::FAILURE
-                }
+        "shutdown" => match emulator::shutdown_all() {
+            Ok(_) => {
+                Status::success("Shutdown all emulators");
+                exit_codes::SUCCESS
             }
-        }
+            Err(e) => {
+                Status::error(&format!("Failed to shutdown: {}", e));
+                exit_codes::FAILURE
+            }
+        },
         _ => {
             Status::error(&format!("Unknown action: {}", action));
             exit_codes::FAILURE
@@ -506,7 +489,10 @@ fn run_swift_build(target: &str, configuration: &str) -> i32 {
         }
     };
 
-    Status::info(&format!("Building Swift for {} ({})...", target, configuration));
+    Status::info(&format!(
+        "Building Swift for {} ({})...",
+        target, configuration
+    ));
 
     match swift_android::build(
         std::path::Path::new("swift-core"),
@@ -643,27 +629,25 @@ fn run_swift_core(action: SwiftCoreAction) -> i32 {
     use owo_colors::OwoColorize;
 
     match action {
-        SwiftCoreAction::Check => {
-            match swift_core::check_prerequisites() {
-                Ok(status) => {
-                    status.print_status();
-                    if status.is_ready() {
-                        println!();
-                        Status::success("Ready to build Swift for Android");
-                        exit_codes::SUCCESS
-                    } else {
-                        println!();
-                        Status::error("Prerequisites not met");
-                        swift_core::print_setup_instructions();
-                        exit_codes::FAILURE
-                    }
-                }
-                Err(e) => {
-                    Status::error(&format!("Check failed: {}", e));
+        SwiftCoreAction::Check => match swift_core::check_prerequisites() {
+            Ok(status) => {
+                status.print_status();
+                if status.is_ready() {
+                    println!();
+                    Status::success("Ready to build Swift for Android");
+                    exit_codes::SUCCESS
+                } else {
+                    println!();
+                    Status::error("Prerequisites not met");
+                    swift_core::print_setup_instructions();
                     exit_codes::FAILURE
                 }
             }
-        }
+            Err(e) => {
+                Status::error(&format!("Check failed: {}", e));
+                exit_codes::FAILURE
+            }
+        },
         SwiftCoreAction::Build {
             target,
             configuration,
@@ -682,7 +666,9 @@ fn run_swift_core(action: SwiftCoreAction) -> i32 {
                 Ok(status) => {
                     if !status.is_ready() {
                         status.print_status();
-                        Status::error("Prerequisites not met. Run 'swift-core setup' for instructions.");
+                        Status::error(
+                            "Prerequisites not met. Run 'swift-core setup' for instructions.",
+                        );
                         return exit_codes::FAILURE;
                     }
                 }
@@ -712,17 +698,16 @@ fn run_swift_core(action: SwiftCoreAction) -> i32 {
             };
 
             let results = match target.as_str() {
-                "arm64" => {
-                    swift_core::build_for_target(SwiftAndroidTarget::Arm64, &config)
-                        .map(|r| vec![r])
-                }
-                "x86_64" => {
-                    swift_core::build_for_target(SwiftAndroidTarget::X86_64, &config)
-                        .map(|r| vec![r])
-                }
+                "arm64" => swift_core::build_for_target(SwiftAndroidTarget::Arm64, &config)
+                    .map(|r| vec![r]),
+                "x86_64" => swift_core::build_for_target(SwiftAndroidTarget::X86_64, &config)
+                    .map(|r| vec![r]),
                 "all" => swift_core::build_all(&config),
                 _ => {
-                    Status::error(&format!("Unknown target: {}. Use arm64, x86_64, or all", target));
+                    Status::error(&format!(
+                        "Unknown target: {}. Use arm64, x86_64, or all",
+                        target
+                    ));
                     return exit_codes::FAILURE;
                 }
             };
@@ -757,7 +742,10 @@ fn run_swift_core(action: SwiftCoreAction) -> i32 {
                 }
             }
         }
-        SwiftCoreAction::Copy { source_dir, android_dir } => {
+        SwiftCoreAction::Copy {
+            source_dir,
+            android_dir,
+        } => {
             Status::info("Copying libraries to Android project...");
 
             match swift_core::copy_to_android_project(&source_dir, &android_dir) {

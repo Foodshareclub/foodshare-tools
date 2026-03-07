@@ -8,16 +8,16 @@
 
 #![warn(missing_docs)]
 
-mod relevance;
-mod fuzzy;
 mod error;
+mod fuzzy;
+mod relevance;
 
 #[cfg(feature = "wasm")]
 mod wasm;
 
-pub use relevance::{calculate_relevance, RelevanceScore};
+pub use error::{Result, SearchError};
 pub use fuzzy::{fuzzy_match, levenshtein_distance};
-pub use error::{SearchError, Result};
+pub use relevance::{RelevanceScore, calculate_relevance};
 
 /// Search result with relevance score.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

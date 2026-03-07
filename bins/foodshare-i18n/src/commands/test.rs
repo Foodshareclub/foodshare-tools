@@ -128,48 +128,111 @@ pub async fn run(locale: &str, delta: bool, cache: bool, format: &str) -> Result
 async fn run_json(client: &ApiClient, locale: &str, delta: bool, cache: bool) -> Result<()> {
     let bff_result = match client.fetch_bff_translations(locale, None).await {
         Ok((resp, elapsed)) => {
-            let keys = resp.data.as_ref().map(|d| count_keys(&d.messages)).unwrap_or(0);
+            let keys = resp
+                .data
+                .as_ref()
+                .map(|d| count_keys(&d.messages))
+                .unwrap_or(0);
             let version = resp.data.as_ref().and_then(|d| d.version.clone());
-            TestResult { success: resp.success, keys, version, response_time_ms: elapsed.as_millis() as u64 }
+            TestResult {
+                success: resp.success,
+                keys,
+                version,
+                response_time_ms: elapsed.as_millis() as u64,
+            }
         }
-        Err(_) => TestResult { success: false, keys: 0, version: None, response_time_ms: 0 },
+        Err(_) => TestResult {
+            success: false,
+            keys: 0,
+            version: None,
+            response_time_ms: 0,
+        },
     };
 
     let (direct_result, direct_version) = match client.fetch_direct_translations(locale).await {
         Ok((resp, elapsed)) => {
-            let keys = resp.data.as_ref().map(|d| count_keys(&d.messages)).unwrap_or(0);
+            let keys = resp
+                .data
+                .as_ref()
+                .map(|d| count_keys(&d.messages))
+                .unwrap_or(0);
             let version = resp.data.as_ref().and_then(|d| d.version.clone());
-            (TestResult { success: resp.success, keys, version: version.clone(), response_time_ms: elapsed.as_millis() as u64 }, version)
+            (
+                TestResult {
+                    success: resp.success,
+                    keys,
+                    version: version.clone(),
+                    response_time_ms: elapsed.as_millis() as u64,
+                },
+                version,
+            )
         }
-        Err(_) => (TestResult { success: false, keys: 0, version: None, response_time_ms: 0 }, None),
+        Err(_) => (
+            TestResult {
+                success: false,
+                keys: 0,
+                version: None,
+                response_time_ms: 0,
+            },
+            None,
+        ),
     };
 
     let etag_caching = if cache {
         if let Some(version) = &direct_version {
-            client.test_etag_caching(locale, version).await.ok().map(|status| status == 304)
-        } else { None }
-    } else { None };
+            client
+                .test_etag_caching(locale, version)
+                .await
+                .ok()
+                .map(|status| status == 304)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     let delta_sync = if delta {
-        client.test_delta_sync(locale, "20260101000000").await.ok().map(|resp| DeltaTestResult {
-            success: resp.success,
-            has_changes: resp.has_changes.unwrap_or(false),
-            added: resp.stats.as_ref().map(|s| s.added).unwrap_or(0),
-            updated: resp.stats.as_ref().map(|s| s.updated).unwrap_or(0),
-            deleted: resp.stats.as_ref().map(|s| s.deleted).unwrap_or(0),
-        })
-    } else { None };
+        client
+            .test_delta_sync(locale, "20260101000000")
+            .await
+            .ok()
+            .map(|resp| DeltaTestResult {
+                success: resp.success,
+                has_changes: resp.has_changes.unwrap_or(false),
+                added: resp.stats.as_ref().map(|s| s.added).unwrap_or(0),
+                updated: resp.stats.as_ref().map(|s| s.updated).unwrap_or(0),
+                deleted: resp.stats.as_ref().map(|s| s.deleted).unwrap_or(0),
+            })
+    } else {
+        None
+    };
 
-    let output = JsonTestOutput { locale: locale.to_string(), bff: bff_result, direct: direct_result, etag_caching, delta_sync };
+    let output = JsonTestOutput {
+        locale: locale.to_string(),
+        bff: bff_result,
+        direct: direct_result,
+        etag_caching,
+        delta_sync,
+    };
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
 }
 
 fn count_keys(value: &serde_json::Value) -> usize {
     match value {
-        serde_json::Value::Object(map) => {
-            map.values().map(|v| if v.is_string() { 1 } else if v.is_object() { count_keys(v) } else { 0 }).sum()
-        }
+        serde_json::Value::Object(map) => map
+            .values()
+            .map(|v| {
+                if v.is_string() {
+                    1
+                } else if v.is_object() {
+                    count_keys(v)
+                } else {
+                    0
+                }
+            })
+            .sum(),
         _ => 0,
     }
 }
@@ -195,7 +258,13 @@ struct LlmTranslateResponse {
     error: Option<String>,
 }
 
-pub async fn run_llm(text: &str, source: &str, target: &str, context: &str, format: &str) -> Result<()> {
+pub async fn run_llm(
+    text: &str,
+    source: &str,
+    target: &str,
+    context: &str,
+    format: &str,
+) -> Result<()> {
     let endpoint = std::env::var("LLM_TRANSLATION_ENDPOINT")
         .unwrap_or_else(|_| "https://translate.foodshare.club/api/translate".to_string());
     let api_key = std::env::var("LLM_TRANSLATION_API_KEY").ok();
@@ -212,7 +281,8 @@ pub async fn run_llm(text: &str, source: &str, target: &str, context: &str, form
     println!();
 
     let start = Instant::now();
-    let result = send_llm_request(&endpoint, api_key.as_deref(), text, source, target, context).await;
+    let result =
+        send_llm_request(&endpoint, api_key.as_deref(), text, source, target, context).await;
     let elapsed = start.elapsed();
 
     match result {
@@ -234,25 +304,53 @@ pub async fn run_llm(text: &str, source: &str, target: &str, context: &str, form
     Ok(())
 }
 
-async fn run_llm_json(endpoint: &str, api_key: Option<&str>, text: &str, source: &str, target: &str, context: &str) -> Result<()> {
+async fn run_llm_json(
+    endpoint: &str,
+    api_key: Option<&str>,
+    text: &str,
+    source: &str,
+    target: &str,
+    context: &str,
+) -> Result<()> {
     let start = Instant::now();
     let result = send_llm_request(endpoint, api_key, text, source, target, context).await;
     let elapsed = start.elapsed();
 
     let output = match result {
-        Ok(resp) => json!({ "success": resp.error.is_none(), "translated_text": resp.translated_text, "confidence": resp.confidence, "response_time_ms": elapsed.as_millis() }),
-        Err(e) => json!({ "success": false, "error": e.to_string(), "response_time_ms": elapsed.as_millis() }),
+        Ok(resp) => {
+            json!({ "success": resp.error.is_none(), "translated_text": resp.translated_text, "confidence": resp.confidence, "response_time_ms": elapsed.as_millis() })
+        }
+        Err(e) => {
+            json!({ "success": false, "error": e.to_string(), "response_time_ms": elapsed.as_millis() })
+        }
     };
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
 }
 
-async fn send_llm_request(endpoint: &str, api_key: Option<&str>, text: &str, source: &str, target: &str, context: &str) -> Result<LlmTranslateResponse> {
+async fn send_llm_request(
+    endpoint: &str,
+    api_key: Option<&str>,
+    text: &str,
+    source: &str,
+    target: &str,
+    context: &str,
+) -> Result<LlmTranslateResponse> {
     let client = reqwest::Client::new();
-    let request = LlmTranslateRequest { text: text.to_string(), source_language: source.to_string(), target_language: target.to_string(), context: context.to_string() };
+    let request = LlmTranslateRequest {
+        text: text.to_string(),
+        source_language: source.to_string(),
+        target_language: target.to_string(),
+        context: context.to_string(),
+    };
 
-    let mut req = client.post(endpoint).header("Content-Type", "application/json").json(&request);
-    if let Some(key) = api_key { req = req.header("X-API-Key", key); }
+    let mut req = client
+        .post(endpoint)
+        .header("Content-Type", "application/json")
+        .json(&request);
+    if let Some(key) = api_key {
+        req = req.header("X-API-Key", key);
+    }
 
     let response = req.send().await.context("Failed to connect")?;
     if !response.status().is_success() {
@@ -276,6 +374,7 @@ struct Post {
 
 #[derive(Debug, Deserialize)]
 struct TranslationResponse {
+    #[allow(dead_code)]
     success: bool,
     #[serde(rename = "fromRedis")]
     from_redis: Option<i32>,
@@ -300,13 +399,27 @@ struct TranslationField {
     text: String,
 }
 
-pub async fn run_posts(locale: &str, limit: usize, skip_trigger: bool, verbose: bool, format: &str) -> Result<()> {
+pub async fn run_posts(
+    locale: &str,
+    limit: usize,
+    skip_trigger: bool,
+    verbose: bool,
+    format: &str,
+) -> Result<()> {
     let supabase_url = std::env::var("SUPABASE_URL").context("SUPABASE_URL required")?;
     let anon_key = std::env::var("SUPABASE_ANON_KEY").context("SUPABASE_ANON_KEY required")?;
     let service_key = std::env::var("SUPABASE_SERVICE_ROLE_KEY").ok();
 
     if format == "json" {
-        return run_posts_json(&supabase_url, &anon_key, service_key.as_deref(), locale, limit, skip_trigger).await;
+        return run_posts_json(
+            &supabase_url,
+            &anon_key,
+            service_key.as_deref(),
+            locale,
+            limit,
+            skip_trigger,
+        )
+        .await;
     }
 
     println!("{}", "Testing Post Translation System".bold().cyan());
@@ -362,11 +475,20 @@ pub async fn run_posts(locale: &str, limit: usize, skip_trigger: bool, verbose: 
     Ok(())
 }
 
-async fn run_posts_json(supabase_url: &str, anon_key: &str, service_key: Option<&str>, locale: &str, limit: usize, skip_trigger: bool) -> Result<()> {
+async fn run_posts_json(
+    supabase_url: &str,
+    anon_key: &str,
+    service_key: Option<&str>,
+    locale: &str,
+    limit: usize,
+    skip_trigger: bool,
+) -> Result<()> {
     let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
 
     let schema_ok = check_schema(&client, supabase_url, anon_key).await.is_ok();
-    let posts = fetch_posts(&client, supabase_url, anon_key, limit).await.unwrap_or_default();
+    let posts = fetch_posts(&client, supabase_url, anon_key, limit)
+        .await
+        .unwrap_or_default();
 
     if !skip_trigger && service_key.is_some() {
         let key = service_key.unwrap();
@@ -376,7 +498,9 @@ async fn run_posts_json(supabase_url: &str, anon_key: &str, service_key: Option<
         tokio::time::sleep(Duration::from_secs(30)).await;
     }
 
-    let tr = fetch_translations(&client, supabase_url, anon_key, &posts, locale).await.ok();
+    let tr = fetch_translations(&client, supabase_url, anon_key, &posts, locale)
+        .await
+        .ok();
 
     let output = json!({
         "schema_ok": schema_ok,
@@ -393,41 +517,81 @@ async fn run_posts_json(supabase_url: &str, anon_key: &str, service_key: Option<
 }
 
 async fn check_schema(client: &Client, url: &str, key: &str) -> Result<()> {
-    let resp = client.get(format!("{}/rest/v1/content_translations?limit=1", url))
-        .header("apikey", key).header("Authorization", format!("Bearer {}", key))
-        .send().await.context("Failed to check schema")?;
-    if !resp.status().is_success() { anyhow::bail!("Schema check failed"); }
+    let resp = client
+        .get(format!("{}/rest/v1/content_translations?limit=1", url))
+        .header("apikey", key)
+        .header("Authorization", format!("Bearer {}", key))
+        .send()
+        .await
+        .context("Failed to check schema")?;
+    if !resp.status().is_success() {
+        anyhow::bail!("Schema check failed");
+    }
     Ok(())
 }
 
 async fn fetch_posts(client: &Client, url: &str, key: &str, limit: usize) -> Result<Vec<Post>> {
-    let resp = client.get(format!("{}/rest/v1/posts?select=id,post_name,post_description&is_active=eq.true&limit={}", url, limit))
-        .header("apikey", key).header("Authorization", format!("Bearer {}", key))
-        .send().await.context("Failed to fetch posts")?;
-    if !resp.status().is_success() { anyhow::bail!("Failed to fetch posts"); }
+    let resp = client
+        .get(format!(
+            "{}/rest/v1/posts?select=id,post_name,post_description&is_active=eq.true&limit={}",
+            url, limit
+        ))
+        .header("apikey", key)
+        .header("Authorization", format!("Bearer {}", key))
+        .send()
+        .await
+        .context("Failed to fetch posts")?;
+    if !resp.status().is_success() {
+        anyhow::bail!("Failed to fetch posts");
+    }
     let posts: Vec<Post> = resp.json().await?;
-    if posts.is_empty() { anyhow::bail!("No active posts found"); }
+    if posts.is_empty() {
+        anyhow::bail!("No active posts found");
+    }
     Ok(posts)
 }
 
 async fn trigger_translation(client: &Client, url: &str, key: &str, post: &Post) -> Result<()> {
-    let mut fields = vec![TranslationField { name: "title".to_string(), text: post.post_name.clone() }];
+    let mut fields = vec![TranslationField {
+        name: "title".to_string(),
+        text: post.post_name.clone(),
+    }];
     if let Some(desc) = &post.post_description {
-        if !desc.is_empty() { fields.push(TranslationField { name: "description".to_string(), text: desc.clone() }); }
+        if !desc.is_empty() {
+            fields.push(TranslationField {
+                name: "description".to_string(),
+                text: desc.clone(),
+            });
+        }
     }
-    let req = TranslateBatchRequest { content_type: "post".to_string(), content_id: post.id.to_string(), fields };
-    client.post(format!("{}/functions/v1/localization/translate-batch", url))
+    let req = TranslateBatchRequest {
+        content_type: "post".to_string(),
+        content_id: post.id.to_string(),
+        fields,
+    };
+    client
+        .post(format!("{}/functions/v1/localization/translate-batch", url))
         .header("Authorization", format!("Bearer {}", key))
-        .json(&req).send().await?;
+        .json(&req)
+        .send()
+        .await?;
     Ok(())
 }
 
-async fn fetch_translations(client: &Client, url: &str, key: &str, posts: &[Post], locale: &str) -> Result<TranslationResponse> {
+async fn fetch_translations(
+    client: &Client,
+    url: &str,
+    key: &str,
+    posts: &[Post],
+    locale: &str,
+) -> Result<TranslationResponse> {
     let ids: Vec<String> = posts.iter().map(|p| p.id.to_string()).collect();
     let resp = client.post(format!("{}/functions/v1/localization/get-translations", url))
         .header("Authorization", format!("Bearer {}", key))
         .json(&json!({ "contentType": "post", "contentIds": ids, "locale": locale, "fields": ["title", "description"] }))
         .send().await.context("Failed to fetch translations")?;
-    if !resp.status().is_success() { anyhow::bail!("Failed to fetch translations"); }
+    if !resp.status().is_success() {
+        anyhow::bail!("Failed to fetch translations");
+    }
     resp.json().await.context("Failed to parse translations")
 }

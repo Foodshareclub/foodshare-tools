@@ -26,19 +26,22 @@ impl FileScanner {
     }
 
     /// Filter by file extensions (e.g., "swift", "kt", "ts")
-    #[must_use] pub fn with_extensions(mut self, extensions: &[&str]) -> Self {
+    #[must_use]
+    pub fn with_extensions(mut self, extensions: &[&str]) -> Self {
         self.extensions = extensions.iter().map(|s| (*s).to_string()).collect();
         self
     }
 
     /// Add patterns to exclude (glob patterns)
-    #[must_use] pub fn exclude(mut self, patterns: &[&str]) -> Self {
+    #[must_use]
+    pub fn exclude(mut self, patterns: &[&str]) -> Self {
         self.exclude_patterns = patterns.iter().map(|s| (*s).to_string()).collect();
         self
     }
 
     /// Whether to respect .gitignore files
-    #[must_use] pub fn respect_gitignore(mut self, respect: bool) -> Self {
+    #[must_use]
+    pub fn respect_gitignore(mut self, respect: bool) -> Self {
         self.respect_gitignore = respect;
         self
     }
@@ -60,10 +63,7 @@ impl FileScanner {
 
             // Check extension filter
             if !self.extensions.is_empty() {
-                let ext = path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("");
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
                 if !self.extensions.iter().any(|e| e == ext) {
                     continue;
                 }
@@ -144,7 +144,8 @@ pub fn file_size(path: &Path) -> Result<u64> {
 }
 
 /// Find files matching a pattern recursively (simple walkdir-based)
-#[must_use] pub fn find_files(root: &Path, pattern: &str) -> Vec<PathBuf> {
+#[must_use]
+pub fn find_files(root: &Path, pattern: &str) -> Vec<PathBuf> {
     let glob_pattern = glob::Pattern::new(pattern).ok();
 
     WalkDir::new(root)

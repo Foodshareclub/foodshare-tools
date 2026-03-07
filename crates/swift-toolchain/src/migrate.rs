@@ -1,4 +1,4 @@
-use crate::error::{Result, SwiftError};
+use crate::error::Result;
 use colored::Colorize;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -64,12 +64,7 @@ impl SwiftMigrator {
             .into_iter()
             .filter_map(|e| e.ok())
         {
-            if entry
-                .path()
-                .extension()
-                .and_then(|s| s.to_str())
-                == Some("xcodeproj")
-            {
+            if entry.path().extension().and_then(|s| s.to_str()) == Some("xcodeproj") {
                 let pbxproj = entry.path().join("project.pbxproj");
                 if pbxproj.exists() {
                     let content = std::fs::read_to_string(&pbxproj)?;
@@ -179,7 +174,9 @@ impl SwiftMigrator {
         if self.dry_run {
             println!(
                 "{}",
-                "✅ Dry run complete! Run without --dry-run to apply changes.".green().bold()
+                "✅ Dry run complete! Run without --dry-run to apply changes."
+                    .green()
+                    .bold()
             );
         } else {
             println!("{}", "✅ Migration complete!".green().bold());

@@ -10,10 +10,10 @@ use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 use uuid::Uuid;
 
 /// Global metrics registry
@@ -29,17 +29,17 @@ pub fn init() -> anyhow::Result<()> {
 
 /// Initialize with custom configuration
 pub fn init_with_config(config: TelemetryConfig) -> anyhow::Result<()> {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&config.log_level));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level));
 
-    let subscriber = tracing_subscriber::registry()
-        .with(filter)
-        .with(fmt::layer()
+    let subscriber = tracing_subscriber::registry().with(filter).with(
+        fmt::layer()
             .with_target(config.show_target)
             .with_thread_ids(config.show_thread_ids)
             .with_file(config.show_file)
             .with_line_number(config.show_line_number)
-            .compact());
+            .compact(),
+    );
 
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|e| anyhow::anyhow!("Failed to set tracing subscriber: {}", e))?;
@@ -132,10 +132,7 @@ impl MetricsRegistry {
     /// Record a histogram value
     pub fn histogram(&self, name: &str, value: f64) {
         let mut histograms = self.histograms.write().unwrap();
-        histograms
-            .entry(name.to_string())
-            .or_default()
-            .push(value);
+        histograms.entry(name.to_string()).or_default().push(value);
     }
 
     /// Get uptime in seconds
@@ -320,7 +317,13 @@ mod tests {
         registry.increment_by("test_counter", 3);
 
         let counters = registry.counters.read().unwrap();
-        assert_eq!(counters.get("test_counter").unwrap().load(Ordering::Relaxed), 5);
+        assert_eq!(
+            counters
+                .get("test_counter")
+                .unwrap()
+                .load(Ordering::Relaxed),
+            5
+        );
     }
 
     #[test]
@@ -330,7 +333,10 @@ mod tests {
         registry.gauge("test_gauge", 100);
 
         let gauges = registry.gauges.read().unwrap();
-        assert_eq!(gauges.get("test_gauge").unwrap().load(Ordering::Relaxed), 100);
+        assert_eq!(
+            gauges.get("test_gauge").unwrap().load(Ordering::Relaxed),
+            100
+        );
     }
 
     #[test]

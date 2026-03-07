@@ -123,10 +123,7 @@ fn cmd_vault_sync(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Erro
     let mut skipped = 0u32;
     let mut missing = 0u32;
 
-    let pb = progress::progress_bar(
-        secrets::VAULT_SECRETS.len() as u64,
-        "Syncing vault secrets",
-    );
+    let pb = progress::progress_bar(secrets::VAULT_SECRETS.len() as u64, "Syncing vault secrets");
 
     for secret in secrets::VAULT_SECRETS {
         pb.inc(1);
@@ -317,10 +314,7 @@ fn cmd_env_diff(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Error>
     }
 
     println!();
-    Status::info(&format!(
-        "{} variables would be added",
-        missing.len()
-    ));
+    Status::info(&format!("{} variables would be added", missing.len()));
 
     Ok(())
 }
@@ -461,16 +455,27 @@ fn make_vault_client(cli: &Cli) -> std::result::Result<VaultClient, Box<dyn std:
 
 /// Extension trait to check a specific vault secret via `get_vault_secret()`.
 trait VaultClientExt {
-    fn run_vault_secret_check(&self, secret_name: &str) -> std::result::Result<bool, Box<dyn std::error::Error>>;
+    fn run_vault_secret_check(
+        &self,
+        secret_name: &str,
+    ) -> std::result::Result<bool, Box<dyn std::error::Error>>;
 }
 
 impl VaultClientExt for VaultClient {
-    fn run_vault_secret_check(&self, secret_name: &str) -> std::result::Result<bool, Box<dyn std::error::Error>> {
+    fn run_vault_secret_check(
+        &self,
+        secret_name: &str,
+    ) -> std::result::Result<bool, Box<dyn std::error::Error>> {
         // Validate the secret name (alphanumeric + underscore only)
-        if !secret_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            return Err(Box::new(foodshare_migrate::error::MigrateError::verification(
-                format!("invalid secret name: {secret_name}"),
-            )));
+        if !secret_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err(Box::new(
+                foodshare_migrate::error::MigrateError::verification(format!(
+                    "invalid secret name: {secret_name}"
+                )),
+            ));
         }
 
         let exists = self.secret_exists(secret_name)?;

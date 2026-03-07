@@ -3,16 +3,21 @@
 //! Provides tools for managing iOS simulators.
 
 use foodshare_core::error::Result;
-use foodshare_core::process::{run_command, CommandResult};
+use foodshare_core::process::{CommandResult, run_command};
 use serde::{Deserialize, Serialize};
 
-/// Simulator device info
+/// Information about an iOS simulator device
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimulatorDevice {
+    /// Unique device identifier
     pub udid: String,
+    /// Human-readable name (e.g. "iPhone 15 Pro")
     pub name: String,
+    /// Current device state (e.g. "Booted", "Shutdown")
     pub state: String,
+    /// iOS runtime version (e.g. "iOS 17.0")
     pub runtime: String,
+    /// Whether the device is available for use
     pub is_available: bool,
 }
 

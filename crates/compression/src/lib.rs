@@ -8,17 +8,17 @@
 #![warn(missing_docs)]
 
 mod brotli_impl;
-mod gzip;
-mod etag;
 mod error;
+mod etag;
+mod gzip;
 
 #[cfg(feature = "wasm")]
 mod wasm;
 
 pub use brotli_impl::{brotli_compress, brotli_decompress};
-pub use gzip::{gzip_compress, gzip_decompress, deflate_compress, deflate_decompress};
-pub use etag::generate_etag;
 pub use error::{CompressionError, Result};
+pub use etag::generate_etag;
+pub use gzip::{deflate_compress, deflate_decompress, gzip_compress, gzip_decompress};
 
 /// Compression algorithm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

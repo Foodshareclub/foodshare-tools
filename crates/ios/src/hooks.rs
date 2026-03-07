@@ -10,7 +10,7 @@
 use crate::code_protection::{ProtectionConfig, SnapshotManager, SnapshotTrigger};
 use crate::swift_tools;
 use chrono::Local;
-use foodshare_core::error::{exit_codes, Result};
+use foodshare_core::error::{Result, exit_codes};
 use foodshare_core::git::GitRepo;
 use foodshare_core::process::run_command;
 use owo_colors::OwoColorize;
@@ -80,8 +80,11 @@ pub struct SafeFormatResult {
 /// Diff information for a single file
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileDiff {
+    /// Number of lines inserted
     pub insertions: usize,
+    /// Number of lines deleted
     pub deletions: usize,
+    /// List of formatted diff hunks
     pub hunks: Vec<String>,
 }
 
@@ -158,11 +161,7 @@ impl SafeFormat {
         if self.config.backup && !self.config.preview {
             result.backup_ref = self.create_backup()?;
             if let Some(ref backup) = result.backup_ref {
-                println!(
-                    "  {} Stash backup: {}",
-                    "✓".green(),
-                    backup.dimmed()
-                );
+                println!("  {} Stash backup: {}", "✓".green(), backup.dimmed());
             }
         }
 
@@ -178,7 +177,10 @@ impl SafeFormat {
 
         // Step 3: Preview or format
         if self.config.preview {
-            println!("\n  {} Preview mode - no files will be modified\n", "👁".yellow());
+            println!(
+                "\n  {} Preview mode - no files will be modified\n",
+                "👁".yellow()
+            );
             self.preview_format(&swift_files, &original_contents, &mut result)?;
         } else {
             self.execute_format(&swift_files, &original_contents, &mut result)?;
@@ -205,10 +207,7 @@ impl SafeFormat {
         }
 
         // Create stash with --keep-index to preserve staged changes
-        let result = run_command(
-            "git",
-            &["stash", "push", "-m", &stash_msg, "--keep-index"],
-        )?;
+        let result = run_command("git", &["stash", "push", "-m", &stash_msg, "--keep-index"])?;
 
         if result.success && !result.stdout.contains("No local changes") {
             Ok(Some(stash_msg))
@@ -285,7 +284,9 @@ impl SafeFormat {
             let cmd_result = run_command("swiftformat", &[&file.to_string_lossy()])?;
 
             if !cmd_result.success {
-                result.failed_files.push((file.clone(), cmd_result.stderr.clone()));
+                result
+                    .failed_files
+                    .push((file.clone(), cmd_result.stderr.clone()));
                 println!(
                     "  {} {} - {}",
                     "✗".red(),
@@ -319,7 +320,10 @@ impl SafeFormat {
                         println!("    {}", hunk.dimmed());
                     }
                     if diff.hunks.len() > 3 {
-                        println!("    {} more changes...", format!("... {} ", diff.hunks.len() - 3).dimmed());
+                        println!(
+                            "    {} more changes...",
+                            format!("... {} ", diff.hunks.len() - 3).dimmed()
+                        );
                     }
                 }
 
@@ -506,20 +510,30 @@ pub fn print_format_summary(result: &SafeFormatResult) {
 /// Pre-push check definition
 #[derive(Debug, Clone)]
 pub struct PrePushCheck {
+    /// Name of the check
     pub name: &'static str,
+    /// Summary of what the check validates
     pub description: &'static str,
+    /// Whether this check is mandatory to pass
     pub required: bool,
+    /// Max duration before timing out
     pub timeout: Duration,
 }
 
-/// Pre-push check result
+/// Result of a single pre-push check execution
 #[derive(Debug, Clone)]
 pub struct PrePushCheckResult {
+    /// Name of the check performed
     pub name: String,
+    /// Whether the check was successful
     pub success: bool,
+    /// Duration of the check execution
     pub duration: Duration,
+    /// Optional error output if the check failed
     pub output: Option<String>,
+    /// Whether the check was explicitly skipped
     pub skipped: bool,
+    /// Whether passing this check was required
     pub required: bool,
 }
 
@@ -564,9 +578,21 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
     }
 
     let checks = vec![
-        CheckDef { name: "lint", description: "Swift lint check", required: true },
-        CheckDef { name: "build", description: "Build validation", required: true },
-        CheckDef { name: "test", description: "Unit tests", required: false },
+        CheckDef {
+            name: "lint",
+            description: "Swift lint check",
+            required: true,
+        },
+        CheckDef {
+            name: "build",
+            description: "Build validation",
+            required: true,
+        },
+        CheckDef {
+            name: "test",
+            description: "Unit tests",
+            required: false,
+        },
     ];
 
     for check in checks {
@@ -580,7 +606,12 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
                 skipped: true,
                 required: check.required,
             });
-            println!("  {} {} {}", "⊘".dimmed(), check.name.dimmed(), "(skipped)".dimmed());
+            println!(
+                "  {} {} {}",
+                "⊘".dimmed(),
+                check.name.dimmed(),
+                "(skipped)".dimmed()
+            );
             continue;
         }
 
@@ -594,7 +625,12 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
                 skipped: true,
                 required: check.required,
             });
-            println!("  {} {} {}", "⊘".dimmed(), check.name.dimmed(), "(quick mode)".dimmed());
+            println!(
+                "  {} {} {}",
+                "⊘".dimmed(),
+                check.name.dimmed(),
+                "(quick mode)".dimmed()
+            );
             continue;
         }
 
@@ -676,8 +712,7 @@ fn check_lint(_config: &PrePushConfig) -> std::result::Result<(), String> {
         return Ok(()); // Skip if not installed
     }
 
-    let result = swift_tools::lint(&["FoodShare"], false, false)
-        .map_err(|e| e.to_string())?;
+    let result = swift_tools::lint(&["FoodShare"], false, false).map_err(|e| e.to_string())?;
 
     if result.success {
         Ok(())

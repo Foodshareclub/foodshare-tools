@@ -11,16 +11,23 @@ use walkdir::WalkDir;
 /// Migration file info
 #[derive(Debug)]
 pub struct MigrationFile {
+    /// Relative path to the migration file
     pub path: String,
+    /// Human-readable name of the migration
     pub name: String,
+    /// Timestamp prefix of the migration
     pub timestamp: String,
 }
 
-/// Check migrations status
+/// Results of a migrations status check
 pub struct MigrationsCheck {
+    /// Directory where migrations are located
     pub migrations_dir: String,
+    /// List of migration files that are not yet committed
     pub uncommitted: Vec<MigrationFile>,
+    /// List of migration files that are currently staged
     pub staged: Vec<MigrationFile>,
+    /// Total number of migration files found
     pub total: usize,
 }
 
@@ -42,10 +49,7 @@ pub fn check_migrations(
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| {
-            e.file_type().is_file()
-                && e.path()
-                    .extension()
-                    .map_or(false, |ext| ext == "sql")
+            e.file_type().is_file() && e.path().extension().map_or(false, |ext| ext == "sql")
         })
         .collect();
 

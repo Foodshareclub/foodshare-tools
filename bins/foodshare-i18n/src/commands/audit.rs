@@ -7,7 +7,12 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 
 /// Run translation audit
-pub async fn run(locale: Option<&str>, show_missing: bool, limit: usize, format: &str) -> Result<()> {
+pub async fn run(
+    locale: Option<&str>,
+    show_missing: bool,
+    limit: usize,
+    format: &str,
+) -> Result<()> {
     let client = ApiClient::new()?;
 
     if format == "json" {
@@ -17,14 +22,12 @@ pub async fn run(locale: Option<&str>, show_missing: bool, limit: usize, format:
     println!();
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!("  {}", "🔍 Translation Coverage Audit".blue().bold());
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!();
 
@@ -104,10 +107,7 @@ async fn audit_single_locale(
                                 .map(|k| k.key.as_str())
                                 .collect();
                             if !missing.is_empty() {
-                                println!(
-                                    "         Missing: {}",
-                                    missing.join(", ").dimmed()
-                                );
+                                println!("         Missing: {}", missing.join(", ").dimmed());
                             }
                         }
                     }

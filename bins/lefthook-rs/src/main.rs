@@ -83,7 +83,9 @@ fn main() -> Result<()> {
 
     let result = match cli.command {
         Commands::Security { files } => run_security(&files, &config),
-        Commands::ConventionalCommit { message_file } => run_conventional_commit(&message_file, &config),
+        Commands::ConventionalCommit { message_file } => {
+            run_conventional_commit(&message_file, &config)
+        }
         Commands::ProtectedBranch => run_protected_branch(),
         Commands::LargeFiles { max_size } => run_large_files(max_size),
         Commands::NextjsSecurity { files } => run_nextjs_security(&files),
@@ -106,13 +108,8 @@ fn run_security(files: &[String], config: &Config) -> i32 {
         files.iter().map(PathBuf::from).collect()
     };
 
-    match secrets::scan_files(&paths, &config.schema.secrets) {
-        Ok(matches) => secrets::print_results(&matches),
-        Err(e) => {
-            Status::error(&format!("Scan error: {}", e));
-            exit_codes::FAILURE
-        }
-    }
+    let matches = secrets::scan_files(&paths, &config.schema.secrets);
+    secrets::print_results(&matches)
 }
 
 fn run_conventional_commit(message_file: &str, config: &Config) -> i32 {
@@ -187,11 +184,7 @@ fn run_large_files(max_size_kb: u64) -> i32 {
             } else {
                 Status::error(&format!("Found {} large file(s):", large_files.len()));
                 for (file, size) in large_files {
-                    eprintln!(
-                        "  - {} ({:.2} KB)",
-                        file.display(),
-                        size as f64 / 1024.0
-                    );
+                    eprintln!("  - {} ({:.2} KB)", file.display(), size as f64 / 1024.0);
                 }
                 exit_codes::FAILURE
             }
@@ -207,8 +200,7 @@ fn run_nextjs_security(files: &[String]) -> i32 {
     use foodshare_web::nextjs_security;
 
     let paths: Vec<PathBuf> = if files.is_empty() {
-        foodshare_core::file_scanner::scan_ts_files(std::path::Path::new("src"))
-            .unwrap_or_default()
+        foodshare_core::file_scanner::scan_ts_files(std::path::Path::new("src")).unwrap_or_default()
     } else {
         files.iter().map(PathBuf::from).collect()
     };

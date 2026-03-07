@@ -7,13 +7,13 @@
 
 #![warn(missing_docs)]
 
+mod error;
 mod hmac_impl;
 mod timing;
-mod error;
 
 #[cfg(feature = "wasm")]
 mod wasm;
 
-pub use hmac_impl::{hmac_sha256, hmac_sha1, verify_signature};
-pub use timing::constant_time_compare;
 pub use error::{CryptoError, Result};
+pub use hmac_impl::{hmac_sha1, hmac_sha256, verify_signature};
+pub use timing::constant_time_compare;

@@ -1,7 +1,7 @@
 //! Benchmarks for geo crate distance calculations.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use foodshare_geo::{batch::LocationItem, calculate_distances, haversine_distance, Coordinate};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use foodshare_geo::{Coordinate, batch::LocationItem, calculate_distances, haversine_distance};
 use serde_json::json;
 
 fn create_test_items(count: usize) -> Vec<LocationItem> {
@@ -36,7 +36,9 @@ fn bench_batch_distances(c: &mut Criterion) {
         let user_lng = 10.0;
 
         group.bench_with_input(BenchmarkId::new("sequential", size), size, |b, _| {
-            b.iter(|| calculate_distances(black_box(user_lat), black_box(user_lng), black_box(&items)))
+            b.iter(|| {
+                calculate_distances(black_box(user_lat), black_box(user_lng), black_box(&items))
+            })
         });
     }
 

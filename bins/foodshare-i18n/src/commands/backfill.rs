@@ -36,6 +36,7 @@ struct BatchTranslateRequest {
 
 /// Batch translation response
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct BatchTranslateResponse {
     success: bool,
     total_translations: Option<i32>,
@@ -45,6 +46,7 @@ struct BatchTranslateResponse {
 
 /// Supabase query response
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct SupabaseResponse<T> {
     #[serde(flatten)]
     data: Option<Vec<T>>,
@@ -52,6 +54,7 @@ struct SupabaseResponse<T> {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct SupabaseError {
     message: String,
 }
@@ -104,11 +107,7 @@ pub async fn run(
     if dry_run {
         println!("{}", "Dry run - would process:".yellow());
         for post in posts.iter().take(5) {
-            println!(
-                "  Post {}: \"{}\"",
-                post.id,
-                truncate(&post.post_name, 40)
-            );
+            println!("  Post {}: \"{}\"", post.id, truncate(&post.post_name, 40));
         }
         if posts.len() > 5 {
             println!("  ... and {} more", posts.len() - 5);
@@ -122,7 +121,9 @@ pub async fn run(
     println!();
     println!(
         "{}",
-        "Backfill complete! Translations are processing in the background.".green().bold()
+        "Backfill complete! Translations are processing in the background."
+            .green()
+            .bold()
     );
     println!("  Check Redis and PostgreSQL for cached translations.");
 
@@ -249,7 +250,8 @@ async fn translate_post(base_url: &str, service_key: &str, post: &Post) -> Resul
         anyhow::bail!("HTTP {}: {}", status, body);
     }
 
-    let result: BatchTranslateResponse = response.json().await.context("Failed to parse response")?;
+    let result: BatchTranslateResponse =
+        response.json().await.context("Failed to parse response")?;
 
     if let Some(err) = result.error {
         anyhow::bail!("{}", err);

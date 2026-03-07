@@ -10,9 +10,9 @@
 #![warn(missing_docs)]
 
 mod detect;
+mod error;
 mod metadata;
 pub mod smart_width;
-mod error;
 
 #[cfg(feature = "processing")]
 mod resize;
@@ -20,13 +20,13 @@ mod resize;
 #[cfg(feature = "processing")]
 mod alpha;
 
-pub use detect::{detect_format, ImageFormat};
-pub use metadata::{ImageMetadata, extract_metadata};
-pub use smart_width::{calculate_target_width, SizeTier};
+pub use detect::{ImageFormat, detect_format};
 pub use error::{ImageError, Result};
+pub use metadata::{ImageMetadata, extract_metadata};
+pub use smart_width::{SizeTier, calculate_target_width};
 
 #[cfg(feature = "processing")]
-pub use resize::{resize_image, ResizeOptions};
+pub use resize::{ResizeOptions, resize_image};
 
 #[cfg(feature = "processing")]
-pub use alpha::{remove_alpha_channel, process_image_file, has_alpha_channel, AlphaRemovalOptions};
+pub use alpha::{AlphaRemovalOptions, has_alpha_channel, process_image_file, remove_alpha_channel};

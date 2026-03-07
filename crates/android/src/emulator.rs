@@ -3,20 +3,26 @@
 //! Provides tools for managing Android emulators.
 
 use foodshare_core::error::Result;
-use foodshare_core::process::{command_exists, run_command, CommandResult};
+use foodshare_core::process::{CommandResult, command_exists, run_command};
 use serde::{Deserialize, Serialize};
 
-/// Emulator device info
+/// Android emulator device information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmulatorDevice {
+    /// Name of the AVD (Android Virtual Device)
     pub name: String,
+    /// Current execution status of the emulator
     pub status: EmulatorStatus,
 }
 
+/// Execution status of an Android emulator
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EmulatorStatus {
+    /// Emulator is currently running
     Running,
+    /// Emulator is stopped
     Stopped,
+    /// Status could not be determined
     Unknown,
 }
 

@@ -3,7 +3,7 @@
 //! Provides tools for working with Xcode projects and workspaces.
 
 use foodshare_core::error::Result;
-use foodshare_core::process::{command_exists, run_command, CommandResult};
+use foodshare_core::process::{CommandResult, command_exists, run_command};
 use std::path::Path;
 
 /// Check if xcodebuild is available
@@ -14,7 +14,12 @@ pub fn is_xcode_available() -> bool {
 /// Get Xcode version
 pub fn xcode_version() -> Result<String> {
     let result = run_command("xcodebuild", &["-version"])?;
-    Ok(result.stdout.lines().next().unwrap_or("Unknown").to_string())
+    Ok(result
+        .stdout
+        .lines()
+        .next()
+        .unwrap_or("Unknown")
+        .to_string())
 }
 
 /// Build an Xcode project
@@ -71,7 +76,12 @@ pub fn archive(scheme: &str, archive_path: &Path) -> Result<CommandResult> {
 pub fn list_schemes(project_path: &Path) -> Result<Vec<String>> {
     let result = run_command(
         "xcodebuild",
-        &["-project", &project_path.to_string_lossy(), "-list", "-json"],
+        &[
+            "-project",
+            &project_path.to_string_lossy(),
+            "-list",
+            "-json",
+        ],
     )?;
 
     // Parse JSON output to extract schemes

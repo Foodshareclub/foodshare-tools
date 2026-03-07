@@ -7,20 +7,27 @@ use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// Bundle info
+/// Information about a single JavaScript bundle
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BundleInfo {
+    /// Name of the bundle file
     pub name: String,
+    /// Size of the bundle in bytes
     pub size: u64,
+    /// Optional gzipped size in bytes
     pub gzip_size: Option<u64>,
 }
 
-/// Bundle analysis result
+/// Results of a bundle size analysis run
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BundleAnalysis {
+    /// Total combined size of all bundles in bytes
     pub total_size: u64,
+    /// Total combined gzipped size in bytes
     pub total_gzip: u64,
+    /// List of individual bundle information
     pub bundles: Vec<BundleInfo>,
+    /// Name of the largest bundle found
     pub largest_bundle: Option<String>,
 }
 

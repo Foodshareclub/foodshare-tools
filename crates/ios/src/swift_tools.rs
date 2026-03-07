@@ -3,7 +3,7 @@
 //! Provides wrappers for Swift development tools.
 
 use foodshare_core::error::Result;
-use foodshare_core::process::{command_exists, run_command, run_command_in_dir, CommandResult};
+use foodshare_core::process::{CommandResult, command_exists, run_command, run_command_in_dir};
 use std::path::Path;
 
 /// Check if swiftformat is available
@@ -60,11 +60,7 @@ pub fn lint(files: &[&str], strict: bool, fix: bool) -> Result<CommandResult> {
 
 /// Lint all Swift files in a directory
 pub fn lint_directory(dir: &Path, strict: bool, fix: bool) -> Result<CommandResult> {
-    let mut args = if fix {
-        vec!["--fix"]
-    } else {
-        vec!["lint"]
-    };
+    let mut args = if fix { vec!["--fix"] } else { vec!["lint"] };
 
     if strict && !fix {
         args.push("--strict");
@@ -75,11 +71,7 @@ pub fn lint_directory(dir: &Path, strict: bool, fix: bool) -> Result<CommandResu
 
 /// Build Swift package
 pub fn build_package(package_dir: &Path, configuration: &str) -> Result<CommandResult> {
-    run_command_in_dir(
-        "swift",
-        &["build", "-c", configuration],
-        package_dir,
-    )
+    run_command_in_dir("swift", &["build", "-c", configuration], package_dir)
 }
 
 /// Test Swift package
@@ -107,7 +99,12 @@ pub fn update_dependencies(package_dir: &Path) -> Result<CommandResult> {
 /// Get Swift version
 pub fn swift_version() -> Result<String> {
     let result = run_command("swift", &["--version"])?;
-    Ok(result.stdout.lines().next().unwrap_or("Unknown").to_string())
+    Ok(result
+        .stdout
+        .lines()
+        .next()
+        .unwrap_or("Unknown")
+        .to_string())
 }
 
 #[cfg(test)]

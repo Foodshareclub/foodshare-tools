@@ -9,59 +9,85 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Represents an Xcode project
+/// Represents an Xcode project (.xcodeproj)
 #[derive(Debug)]
 pub struct XcodeProject {
+    /// Absolute path to the .xcodeproj directory
     pub path: PathBuf,
+    /// Absolute path to the project root directory
     pub project_dir: PathBuf,
+    /// Raw content of the project.pbxproj file
     content: String,
+    /// Map of all PBX objects in the project by their 24-char hex ID
     objects: HashMap<String, PBXObject>,
+    /// ID of the root PBXProject object
     root_object_id: String,
 }
 
 /// A generic PBX object from the project file
 #[derive(Debug, Clone)]
 pub struct PBXObject {
+    /// 24-character uppercase hex ID
     pub id: String,
+    /// The 'isa' property (e.g., PBXFileReference)
     pub isa: String,
+    /// Map of all immediate properties extracted from the object
     pub properties: HashMap<String, String>,
+    /// Raw string representation of the object in the pbxproj file
     pub raw: String,
 }
 
-/// File reference in the project
+/// File reference in the project (PBXFileReference)
 #[derive(Debug, Clone)]
 pub struct FileReference {
+    /// 24-character ID of the file reference
     pub id: String,
+    /// Relative or absolute path to the file
     pub path: String,
+    /// Optional display name of the file
     pub name: Option<String>,
+    /// Source tree reference (e.g. SOURCE_ROOT)
     pub source_tree: String,
+    /// Optional explicit file type
     pub file_type: Option<String>,
 }
 
-/// Build file reference
+/// Build file reference (PBXBuildFile) linking a file to a build phase
 #[derive(Debug, Clone)]
 pub struct BuildFile {
+    /// 24-character ID of the build file entry
     pub id: String,
+    /// ID of the associated PBXFileReference
     pub file_ref_id: String,
 }
 
-/// Target in the project
+/// Target in the project (PBXNativeTarget)
 #[derive(Debug, Clone)]
 pub struct Target {
+    /// 24-character ID of the target
     pub id: String,
+    /// Name of the target (e.g. "FoodShare")
     pub name: String,
+    /// List of IDs for the target's build phases
     pub build_phases: Vec<String>,
 }
 
-/// File type classification for Xcode
+/// File type classification for Xcode project entries
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileType {
+    /// Swift source file (.swift)
     Swift,
+    /// Objective-C or Objective-C++ source file (.m, .mm)
     ObjC,
+    /// Metal shader file (.metal)
     Metal,
+    /// C/C++/ObjC header file (.h, .hpp)
     Header,
+    /// App resource (json, plist, png, etc.)
     Resource,
+    /// External framework or library
     Framework,
+    /// Unclassified file type
     Unknown,
 }
 
@@ -99,23 +125,33 @@ impl FileType {
     }
 }
 
-/// Result of adding a file to the project
+/// Result of adding a file to the Xcode project
 #[derive(Debug)]
 pub struct AddFileResult {
+    /// ID of the created PBXFileReference
     pub file_ref_id: String,
+    /// ID of the created PBXBuildFile if added to a build phase
     pub build_file_id: Option<String>,
+    /// ID of the PBXGroup the file was added to
     pub group_id: String,
+    /// Resolved path of the file
     pub path: PathBuf,
+    /// Whether the file was already present in the project
     pub already_exists: bool,
 }
 
-/// Reference to a PBXGroup in the project
+/// Reference to a group in the project hierarchy (PBXGroup)
 #[derive(Debug, Clone)]
 pub struct GroupReference {
+    /// 24-character ID of the group
     pub id: String,
+    /// Display name of the group
     pub name: Option<String>,
+    /// Optional path on disk associated with the group
     pub path: Option<String>,
+    /// List of IDs for children (files or sub-groups)
     pub children: Vec<String>,
+    /// Source tree reference (usually <group>)
     pub source_tree: String,
 }
 
@@ -155,34 +191,35 @@ impl XcodeProject {
 
         // Parse PBXFileReference entries
         let file_ref_re = Regex::new(
-            r#"([A-F0-9]{24})\s*/\*[^*]*\*/\s*=\s*\{isa\s*=\s*PBXFileReference;[^}]+\}"#
-        ).unwrap();
-        
+            r#"([A-F0-9]{24})\s*/\*[^*]*\*/\s*=\s*\{isa\s*=\s*PBXFileReference;[^}]+\}"#,
+        )
+        .unwrap();
+
         for cap in file_ref_re.captures_iter(&self.content) {
             let id = cap[0].split_whitespace().next().unwrap_or("").to_string();
             let body = &cap[0];
-            
+
             let mut properties = HashMap::new();
             properties.insert("isa".to_string(), "PBXFileReference".to_string());
-            
+
             // Extract path
             let path_re = Regex::new(r#"path\s*=\s*"?([^";]+)"?"#).unwrap();
             if let Some(path_cap) = path_re.captures(body) {
                 properties.insert("path".to_string(), path_cap[1].trim().to_string());
             }
-            
+
             // Extract name
             let name_re = Regex::new(r#"name\s*=\s*"?([^";]+)"?"#).unwrap();
             if let Some(name_cap) = name_re.captures(body) {
                 properties.insert("name".to_string(), name_cap[1].trim().to_string());
             }
-            
+
             // Extract sourceTree
             let tree_re = Regex::new(r#"sourceTree\s*=\s*"?([^";]+)"?"#).unwrap();
             if let Some(tree_cap) = tree_re.captures(body) {
                 properties.insert("sourceTree".to_string(), tree_cap[1].trim().to_string());
             }
-            
+
             self.objects.insert(
                 id.clone(),
                 PBXObject {
@@ -198,15 +235,15 @@ impl XcodeProject {
         let build_file_re = Regex::new(
             r#"([A-F0-9]{24})\s*/\*[^*]*\*/\s*=\s*\{isa\s*=\s*PBXBuildFile;\s*fileRef\s*=\s*([A-F0-9]{24})"#
         ).unwrap();
-        
+
         for cap in build_file_re.captures_iter(&self.content) {
             let id = cap[1].to_string();
             let file_ref = cap[2].to_string();
-            
+
             let mut properties = HashMap::new();
             properties.insert("isa".to_string(), "PBXBuildFile".to_string());
             properties.insert("fileRef".to_string(), file_ref);
-            
+
             self.objects.insert(
                 id.clone(),
                 PBXObject {
@@ -220,27 +257,28 @@ impl XcodeProject {
 
         // Parse PBXNativeTarget entries
         let target_re = Regex::new(
-            r#"([A-F0-9]{24})\s*/\*\s*([^*]+)\s*\*/\s*=\s*\{[^}]*isa\s*=\s*PBXNativeTarget"#
-        ).unwrap();
-        
+            r#"([A-F0-9]{24})\s*/\*\s*([^*]+)\s*\*/\s*=\s*\{[^}]*isa\s*=\s*PBXNativeTarget"#,
+        )
+        .unwrap();
+
         for cap in target_re.captures_iter(&self.content) {
             let id = cap[1].to_string();
             let name = cap[2].trim().to_string();
-            
+
             let mut properties = HashMap::new();
             properties.insert("isa".to_string(), "PBXNativeTarget".to_string());
             properties.insert("name".to_string(), name);
-            
+
             // Find buildPhases for this target - search in a larger context
             let target_start = cap.get(0).unwrap().start();
             let search_end = (target_start + 2000).min(self.content.len());
             let target_context = &self.content[target_start..search_end];
-            
+
             let phases_re = Regex::new(r#"buildPhases\s*=\s*\(([^)]+)\)"#).unwrap();
             if let Some(phases_cap) = phases_re.captures(target_context) {
                 properties.insert("buildPhases".to_string(), phases_cap[1].to_string());
             }
-            
+
             self.objects.insert(
                 id.clone(),
                 PBXObject {
@@ -254,25 +292,26 @@ impl XcodeProject {
 
         // Parse PBXSourcesBuildPhase entries
         let sources_re = Regex::new(
-            r#"([A-F0-9]{24})\s*/\*[^*]*\*/\s*=\s*\{[^}]*isa\s*=\s*PBXSourcesBuildPhase"#
-        ).unwrap();
-        
+            r#"([A-F0-9]{24})\s*/\*[^*]*\*/\s*=\s*\{[^}]*isa\s*=\s*PBXSourcesBuildPhase"#,
+        )
+        .unwrap();
+
         for cap in sources_re.captures_iter(&self.content) {
             let id = cap[1].to_string();
-            
+
             let mut properties = HashMap::new();
             properties.insert("isa".to_string(), "PBXSourcesBuildPhase".to_string());
-            
+
             // Find files for this phase
             let phase_start = cap.get(0).unwrap().start();
             let search_end = (phase_start + 50000).min(self.content.len());
             let phase_context = &self.content[phase_start..search_end];
-            
+
             let files_re = Regex::new(r#"files\s*=\s*\(([^)]+)\)"#).unwrap();
             if let Some(files_cap) = files_re.captures(phase_context) {
                 properties.insert("files".to_string(), files_cap[1].to_string());
             }
-            
+
             self.objects.insert(
                 id.clone(),
                 PBXObject {
@@ -315,7 +354,11 @@ impl XcodeProject {
                 let name = obj.properties.get("name").cloned().unwrap_or_default();
                 // Parse buildPhases array
                 let phases_re = Regex::new(r#"([A-F0-9]{24})"#).unwrap();
-                let phases_str = obj.properties.get("buildPhases").cloned().unwrap_or_default();
+                let phases_str = obj
+                    .properties
+                    .get("buildPhases")
+                    .cloned()
+                    .unwrap_or_default();
                 let build_phases: Vec<String> = phases_re
                     .captures_iter(&phases_str)
                     .map(|c| c[1].to_string())
@@ -347,11 +390,7 @@ impl XcodeProject {
                         let bf_id = c[1].to_string();
                         self.objects.get(&bf_id).map(|bf| BuildFile {
                             id: bf_id,
-                            file_ref_id: bf
-                                .properties
-                                .get("fileRef")
-                                .cloned()
-                                .unwrap_or_default(),
+                            file_ref_id: bf.properties.get("fileRef").cloned().unwrap_or_default(),
                         })
                     })
                     .collect();
@@ -418,13 +457,22 @@ impl XcodeProject {
         let build_files: HashSet<_> = self
             .swift_files_in_build(target_name)
             .into_iter()
-            .map(|p| p.file_name().unwrap_or_default().to_string_lossy().to_string())
+            .map(|p| {
+                p.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string()
+            })
             .collect();
 
         let missing: Vec<PathBuf> = disk_files
             .into_iter()
             .filter(|p| {
-                let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let name = p
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
                 !build_files.contains(&name)
             })
             .collect();
@@ -526,10 +574,8 @@ impl XcodeProject {
         let mut groups = Vec::new();
 
         // Match PBXGroup entries
-        let group_re = Regex::new(
-            r#"([A-F0-9]{24})\s*/\*[^*]*\*/\s*=\s*\{[^}]*isa\s*=\s*PBXGroup"#,
-        )
-        .unwrap();
+        let group_re =
+            Regex::new(r#"([A-F0-9]{24})\s*/\*[^*]*\*/\s*=\s*\{[^}]*isa\s*=\s*PBXGroup"#).unwrap();
 
         for cap in group_re.captures_iter(&self.content) {
             let id = cap[1].to_string();
@@ -600,9 +646,9 @@ impl XcodeProject {
         let path_parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
         if path_parts.is_empty() {
-            return self.find_main_group_id().and_then(|id| {
-                groups.into_iter().find(|g| g.id == id)
-            });
+            return self
+                .find_main_group_id()
+                .and_then(|id| groups.into_iter().find(|g| g.id == id));
         }
 
         // Start from main group
@@ -636,10 +682,7 @@ impl XcodeProject {
 
     /// Check if a file path is already referenced in the project
     pub fn file_exists_in_project(&self, file_path: &Path) -> bool {
-        let file_name = file_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let file_name = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let path_str = file_path.to_string_lossy();
 
         self.file_references()
@@ -688,10 +731,7 @@ impl XcodeProject {
         }
 
         // Determine file type
-        let ext = file_path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
         let file_type = FileType::from_extension(ext);
         let file_name = file_path
             .file_name()
@@ -765,12 +805,7 @@ impl XcodeProject {
     }
 
     /// Add a PBXFileReference entry to the project content
-    fn add_file_reference(
-        &mut self,
-        id: &str,
-        path: &Path,
-        file_type: &FileType,
-    ) -> Result<()> {
+    fn add_file_reference(&mut self, id: &str, path: &Path, file_type: &FileType) -> Result<()> {
         let path_str = path.to_string_lossy();
         let file_name = path
             .file_name()
@@ -827,10 +862,12 @@ impl XcodeProject {
         file_name: &str,
     ) -> Result<()> {
         // Find the build phase entry
-        let phase_pattern = format!(r#"{}\s*/\*[^*]*\*/\s*=\s*\{{[^}}]*files\s*=\s*\("#, phase_id);
-        let phase_re = Regex::new(&phase_pattern).map_err(|e| {
-            Error::validation(&format!("Invalid regex pattern: {}", e))
-        })?;
+        let phase_pattern = format!(
+            r#"{}\s*/\*[^*]*\*/\s*=\s*\{{[^}}]*files\s*=\s*\("#,
+            phase_id
+        );
+        let phase_re = Regex::new(&phase_pattern)
+            .map_err(|e| Error::validation(&format!("Invalid regex pattern: {}", e)))?;
 
         if let Some(cap) = phase_re.find(&self.content) {
             let insert_pos = cap.end();
@@ -845,12 +882,19 @@ impl XcodeProject {
     }
 
     /// Add a child ID to a group's children array
-    fn add_child_to_group(&mut self, group_id: &str, child_id: &str, file_name: &str) -> Result<()> {
+    fn add_child_to_group(
+        &mut self,
+        group_id: &str,
+        child_id: &str,
+        file_name: &str,
+    ) -> Result<()> {
         // Find the group entry and its children array
-        let group_pattern = format!(r#"{}\s*/\*[^*]*\*/\s*=\s*\{{[^}}]*children\s*=\s*\("#, group_id);
-        let group_re = Regex::new(&group_pattern).map_err(|e| {
-            Error::validation(&format!("Invalid regex pattern: {}", e))
-        })?;
+        let group_pattern = format!(
+            r#"{}\s*/\*[^*]*\*/\s*=\s*\{{[^}}]*children\s*=\s*\("#,
+            group_id
+        );
+        let group_re = Regex::new(&group_pattern)
+            .map_err(|e| Error::validation(&format!("Invalid regex pattern: {}", e)))?;
 
         if let Some(cap) = group_re.find(&self.content) {
             let insert_pos = cap.end();
@@ -876,10 +920,7 @@ impl XcodeProject {
         }
 
         // Use the file's parent directory as the group path
-        let parent = file_path
-            .parent()
-            .and_then(|p| p.to_str())
-            .unwrap_or("");
+        let parent = file_path.parent().and_then(|p| p.to_str()).unwrap_or("");
 
         if let Some(group) = self.find_group_by_path(parent) {
             return Ok(group.id);
@@ -936,22 +977,30 @@ impl XcodeProject {
     }
 }
 
-/// Project status summary
+/// Results of an Xcode project health check
 #[derive(Debug)]
 pub struct ProjectStatus {
+    /// Total number of files in all build phases
     pub total_build_files: usize,
+    /// Number of files found on disk but missing from the project
     pub missing_files: usize,
+    /// Number of project references pointing to non-existent files
     pub broken_references: usize,
+    /// Number of duplicate build file entries for the same file
     pub duplicate_references: usize,
+    /// Paths to files found on disk that should be in the project
     pub missing_file_paths: Vec<PathBuf>,
+    /// Paths for which the project has a broken reference
     pub broken_reference_paths: Vec<String>,
 }
 
 impl ProjectStatus {
+    /// Returns true if the project has no missing, broken, or duplicate files
     pub fn is_clean(&self) -> bool {
         self.missing_files == 0 && self.broken_references == 0 && self.duplicate_references == 0
     }
 
+    /// Print the project status to stdout with formatted output
     pub fn print(&self) {
         use owo_colors::OwoColorize;
 
@@ -960,11 +1009,7 @@ impl ProjectStatus {
         println!("  Total build files: {}", self.total_build_files);
 
         if self.missing_files > 0 {
-            println!(
-                "  {} Missing files: {}",
-                "⚠".yellow(),
-                self.missing_files
-            );
+            println!("  {} Missing files: {}", "⚠".yellow(), self.missing_files);
         } else {
             println!("  {} No missing files", "✓".green());
         }
@@ -1074,7 +1119,10 @@ mod tests {
         assert_eq!(FileType::ObjC.last_known_file_type(), "sourcecode.c.objc");
         assert_eq!(FileType::Metal.last_known_file_type(), "sourcecode.metal");
         assert_eq!(FileType::Header.last_known_file_type(), "sourcecode.c.h");
-        assert_eq!(FileType::Framework.last_known_file_type(), "wrapper.framework");
+        assert_eq!(
+            FileType::Framework.last_known_file_type(),
+            "wrapper.framework"
+        );
     }
 
     #[test]
@@ -1119,9 +1167,6 @@ mod tests {
 
     #[test]
     fn test_quote_if_needed_with_dashes() {
-        assert_eq!(
-            XcodeProject::quote_if_needed("my-file"),
-            "\"my-file\""
-        );
+        assert_eq!(XcodeProject::quote_if_needed("my-file"), "\"my-file\"");
     }
 }

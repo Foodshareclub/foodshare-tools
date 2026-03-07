@@ -55,7 +55,8 @@ impl Default for RetryConfig {
 
 impl RetryConfig {
     /// Create a config for quick retries
-    #[must_use] pub fn quick() -> Self {
+    #[must_use]
+    pub fn quick() -> Self {
         Self {
             max_attempts: 3,
             initial_delay: Duration::from_millis(50),
@@ -67,7 +68,8 @@ impl RetryConfig {
     }
 
     /// Create a config for patient retries
-    #[must_use] pub fn patient() -> Self {
+    #[must_use]
+    pub fn patient() -> Self {
         Self {
             max_attempts: 5,
             initial_delay: Duration::from_millis(500),
@@ -79,7 +81,8 @@ impl RetryConfig {
     }
 
     /// Create a config with no retries
-    #[must_use] pub fn no_retry() -> Self {
+    #[must_use]
+    pub fn no_retry() -> Self {
         Self {
             max_attempts: 1,
             initial_delay: Duration::ZERO,
@@ -91,13 +94,14 @@ impl RetryConfig {
     }
 
     /// Calculate delay for a given attempt
-    #[must_use] pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
+    #[must_use]
+    pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
         if attempt == 0 {
             return Duration::ZERO;
         }
 
-        let base_delay = self.initial_delay.as_secs_f64()
-            * self.backoff_multiplier.powi(attempt as i32 - 1);
+        let base_delay =
+            self.initial_delay.as_secs_f64() * self.backoff_multiplier.powi(attempt as i32 - 1);
 
         let delay_secs = base_delay.min(self.max_delay.as_secs_f64());
 
@@ -233,7 +237,8 @@ impl Default for CircuitBreakerConfig {
 
 impl CircuitBreaker {
     /// Create a new circuit breaker
-    #[must_use] pub fn new(config: CircuitBreakerConfig) -> Self {
+    #[must_use]
+    pub fn new(config: CircuitBreakerConfig) -> Self {
         Self {
             config,
             state: std::sync::RwLock::new(CircuitState::Closed),

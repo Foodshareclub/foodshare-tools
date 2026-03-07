@@ -63,10 +63,7 @@ pub async fn run(
         test_deployment().await?;
         println!();
     } else {
-        println!(
-            "{}",
-            "Step 4: Skipping endpoint tests (--no-test)".dimmed()
-        );
+        println!("{}", "Step 4: Skipping endpoint tests (--no-test)".dimmed());
         println!();
     }
 
@@ -77,10 +74,7 @@ pub async fn run(
         "  1. Test with CLI: {}",
         "foodshare-i18n test-translation --locale ru".cyan()
     );
-    println!(
-        "  2. View status:   {}",
-        "foodshare-i18n status".cyan()
-    );
+    println!("  2. View status:   {}", "foodshare-i18n status".cyan());
     println!();
 
     Ok(())
@@ -257,10 +251,9 @@ fn deploy_edge_functions() -> Result<()> {
 
 /// Test deployment endpoints
 async fn test_deployment() -> Result<()> {
-    let base_url =
-        std::env::var("SUPABASE_URL").context("SUPABASE_URL not set")?;
-    let service_key = std::env::var("SUPABASE_SERVICE_ROLE_KEY")
-        .context("SUPABASE_SERVICE_ROLE_KEY not set")?;
+    let base_url = std::env::var("SUPABASE_URL").context("SUPABASE_URL not set")?;
+    let service_key =
+        std::env::var("SUPABASE_SERVICE_ROLE_KEY").context("SUPABASE_SERVICE_ROLE_KEY not set")?;
 
     let client = reqwest::Client::new();
 

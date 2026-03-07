@@ -18,8 +18,7 @@ type HmacSha1 = Hmac<Sha1>;
 /// # Returns
 /// Signature as hex string
 pub fn hmac_sha256(key: &[u8], message: &[u8]) -> String {
-    let mut mac = HmacSha256::new_from_slice(key)
-        .expect("HMAC can take key of any size");
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC can take key of any size");
     mac.update(message);
     let result = mac.finalize();
     hex::encode(result.into_bytes())
@@ -34,8 +33,7 @@ pub fn hmac_sha256(key: &[u8], message: &[u8]) -> String {
 /// # Returns
 /// Signature as hex string
 pub fn hmac_sha1(key: &[u8], message: &[u8]) -> String {
-    let mut mac = HmacSha1::new_from_slice(key)
-        .expect("HMAC can take key of any size");
+    let mut mac = HmacSha1::new_from_slice(key).expect("HMAC can take key of any size");
     mac.update(message);
     let result = mac.finalize();
     hex::encode(result.into_bytes())

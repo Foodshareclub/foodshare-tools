@@ -3,7 +3,7 @@
 //! This module provides high-performance batch processing of distance calculations,
 //! which is the primary use case for replacing the web worker.
 
-use crate::{haversine_distance, parse_postgis_point, Coordinate};
+use crate::{Coordinate, haversine_distance, parse_postgis_point};
 use serde::{Deserialize, Serialize};
 
 /// Result of a distance calculation for a single item.
@@ -49,7 +49,11 @@ pub struct LocationItem {
 /// let results = calculate_distances(50.0, 10.0, &items);
 /// assert_eq!(results.len(), 2);
 /// ```
-pub fn calculate_distances(user_lat: f64, user_lng: f64, items: &[LocationItem]) -> Vec<DistanceResult> {
+pub fn calculate_distances(
+    user_lat: f64,
+    user_lng: f64,
+    items: &[LocationItem],
+) -> Vec<DistanceResult> {
     let user_coord = Coordinate::new(user_lat, user_lng);
 
     #[cfg(feature = "parallel")]
@@ -90,7 +94,9 @@ pub fn calculate_distances_sorted(
 
     // Sort by distance, putting Infinity at the end
     results.sort_by(|a, b| {
-        a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal)
+        a.distance
+            .partial_cmp(&b.distance)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     if let Some(max) = max_results {
@@ -123,7 +129,9 @@ pub fn calculate_distances_within_radius(
 
     // Sort by distance
     results.sort_by(|a, b| {
-        a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal)
+        a.distance
+            .partial_cmp(&b.distance)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     results

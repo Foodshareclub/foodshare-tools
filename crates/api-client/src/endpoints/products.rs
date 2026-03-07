@@ -115,7 +115,9 @@ impl ProductsApi {
     /// DELETE /api-v1-products?id=<id>
     pub async fn delete(&self, id: &str) -> ApiResult<DeleteProductResponse> {
         let path = format!("api-v1-products?id={id}");
-        self.client.post(&path, &serde_json::json!({"_method": "DELETE"})).await
+        self.client
+            .post(&path, &serde_json::json!({"_method": "DELETE"}))
+            .await
     }
 }
 
@@ -186,36 +188,53 @@ impl ListProductsParams {
 /// List products response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListProductsResponse {
+    /// Whether the request was successful
     pub success: bool,
+    /// List of products if successful
     pub data: Option<Vec<Product>>,
+    /// Pagination metadata
     pub pagination: Option<PaginationInfo>,
+    /// Error details if successful is false
     pub error: Option<ErrorInfo>,
 }
 
 /// Single product response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetProductResponse {
+    /// Whether the request was successful
     pub success: bool,
+    /// Product data if successful
     pub data: Option<Product>,
+    /// Error details if successful is false
     pub error: Option<ErrorInfo>,
 }
 
 /// Create product request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateProductRequest {
+    /// Product title
     pub title: String,
+    /// Optional product description
     pub description: Option<String>,
+    /// List of image URLs
     pub images: Vec<String>,
+    /// Type of post: "food", "non-food", or "request"
     #[serde(rename = "postType")]
     pub post_type: String,
+    /// Latitude
     pub latitude: f64,
+    /// Longitude
     pub longitude: f64,
+    /// Optional pickup address
     #[serde(rename = "pickupAddress")]
     pub pickup_address: Option<String>,
+    /// When the item can be picked up
     #[serde(rename = "pickupTime")]
     pub pickup_time: Option<String>,
+    /// Optional category ID
     #[serde(rename = "categoryId")]
     pub category_id: Option<i64>,
+    /// When the item expires
     #[serde(rename = "expiresAt")]
     pub expires_at: Option<String>,
 }
@@ -223,25 +242,36 @@ pub struct CreateProductRequest {
 /// Create product response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateProductResponse {
+    /// Whether the creation was successful
     pub success: bool,
+    /// Created product data
     pub data: Option<Product>,
+    /// Error details if creation failed
     pub error: Option<ErrorInfo>,
 }
 
 /// Update product request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateProductRequest {
+    /// New title (optional)
     pub title: Option<String>,
+    /// New description (optional)
     pub description: Option<String>,
+    /// New list of images (optional)
     pub images: Option<Vec<String>>,
+    /// New pickup address (optional)
     #[serde(rename = "pickupAddress")]
     pub pickup_address: Option<String>,
+    /// New pickup time (optional)
     #[serde(rename = "pickupTime")]
     pub pickup_time: Option<String>,
+    /// New category ID (optional)
     #[serde(rename = "categoryId")]
     pub category_id: Option<i64>,
+    /// New expiry date (optional)
     #[serde(rename = "expiresAt")]
     pub expires_at: Option<String>,
+    /// Update active status (optional)
     #[serde(rename = "isActive")]
     pub is_active: Option<bool>,
     /// Required for optimistic locking
@@ -251,43 +281,63 @@ pub struct UpdateProductRequest {
 /// Update product response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateProductResponse {
+    /// Whether the update was successful
     pub success: bool,
+    /// Updated product data
     pub data: Option<Product>,
+    /// Error details if update failed
     pub error: Option<ErrorInfo>,
 }
 
 /// Delete product response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteProductResponse {
+    /// Whether the deletion was successful
     pub success: bool,
+    /// Error details if deletion failed
     pub error: Option<ErrorInfo>,
 }
 
 /// Product entity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Product {
+    /// Unique ID
     pub id: String,
+    /// Title
     pub title: String,
+    /// Optional description
     pub description: Option<String>,
+    /// List of image URLs
     pub images: Vec<String>,
+    /// Type: "food", "non-food", or "request"
     #[serde(rename = "postType")]
     pub post_type: String,
+    /// Latitude
     pub latitude: f64,
+    /// Longitude
     pub longitude: f64,
+    /// Pickup address
     #[serde(rename = "pickupAddress")]
     pub pickup_address: Option<String>,
+    /// Pickup time
     #[serde(rename = "pickupTime")]
     pub pickup_time: Option<String>,
+    /// Category ID
     #[serde(rename = "categoryId")]
     pub category_id: Option<i64>,
+    /// Expiry date
     #[serde(rename = "expiresAt")]
     pub expires_at: Option<String>,
+    /// Whether the product is active/listed
     #[serde(rename = "isActive")]
     pub is_active: bool,
+    /// Creation timestamp
     #[serde(rename = "createdAt")]
     pub created_at: String,
+    /// Last update timestamp
     #[serde(rename = "updatedAt")]
     pub updated_at: Option<String>,
+    /// Version for optimistic locking
     pub version: i64,
     /// Distance in km (when geo-search is used)
     pub distance: Option<f64>,
@@ -298,25 +348,34 @@ pub struct Product {
 /// Product owner info
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProductOwner {
+    /// Owner ID
     pub id: String,
+    /// Owner display name
     pub name: Option<String>,
+    /// Owner avatar URL
     pub avatar: Option<String>,
+    /// Owner rating
     pub rating: Option<f64>,
 }
 
 /// Pagination info
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaginationInfo {
+    /// Cursor for next page
     pub cursor: Option<String>,
+    /// Whether there are more results
     #[serde(rename = "hasMore")]
     pub has_more: bool,
+    /// Total count of results (if available)
     pub total: Option<i64>,
 }
 
 /// Error info
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorInfo {
+    /// Error code
     pub code: String,
+    /// Human-readable error message
     pub message: String,
 }
 

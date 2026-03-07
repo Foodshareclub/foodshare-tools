@@ -9,7 +9,7 @@
 
 use crate::api::ApiClient;
 use crate::config::get_locale_info;
-use crate::types::{GenerateInfoPlistStringsResponse, InfoPlistStats, JsonGenerateInfoPlistOutput};
+use crate::types::{GenerateInfoPlistStringsResponse, JsonGenerateInfoPlistOutput};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use std::collections::HashMap;
@@ -98,10 +98,7 @@ pub async fn run(
     io::stdout().flush()?;
 
     if !response.success {
-        println!(
-            "  {} Generation failed",
-            "✗".red()
-        );
+        println!("  {} Generation failed", "✗".red());
         for err in &response.errors {
             println!("    {} {}", "→".red(), err);
         }
@@ -156,7 +153,11 @@ fn print_stats(response: &GenerateInfoPlistStringsResponse, duration: std::time:
         println!(
             "    ├─ Locales:     {} ({})",
             stats.total_locales.to_string().cyan(),
-            format!("{} cached, {} translated", stats.from_cache, stats.translated_count).dimmed()
+            format!(
+                "{} cached, {} translated",
+                stats.from_cache, stats.translated_count
+            )
+            .dimmed()
         );
         println!(
             "    ├─ Strings:     {} per locale",
@@ -187,7 +188,11 @@ fn print_preview(response: &GenerateInfoPlistStringsResponse) {
         if let Some(translations) = response.locales.get(code) {
             let info = locales.iter().find(|l| l.code == code);
             let flag = info.map(|l| l.flag).unwrap_or("");
-            let folder = response.lproj_folders.get(code).map(|s| s.as_str()).unwrap_or(code);
+            let folder = response
+                .lproj_folders
+                .get(code)
+                .map(|s| s.as_str())
+                .unwrap_or(code);
 
             println!();
             println!("    {} {} ({}.lproj):", flag, code.cyan(), folder);
@@ -200,7 +205,11 @@ fn print_preview(response: &GenerateInfoPlistStringsResponse) {
             }
 
             if translations.len() > 2 {
-                println!("      {} and {} more...", "...".dimmed(), translations.len() - 2);
+                println!(
+                    "      {} and {} more...",
+                    "...".dimmed(),
+                    translations.len() - 2
+                );
             }
         }
     }
@@ -245,7 +254,11 @@ fn write_files(response: &GenerateInfoPlistStringsResponse) -> Result<()> {
         // Verify write
         let verify = std::fs::read_to_string(&file_path)?;
         if verify != *content {
-            println!("    {} {}.lproj - verification failed!", "⚠".yellow(), folder);
+            println!(
+                "    {} {}.lproj - verification failed!",
+                "⚠".yellow(),
+                folder
+            );
         } else {
             print!("    {} {}.lproj", "✓".green(), folder);
             if backed_up > 0 && file_path.with_extension("strings.bak").exists() {
@@ -338,7 +351,9 @@ async fn run_json(
     dry_run: bool,
     skip_cache: bool,
 ) -> Result<()> {
-    let response = client.generate_infoplist_strings(strings, skip_cache).await?;
+    let response = client
+        .generate_infoplist_strings(strings, skip_cache)
+        .await?;
 
     let files_written = if response.success && !dry_run {
         let resources_path = find_resources_path()?;

@@ -6,7 +6,6 @@
 //! - File system permissions
 //! - Network connectivity (optional)
 
-
 use crate::process::{command_exists, run_command};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -29,12 +28,14 @@ pub enum HealthStatus {
 
 impl HealthStatus {
     /// Returns true if status is healthy
-    #[must_use] pub fn is_healthy(&self) -> bool {
+    #[must_use]
+    pub fn is_healthy(&self) -> bool {
         matches!(self, HealthStatus::Healthy)
     }
 
     /// Returns true if status is healthy or degraded (still operational)
-    #[must_use] pub fn is_operational(&self) -> bool {
+    #[must_use]
+    pub fn is_operational(&self) -> bool {
         matches!(self, HealthStatus::Healthy | HealthStatus::Degraded)
     }
 }
@@ -89,7 +90,8 @@ impl CheckResult {
     }
 
     /// Set the duration of the check
-    #[must_use] pub fn with_duration(mut self, duration: Duration) -> Self {
+    #[must_use]
+    pub fn with_duration(mut self, duration: Duration) -> Self {
         self.duration_ms = duration.as_millis() as u64;
         self
     }
@@ -118,7 +120,8 @@ pub struct HealthReport {
 
 impl HealthReport {
     /// Create a new health report from check results
-    #[must_use] pub fn new(checks: Vec<CheckResult>, duration: Duration) -> Self {
+    #[must_use]
+    pub fn new(checks: Vec<CheckResult>, duration: Duration) -> Self {
         let status = if checks.iter().all(|c| c.status == HealthStatus::Healthy) {
             HealthStatus::Healthy
         } else if checks.iter().any(|c| c.status == HealthStatus::Unhealthy) {
@@ -137,12 +140,14 @@ impl HealthReport {
     }
 
     /// Returns true if overall status is healthy
-    #[must_use] pub fn is_healthy(&self) -> bool {
+    #[must_use]
+    pub fn is_healthy(&self) -> bool {
         self.status.is_healthy()
     }
 
     /// Get all checks that failed (not healthy)
-    #[must_use] pub fn failed_checks(&self) -> Vec<&CheckResult> {
+    #[must_use]
+    pub fn failed_checks(&self) -> Vec<&CheckResult> {
         self.checks
             .iter()
             .filter(|c| !c.status.is_healthy())
@@ -163,7 +168,8 @@ impl Default for HealthChecker {
 
 impl HealthChecker {
     /// Create a new health checker with no checks
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self { checks: Vec::new() }
     }
 
@@ -174,13 +180,15 @@ impl HealthChecker {
     }
 
     /// Add standard checks for all platforms
-    #[must_use] pub fn with_standard_checks(self) -> Self {
+    #[must_use]
+    pub fn with_standard_checks(self) -> Self {
         self.add_check(GitCheck)
             .add_check(DiskSpaceCheck::new("/", 100 * 1024 * 1024)) // 100MB minimum
     }
 
     /// Add iOS-specific checks
-    #[must_use] pub fn with_ios_checks(self) -> Self {
+    #[must_use]
+    pub fn with_ios_checks(self) -> Self {
         self.add_check(CommandCheck::new("xcodebuild", Some("--version")))
             .add_check(CommandCheck::new("swift", Some("--version")))
             .add_check(CommandCheck::optional("swiftformat", Some("--version")))
@@ -188,20 +196,23 @@ impl HealthChecker {
     }
 
     /// Add Android-specific checks
-    #[must_use] pub fn with_android_checks(self) -> Self {
+    #[must_use]
+    pub fn with_android_checks(self) -> Self {
         self.add_check(EnvVarCheck::new("ANDROID_HOME"))
             .add_check(CommandCheck::optional("gradle", Some("--version")))
             .add_check(CommandCheck::optional("kotlin", Some("-version")))
     }
 
     /// Add web-specific checks
-    #[must_use] pub fn with_web_checks(self) -> Self {
+    #[must_use]
+    pub fn with_web_checks(self) -> Self {
         self.add_check(CommandCheck::new("node", Some("--version")))
             .add_check(CommandCheck::new("bun", Some("--version")))
     }
 
     /// Run all health checks
-    #[must_use] pub fn run(&self) -> HealthReport {
+    #[must_use]
+    pub fn run(&self) -> HealthReport {
         let start = Instant::now();
         let mut results = Vec::new();
 
@@ -241,10 +252,10 @@ impl HealthCheck for GitCheck {
                     .with_detail("version", version)
                     .with_duration(start.elapsed())
             }
-            Ok(output) => CheckResult::unhealthy("git", output.stderr)
-                .with_duration(start.elapsed()),
-            Err(e) => CheckResult::unhealthy("git", e.to_string())
-                .with_duration(start.elapsed()),
+            Ok(output) => {
+                CheckResult::unhealthy("git", output.stderr).with_duration(start.elapsed())
+            }
+            Err(e) => CheckResult::unhealthy("git", e.to_string()).with_duration(start.elapsed()),
         }
     }
 }
@@ -284,7 +295,10 @@ impl HealthCheck for CommandCheck {
             let result = if self.required {
                 CheckResult::unhealthy(&self.command, format!("{} is not installed", self.command))
             } else {
-                CheckResult::degraded(&self.command, format!("{} is not installed (optional)", self.command))
+                CheckResult::degraded(
+                    &self.command,
+                    format!("{} is not installed (optional)", self.command),
+                )
             };
             return result.with_duration(start.elapsed());
         }
@@ -292,17 +306,21 @@ impl HealthCheck for CommandCheck {
         if let Some(ref arg) = self.version_arg {
             match run_command(&self.command, &[arg]) {
                 Ok(output) if output.success => {
-                    let version = output.stdout.lines().next().unwrap_or("").trim().to_string();
+                    let version = output
+                        .stdout
+                        .lines()
+                        .next()
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
                     CheckResult::healthy(&self.command)
                         .with_detail("version", version)
                         .with_duration(start.elapsed())
                 }
-                _ => CheckResult::healthy(&self.command)
-                    .with_duration(start.elapsed()),
+                _ => CheckResult::healthy(&self.command).with_duration(start.elapsed()),
             }
         } else {
-            CheckResult::healthy(&self.command)
-                .with_duration(start.elapsed())
+            CheckResult::healthy(&self.command).with_duration(start.elapsed())
         }
     }
 }
@@ -334,17 +352,22 @@ impl EnvVarCheck {
 impl HealthCheck for EnvVarCheck {
     fn check(&self) -> CheckResult {
         match std::env::var(&self.var_name) {
-            Ok(value) => CheckResult::healthy(&self.var_name)
-                .with_detail("value", if value.len() > 50 {
+            Ok(value) => CheckResult::healthy(&self.var_name).with_detail(
+                "value",
+                if value.len() > 50 {
                     format!("{}...", &value[..50])
                 } else {
                     value
-                }),
+                },
+            ),
             Err(_) => {
                 if self.required {
                     CheckResult::unhealthy(&self.var_name, format!("{} is not set", self.var_name))
                 } else {
-                    CheckResult::degraded(&self.var_name, format!("{} is not set (optional)", self.var_name))
+                    CheckResult::degraded(
+                        &self.var_name,
+                        format!("{} is not set (optional)", self.var_name),
+                    )
                 }
             }
         }
@@ -381,15 +404,27 @@ impl HealthCheck for DiskSpaceCheck {
                             let available_bytes = available_kb * 1024;
                             if available_bytes >= self.min_bytes {
                                 return CheckResult::healthy("disk_space")
-                                    .with_detail("available_mb", (available_bytes / 1024 / 1024).to_string())
+                                    .with_detail(
+                                        "available_mb",
+                                        (available_bytes / 1024 / 1024).to_string(),
+                                    )
                                     .with_detail("path", &self.path);
                             } else {
                                 return CheckResult::degraded(
                                     "disk_space",
-                                    format!("Low disk space: {} MB available", available_bytes / 1024 / 1024),
+                                    format!(
+                                        "Low disk space: {} MB available",
+                                        available_bytes / 1024 / 1024
+                                    ),
                                 )
-                                .with_detail("available_mb", (available_bytes / 1024 / 1024).to_string())
-                                .with_detail("required_mb", (self.min_bytes / 1024 / 1024).to_string());
+                                .with_detail(
+                                    "available_mb",
+                                    (available_bytes / 1024 / 1024).to_string(),
+                                )
+                                .with_detail(
+                                    "required_mb",
+                                    (self.min_bytes / 1024 / 1024).to_string(),
+                                );
                             }
                         }
                     }

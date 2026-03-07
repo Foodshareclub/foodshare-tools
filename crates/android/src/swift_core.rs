@@ -64,15 +64,20 @@ impl SwiftAndroidTarget {
     }
 }
 
-/// Build configuration
+/// Configuration for a FoodshareCore build
 #[derive(Debug, Clone)]
 pub struct BuildConfig {
+    /// Root directory of the FoodshareCore project
     pub project_dir: PathBuf,
+    /// Directory where built libraries will be stored
     pub output_dir: PathBuf,
+    /// Android API level to target (e.g. 24)
     pub api_level: u8,
+    /// Build configuration (debug or release)
     pub configuration: String,
+    /// Whether to link the Swift standard library statically
     pub static_stdlib: bool,
-    /// Path to Android project for auto-copy (optional)
+    /// Optional path to an Android project for automatic library deployment
     pub android_project_dir: Option<PathBuf>,
 }
 
@@ -115,21 +120,28 @@ pub fn check_prerequisites() -> Result<PrerequisiteStatus> {
     Ok(status)
 }
 
-/// Prerequisite check status
+/// Status of various build prerequisites
 #[derive(Debug, Default)]
 pub struct PrerequisiteStatus {
+    /// Whether the Swift compiler is installed
     pub swift_installed: bool,
+    /// Detailed Swift version string if installed
     pub swift_version: Option<String>,
+    /// Whether the Swift SDK for Android is installed
     pub android_sdk_installed: bool,
+    /// Whether the Android NDK is available
     pub ndk_installed: bool,
+    /// Path to the Android NDK if found
     pub ndk_path: Option<PathBuf>,
 }
 
 impl PrerequisiteStatus {
+    /// Returns true if all critical prerequisites are met
     pub fn is_ready(&self) -> bool {
         self.swift_installed && self.android_sdk_installed && self.ndk_installed
     }
 
+    /// Prints a formatted status report of all prerequisites
     pub fn print_status(&self) {
         println!("{}", "Prerequisites Check".bold());
         println!();
@@ -154,19 +166,22 @@ impl PrerequisiteStatus {
             println!(
                 "  {} Android NDK: {}",
                 "OK".green(),
-                self.ndk_path.as_ref().map(|p| p.display().to_string()).unwrap_or_default()
+                self.ndk_path
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
             );
         } else {
-            println!("  {} Android NDK: not found (set ANDROID_NDK_HOME)", "ERROR".red());
+            println!(
+                "  {} Android NDK: not found (set ANDROID_NDK_HOME)",
+                "ERROR".red()
+            );
         }
     }
 }
 
 /// Build FoodshareCore for a specific Android target
-pub fn build_for_target(
-    target: SwiftAndroidTarget,
-    config: &BuildConfig,
-) -> Result<BuildResult> {
+pub fn build_for_target(target: SwiftAndroidTarget, config: &BuildConfig) -> Result<BuildResult> {
     let sdk_id = target.sdk_id(config.api_level);
 
     println!(
@@ -219,7 +234,11 @@ pub fn build_for_target(
             })
         }
         None => {
-            println!("  {} Library not found for {}", "⚠".yellow(), target.jni_arch());
+            println!(
+                "  {} Library not found for {}",
+                "⚠".yellow(),
+                target.jni_arch()
+            );
             Ok(BuildResult {
                 target,
                 success: false,
@@ -286,12 +305,16 @@ fn find_library_in_build(
     Ok(None)
 }
 
-/// Build result
+/// Result of a Swift for Android build
 #[derive(Debug)]
 pub struct BuildResult {
+    /// The target architecture built
     pub target: SwiftAndroidTarget,
+    /// Whether the build was successful
     pub success: bool,
+    /// Path to the output library if successful
     pub output_path: Option<PathBuf>,
+    /// Error message if the build failed
     pub error: Option<String>,
 }
 
@@ -358,10 +381,7 @@ pub fn build_single(target_name: &str, config: &BuildConfig) -> Result<BuildResu
 }
 
 /// Copy built libraries to Android project
-pub fn copy_to_android_project(
-    output_dir: &Path,
-    android_project_dir: &Path,
-) -> Result<()> {
+pub fn copy_to_android_project(output_dir: &Path, android_project_dir: &Path) -> Result<()> {
     let jni_libs_dir = android_project_dir.join("app/src/main/jniLibs");
     std::fs::create_dir_all(&jni_libs_dir)?;
 
@@ -379,11 +399,7 @@ pub fn copy_to_android_project(
                 if lib_path.extension().map_or(false, |e| e == "so") {
                     let dest_path = dest_dir.join(lib_path.file_name().unwrap());
                     std::fs::copy(&lib_path, &dest_path)?;
-                    println!(
-                        "  {} Copied to: {}",
-                        "✓".green(),
-                        dest_path.display()
-                    );
+                    println!("  {} Copied to: {}", "✓".green(), dest_path.display());
                 }
             }
         }

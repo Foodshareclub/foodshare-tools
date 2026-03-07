@@ -419,60 +419,81 @@ fn main() -> Result<()> {
     let config = Config::load(cli.config.as_deref().map(|p| p.to_str().unwrap()))?;
 
     let exit_code = match cli.command {
-        Commands::Format { files, check, staged, preview, backup, no_backup, show_diff, audit, snapshot, no_snapshot } => {
-            run_format(&files, check || preview, staged, preview, backup && !no_backup, show_diff, audit, snapshot && !no_snapshot)
-        }
-        Commands::Lint { files, strict, fix } => {
-            run_lint(&files, strict, fix)
-        }
-        Commands::CommitMsg { file } => {
-            run_commit_msg(&file, &config)
-        }
-        Commands::Secrets { all } => {
-            run_secrets(all, &config)
-        }
-        Commands::Migrations { dir } => {
-            run_migrations(&dir)
-        }
-        Commands::Build { configuration, clean } => {
-            run_build(&configuration, clean)
-        }
-        Commands::Test { coverage } => {
-            run_test(coverage)
-        }
-        Commands::Run { clean, logs, release, device } => {
-            run_app(clean, logs, release, device.as_deref())
-        }
-        Commands::Simulator { action, device } => {
-            run_simulator(&action, device.as_deref())
-        }
-        Commands::Doctor { json } => {
-            run_doctor(json)
-        }
-        Commands::Project { action } => {
-            run_project(action)
-        }
-        Commands::Verify => {
-            run_verify()
-        }
-        Commands::PrePush { remote, url, fail_fast, release, quick, skip, detailed } => {
-            run_pre_push(remote.as_deref(), url.as_deref(), fail_fast, release, quick, skip, detailed)
-        }
-        Commands::Deps { action } => {
-            run_deps(action)
-        }
-        Commands::Protect { action } => {
-            run_protect(action)
-        }
-        Commands::Supabase { action } => {
-            run_supabase(action)
-        }
+        Commands::Format {
+            files,
+            check,
+            staged,
+            preview,
+            backup,
+            no_backup,
+            show_diff,
+            audit,
+            snapshot,
+            no_snapshot,
+        } => run_format(
+            &files,
+            check || preview,
+            staged,
+            preview,
+            backup && !no_backup,
+            show_diff,
+            audit,
+            snapshot && !no_snapshot,
+        ),
+        Commands::Lint { files, strict, fix } => run_lint(&files, strict, fix),
+        Commands::CommitMsg { file } => run_commit_msg(&file, &config),
+        Commands::Secrets { all } => run_secrets(all, &config),
+        Commands::Migrations { dir } => run_migrations(&dir),
+        Commands::Build {
+            configuration,
+            clean,
+        } => run_build(&configuration, clean),
+        Commands::Test { coverage } => run_test(coverage),
+        Commands::Run {
+            clean,
+            logs,
+            release,
+            device,
+        } => run_app(clean, logs, release, device.as_deref()),
+        Commands::Simulator { action, device } => run_simulator(&action, device.as_deref()),
+        Commands::Doctor { json } => run_doctor(json),
+        Commands::Project { action } => run_project(action),
+        Commands::Verify => run_verify(),
+        Commands::PrePush {
+            remote,
+            url,
+            fail_fast,
+            release,
+            quick,
+            skip,
+            detailed,
+        } => run_pre_push(
+            remote.as_deref(),
+            url.as_deref(),
+            fail_fast,
+            release,
+            quick,
+            skip,
+            detailed,
+        ),
+        Commands::Deps { action } => run_deps(action),
+        Commands::Protect { action } => run_protect(action),
+        Commands::Supabase { action } => run_supabase(action),
     };
 
     std::process::exit(exit_code);
 }
 
-fn run_format(files: &[PathBuf], check: bool, staged: bool, preview: bool, backup: bool, show_diff: bool, audit: bool, create_snapshot: bool) -> i32 {
+fn run_format(
+    files: &[PathBuf],
+    check: bool,
+    staged: bool,
+    preview: bool,
+    backup: bool,
+    show_diff: bool,
+    audit: bool,
+    create_snapshot: bool,
+) -> i32 {
     use foodshare_ios::hooks::{SafeFormat, SafeFormatConfig, print_format_summary};
     use foodshare_ios::swift_tools;
 
@@ -483,9 +504,7 @@ fn run_format(files: &[PathBuf], check: bool, staged: bool, preview: bool, backu
 
     // Determine target files
     let target_files = if staged {
-        match foodshare_core::git::GitRepo::open_current()
-            .and_then(|r| r.staged_swift_files())
-        {
+        match foodshare_core::git::GitRepo::open_current().and_then(|r| r.staged_swift_files()) {
             Ok(f) => f,
             Err(e) => {
                 Status::error(&format!("Failed to get staged files: {}", e));
@@ -534,7 +553,10 @@ fn run_format(files: &[PathBuf], check: bool, staged: bool, preview: bool, backu
     println!();
 
     if preview {
-        println!("  {} Preview mode enabled - no files will be modified", "👁".yellow());
+        println!(
+            "  {} Preview mode enabled - no files will be modified",
+            "👁".yellow()
+        );
     }
     if create_snapshot {
         println!("  {} Snapshot protection enabled", "📸".green());
@@ -857,22 +879,20 @@ fn run_simulator(action: &str, device: Option<&str>) -> i32 {
     use foodshare_ios::simulator;
 
     match action {
-        "list" => {
-            match simulator::list_devices() {
-                Ok(devices) => {
-                    println!("Available Simulators:");
-                    for d in devices.iter().filter(|d| d.is_available) {
-                        let status = if d.state == "Booted" { "🟢" } else { "⚪" };
-                        println!("  {} {} ({})", status, d.name, d.runtime);
-                    }
-                    exit_codes::SUCCESS
+        "list" => match simulator::list_devices() {
+            Ok(devices) => {
+                println!("Available Simulators:");
+                for d in devices.iter().filter(|d| d.is_available) {
+                    let status = if d.state == "Booted" { "🟢" } else { "⚪" };
+                    println!("  {} {} ({})", status, d.name, d.runtime);
                 }
-                Err(e) => {
-                    Status::error(&format!("Failed to list simulators: {}", e));
-                    exit_codes::FAILURE
-                }
+                exit_codes::SUCCESS
             }
-        }
+            Err(e) => {
+                Status::error(&format!("Failed to list simulators: {}", e));
+                exit_codes::FAILURE
+            }
+        },
         "boot" => {
             let device_name = device.unwrap_or("iPhone 17 Pro Max");
             match simulator::boot(device_name) {
@@ -886,18 +906,16 @@ fn run_simulator(action: &str, device: Option<&str>) -> i32 {
                 }
             }
         }
-        "shutdown" => {
-            match simulator::shutdown_all() {
-                Ok(_) => {
-                    Status::success("Shutdown all simulators");
-                    exit_codes::SUCCESS
-                }
-                Err(e) => {
-                    Status::error(&format!("Failed to shutdown: {}", e));
-                    exit_codes::FAILURE
-                }
+        "shutdown" => match simulator::shutdown_all() {
+            Ok(_) => {
+                Status::success("Shutdown all simulators");
+                exit_codes::SUCCESS
             }
-        }
+            Err(e) => {
+                Status::error(&format!("Failed to shutdown: {}", e));
+                exit_codes::FAILURE
+            }
+        },
         _ => {
             Status::error(&format!("Unknown action: {}", action));
             exit_codes::FAILURE
@@ -973,7 +991,6 @@ fn run_verify() -> i32 {
     exit_codes::SUCCESS
 }
 
-
 fn run_pre_push(
     _remote: Option<&str>,
     _url: Option<&str>,
@@ -983,7 +1000,7 @@ fn run_pre_push(
     skip: Vec<String>,
     detailed: bool,
 ) -> i32 {
-    use foodshare_ios::hooks::{run_pre_push_checks, print_pre_push_summary, PrePushConfig};
+    use foodshare_ios::hooks::{PrePushConfig, print_pre_push_summary, run_pre_push_checks};
 
     // Check for quick mode environment variable
     let quick_mode = quick || std::env::var("FOODSHARE_QUICK_MODE").is_ok();
@@ -1083,31 +1100,33 @@ fn run_project(action: ProjectAction) -> i32 {
     use owo_colors::OwoColorize;
 
     match action {
-        ProjectAction::Status { project, target, source_dir } => {
+        ProjectAction::Status {
+            project,
+            target,
+            source_dir,
+        } => {
             Status::info(&format!("Analyzing {}...", project.display()));
 
             match XcodeProject::open(&project) {
-                Ok(proj) => {
-                    match proj.status(&target, &source_dir) {
-                        Ok(status) => {
+                Ok(proj) => match proj.status(&target, &source_dir) {
+                    Ok(status) => {
+                        println!();
+                        status.print();
+
+                        if status.is_clean() {
                             println!();
-                            status.print();
-
-                            if status.is_clean() {
-                                println!();
-                                Status::success("Project is clean!");
-                            } else {
-                                println!();
-                                Status::warning("Project has issues. Run subcommands for details.");
-                            }
-                            exit_codes::SUCCESS
+                            Status::success("Project is clean!");
+                        } else {
+                            println!();
+                            Status::warning("Project has issues. Run subcommands for details.");
                         }
-                        Err(e) => {
-                            Status::error(&format!("Analysis failed: {}", e));
-                            exit_codes::FAILURE
-                        }
+                        exit_codes::SUCCESS
                     }
-                }
+                    Err(e) => {
+                        Status::error(&format!("Analysis failed: {}", e));
+                        exit_codes::FAILURE
+                    }
+                },
                 Err(e) => {
                     Status::error(&format!("Failed to open project: {}", e));
                     exit_codes::FAILURE
@@ -1115,86 +1134,98 @@ fn run_project(action: ProjectAction) -> i32 {
             }
         }
 
-        ProjectAction::Missing { project, target, source_dir } => {
-            match XcodeProject::open(&project) {
-                Ok(proj) => {
-                    match proj.find_missing_files(&target, &source_dir) {
-                        Ok(missing) => {
-                            if missing.is_empty() {
-                                Status::success("No missing files found");
-                            } else {
-                                println!("{}", "Missing files (on disk but not in build phase):".bold());
-                                println!();
-                                for path in &missing {
-                                    println!("  {} {}", "+".green(), path.display());
-                                }
-                                println!();
-                                println!("Total: {} file(s)", missing.len());
-                            }
-                            exit_codes::SUCCESS
-                        }
-                        Err(e) => {
-                            Status::error(&format!("Scan failed: {}", e));
-                            exit_codes::FAILURE
-                        }
-                    }
-                }
-                Err(e) => {
-                    Status::error(&format!("Failed to open project: {}", e));
-                    exit_codes::FAILURE
-                }
-            }
-        }
-
-        ProjectAction::Broken { project } => {
-            match XcodeProject::open(&project) {
-                Ok(proj) => {
-                    let broken = proj.find_broken_references();
-                    if broken.is_empty() {
-                        Status::success("No broken references found");
+        ProjectAction::Missing {
+            project,
+            target,
+            source_dir,
+        } => match XcodeProject::open(&project) {
+            Ok(proj) => match proj.find_missing_files(&target, &source_dir) {
+                Ok(missing) => {
+                    if missing.is_empty() {
+                        Status::success("No missing files found");
                     } else {
-                        println!("{}", "Broken references (in project but file doesn't exist):".bold());
+                        println!(
+                            "{}",
+                            "Missing files (on disk but not in build phase):".bold()
+                        );
                         println!();
-                        for fr in &broken {
-                            println!("  {} {}", "✗".red(), fr.path);
+                        for path in &missing {
+                            println!("  {} {}", "+".green(), path.display());
                         }
                         println!();
-                        println!("Total: {} reference(s)", broken.len());
+                        println!("Total: {} file(s)", missing.len());
                     }
                     exit_codes::SUCCESS
                 }
                 Err(e) => {
-                    Status::error(&format!("Failed to open project: {}", e));
+                    Status::error(&format!("Scan failed: {}", e));
                     exit_codes::FAILURE
                 }
+            },
+            Err(e) => {
+                Status::error(&format!("Failed to open project: {}", e));
+                exit_codes::FAILURE
             }
-        }
+        },
 
-        ProjectAction::Duplicates { project, target } => {
-            match XcodeProject::open(&project) {
-                Ok(proj) => {
-                    let duplicates = proj.find_duplicate_build_files(&target);
-                    if duplicates.is_empty() {
-                        Status::success("No duplicate references found");
-                    } else {
-                        println!("{}", "Duplicate build file references:".bold());
-                        println!();
-                        for (file_ref_id, build_files) in &duplicates {
-                            println!("  File ref {}: {} duplicates", file_ref_id, build_files.len());
-                        }
-                        println!();
-                        println!("Total: {} file(s) with duplicates", duplicates.len());
+        ProjectAction::Broken { project } => match XcodeProject::open(&project) {
+            Ok(proj) => {
+                let broken = proj.find_broken_references();
+                if broken.is_empty() {
+                    Status::success("No broken references found");
+                } else {
+                    println!(
+                        "{}",
+                        "Broken references (in project but file doesn't exist):".bold()
+                    );
+                    println!();
+                    for fr in &broken {
+                        println!("  {} {}", "✗".red(), fr.path);
                     }
-                    exit_codes::SUCCESS
+                    println!();
+                    println!("Total: {} reference(s)", broken.len());
                 }
-                Err(e) => {
-                    Status::error(&format!("Failed to open project: {}", e));
-                    exit_codes::FAILURE
-                }
+                exit_codes::SUCCESS
             }
-        }
+            Err(e) => {
+                Status::error(&format!("Failed to open project: {}", e));
+                exit_codes::FAILURE
+            }
+        },
 
-        ProjectAction::Add { files, project, target, group, dry_run } => {
+        ProjectAction::Duplicates { project, target } => match XcodeProject::open(&project) {
+            Ok(proj) => {
+                let duplicates = proj.find_duplicate_build_files(&target);
+                if duplicates.is_empty() {
+                    Status::success("No duplicate references found");
+                } else {
+                    println!("{}", "Duplicate build file references:".bold());
+                    println!();
+                    for (file_ref_id, build_files) in &duplicates {
+                        println!(
+                            "  File ref {}: {} duplicates",
+                            file_ref_id,
+                            build_files.len()
+                        );
+                    }
+                    println!();
+                    println!("Total: {} file(s) with duplicates", duplicates.len());
+                }
+                exit_codes::SUCCESS
+            }
+            Err(e) => {
+                Status::error(&format!("Failed to open project: {}", e));
+                exit_codes::FAILURE
+            }
+        },
+
+        ProjectAction::Add {
+            files,
+            project,
+            target,
+            group,
+            dry_run,
+        } => {
             if dry_run {
                 Status::info("Dry run mode - no changes will be made");
             }
@@ -1209,7 +1240,11 @@ fn run_project(action: ProjectAction) -> i32 {
                         match proj.add_file(file, &target, group.as_deref()) {
                             Ok(result) => {
                                 if result.already_exists {
-                                    println!("  {} {} (already in project)", "~".yellow(), file.display());
+                                    println!(
+                                        "  {} {} (already in project)",
+                                        "~".yellow(),
+                                        file.display()
+                                    );
                                     skipped += 1;
                                 } else {
                                     println!("  {} {}", "+".green(), file.display());
@@ -1229,7 +1264,9 @@ fn run_project(action: ProjectAction) -> i32 {
                     if !dry_run && added > 0 {
                         match proj.save() {
                             Ok(()) => {
-                                Status::success("Project saved (backup created at project.pbxproj.backup)");
+                                Status::success(
+                                    "Project saved (backup created at project.pbxproj.backup)",
+                                );
                             }
                             Err(e) => {
                                 Status::error(&format!("Failed to save project: {}", e));
@@ -1334,7 +1371,11 @@ fn run_protect(action: ProtectAction) -> i32 {
                     ));
                     println!();
                     println!("  Recovery command:");
-                    println!("    {} protect restore --snapshot {}", "foodshare-ios".cyan(), snapshot.id);
+                    println!(
+                        "    {} protect restore --snapshot {}",
+                        "foodshare-ios".cyan(),
+                        snapshot.id
+                    );
                     println!();
                     exit_codes::SUCCESS
                 }
@@ -1345,7 +1386,12 @@ fn run_protect(action: ProtectAction) -> i32 {
             }
         }
 
-        ProtectAction::Restore { latest, snapshot, file, dry_run } => {
+        ProtectAction::Restore {
+            latest,
+            snapshot,
+            file,
+            dry_run,
+        } => {
             let manager = match SnapshotManager::new(config) {
                 Ok(m) => m,
                 Err(e) => {
@@ -1465,26 +1511,24 @@ fn run_protect(action: ProtectAction) -> i32 {
             }
         }
 
-        ProtectAction::VerifyBuild { quick } => {
-            match verify_build(quick) {
-                Ok(result) => {
-                    if result.success {
-                        exit_codes::SUCCESS
-                    } else {
-                        println!();
-                        println!("{}", "Build errors:".red().bold());
-                        for error in result.errors.iter().take(10) {
-                            println!("  {}", error);
-                        }
-                        exit_codes::FAILURE
+        ProtectAction::VerifyBuild { quick } => match verify_build(quick) {
+            Ok(result) => {
+                if result.success {
+                    exit_codes::SUCCESS
+                } else {
+                    println!();
+                    println!("{}", "Build errors:".red().bold());
+                    for error in result.errors.iter().take(10) {
+                        println!("  {}", error);
                     }
-                }
-                Err(e) => {
-                    Status::error(&format!("Build verification failed: {}", e));
                     exit_codes::FAILURE
                 }
             }
-        }
+            Err(e) => {
+                Status::error(&format!("Build verification failed: {}", e));
+                exit_codes::FAILURE
+            }
+        },
 
         ProtectAction::History { limit } => {
             let data_dir = std::path::Path::new(".foodshare-hooks");
@@ -1542,9 +1586,21 @@ fn run_protect(action: ProtectAction) -> i32 {
 
             let config = ProtectionConfig::default();
             println!("  Configuration:");
-            let snap_status = if config.snapshots_enabled { "✓".green().to_string() } else { "✗".red().to_string() };
-            let build_status = if config.verify_build { "✓".green().to_string() } else { "✗".red().to_string() };
-            let interactive_status = if config.interactive_approval { "✓".green().to_string() } else { "○".dimmed().to_string() };
+            let snap_status = if config.snapshots_enabled {
+                "✓".green().to_string()
+            } else {
+                "✗".red().to_string()
+            };
+            let build_status = if config.verify_build {
+                "✓".green().to_string()
+            } else {
+                "✗".red().to_string()
+            };
+            let interactive_status = if config.interactive_approval {
+                "✓".green().to_string()
+            } else {
+                "○".dimmed().to_string()
+            };
             println!("    Snapshots enabled: {}", snap_status);
             println!("    Build verification: {}", build_status);
             println!("    Interactive approval: {}", interactive_status);
@@ -1562,7 +1618,11 @@ fn run_protect(action: ProtectAction) -> i32 {
                 if let Ok(snapshots) = manager.list_snapshots() {
                     println!("  Snapshots: {} stored", snapshots.len());
                     if let Some(latest) = snapshots.first() {
-                        println!("  Latest: {} ({})", latest.id, latest.timestamp.format("%Y-%m-%d %H:%M"));
+                        println!(
+                            "  Latest: {} ({})",
+                            latest.id,
+                            latest.timestamp.format("%Y-%m-%d %H:%M")
+                        );
                     }
                 }
             }
@@ -1580,23 +1640,33 @@ fn run_protect(action: ProtectAction) -> i32 {
 
 fn run_supabase(action: SupabaseAction) -> i32 {
     match action {
-        SupabaseAction::AuthFix { secret, yes, check, backend_path } => {
-            run_supabase_auth_fix(secret, yes, check, &backend_path)
-        }
-        SupabaseAction::Secrets { list, backend_path } => {
-            run_supabase_secrets(list, &backend_path)
-        }
-        SupabaseAction::Deploy { function, backend_path } => {
-            run_supabase_deploy(function.as_deref(), &backend_path)
-        }
-        SupabaseAction::Logs { function, tail, limit, backend_path } => {
-            run_supabase_logs(&function, tail, limit, &backend_path)
-        }
+        SupabaseAction::AuthFix {
+            secret,
+            yes,
+            check,
+            backend_path,
+        } => run_supabase_auth_fix(secret, yes, check, &backend_path),
+        SupabaseAction::Secrets { list, backend_path } => run_supabase_secrets(list, &backend_path),
+        SupabaseAction::Deploy {
+            function,
+            backend_path,
+        } => run_supabase_deploy(function.as_deref(), &backend_path),
+        SupabaseAction::Logs {
+            function,
+            tail,
+            limit,
+            backend_path,
+        } => run_supabase_logs(&function, tail, limit, &backend_path),
     }
 }
 
 /// Fix auth hook configuration - resolves "Hook requires authorization token" error
-fn run_supabase_auth_fix(secret: Option<String>, yes: bool, check: bool, backend_path: &PathBuf) -> i32 {
+fn run_supabase_auth_fix(
+    secret: Option<String>,
+    yes: bool,
+    check: bool,
+    backend_path: &PathBuf,
+) -> i32 {
     use std::io::{self, Write};
 
     println!();
@@ -1604,8 +1674,14 @@ fn run_supabase_auth_fix(secret: Option<String>, yes: bool, check: bool, backend
     println!("{}", "SUPABASE AUTH HOOK FIX".bold());
     println!("{}", "═".repeat(60));
     println!();
-    println!("  {} Resolves: \"Hook requires authorization token\" error", "🔧".yellow());
-    println!("  {} Caused by: Missing BEFORE_USER_CREATED_HOOK_SECRET", "📋".dimmed());
+    println!(
+        "  {} Resolves: \"Hook requires authorization token\" error",
+        "🔧".yellow()
+    );
+    println!(
+        "  {} Caused by: Missing BEFORE_USER_CREATED_HOOK_SECRET",
+        "📋".dimmed()
+    );
     println!();
 
     // Check if Supabase CLI is available
@@ -1616,7 +1692,10 @@ fn run_supabase_auth_fix(secret: Option<String>, yes: bool, check: bool, backend
 
     // Verify backend path exists
     if !backend_path.exists() {
-        Status::error(&format!("Backend path not found: {}", backend_path.display()));
+        Status::error(&format!(
+            "Backend path not found: {}",
+            backend_path.display()
+        ));
         println!();
         println!("  Hint: Make sure you're running from the iOS project directory");
         println!("  Or specify: --backend-path /path/to/foodshare-backend/supabase");
@@ -1632,15 +1711,25 @@ fn run_supabase_auth_fix(secret: Option<String>, yes: bool, check: bool, backend
     let webhook_secret = if let Some(s) = secret {
         s
     } else {
-        println!("{}", "Step 1: Get webhook secret from Supabase Dashboard".cyan().bold());
+        println!(
+            "{}",
+            "Step 1: Get webhook secret from Supabase Dashboard"
+                .cyan()
+                .bold()
+        );
         println!();
         println!("  1. Open: https://studio.foodshare.club/project/default/auth/hooks");
         println!("  2. Find the 'Before User Created' hook");
-        println!("  3. Copy the webhook secret (starts with {})","v1,whsec_...".green());
+        println!(
+            "  3. Copy the webhook secret (starts with {})",
+            "v1,whsec_...".green()
+        );
         println!();
 
         if yes {
-            Status::error("Cannot auto-confirm without --secret. Provide the secret or run interactively.");
+            Status::error(
+                "Cannot auto-confirm without --secret. Provide the secret or run interactively.",
+            );
             return exit_codes::FAILURE;
         }
 
@@ -1685,7 +1774,12 @@ fn run_supabase_auth_fix(secret: Option<String>, yes: bool, check: bool, backend
     }
 
     println!();
-    println!("{}", "Step 2: Setting secret in Supabase Edge Functions".cyan().bold());
+    println!(
+        "{}",
+        "Step 2: Setting secret in Supabase Edge Functions"
+            .cyan()
+            .bold()
+    );
     println!();
 
     // Run supabase secrets set
@@ -1716,7 +1810,12 @@ fn run_supabase_auth_fix(secret: Option<String>, yes: bool, check: bool, backend
     }
 
     println!();
-    println!("{}", "Step 3: Deploying geolocate-user Edge Function".cyan().bold());
+    println!(
+        "{}",
+        "Step 3: Deploying geolocate-user Edge Function"
+            .cyan()
+            .bold()
+    );
     println!();
 
     // Deploy the function
@@ -1753,7 +1852,10 @@ fn run_supabase_auth_fix(secret: Option<String>, yes: bool, check: bool, backend
     println!("    4. If all tests pass, resubmit to App Store");
     println!();
     println!("  Monitor logs:");
-    println!("    {} supabase logs geolocate-user --tail", "foodshare-hooks".dimmed());
+    println!(
+        "    {} supabase logs geolocate-user --tail",
+        "foodshare-hooks".dimmed()
+    );
     println!();
 
     exit_codes::SUCCESS
@@ -1775,11 +1877,20 @@ fn run_supabase_auth_check(backend_path: &PathBuf) -> i32 {
             let stdout = String::from_utf8_lossy(&result.stdout);
 
             if stdout.contains("BEFORE_USER_CREATED_HOOK_SECRET") {
-                println!("  {} BEFORE_USER_CREATED_HOOK_SECRET is configured", "✓".green());
+                println!(
+                    "  {} BEFORE_USER_CREATED_HOOK_SECRET is configured",
+                    "✓".green()
+                );
             } else {
-                println!("  {} BEFORE_USER_CREATED_HOOK_SECRET is NOT configured", "✗".red());
+                println!(
+                    "  {} BEFORE_USER_CREATED_HOOK_SECRET is NOT configured",
+                    "✗".red()
+                );
                 println!();
-                println!("  Run {} to fix this", "foodshare-hooks supabase auth-fix".cyan());
+                println!(
+                    "  Run {} to fix this",
+                    "foodshare-hooks supabase auth-fix".cyan()
+                );
                 return exit_codes::FAILURE;
             }
         }
@@ -1801,7 +1912,10 @@ fn run_supabase_secrets(list: bool, backend_path: &PathBuf) -> i32 {
     }
 
     if !backend_path.exists() {
-        Status::error(&format!("Backend path not found: {}", backend_path.display()));
+        Status::error(&format!(
+            "Backend path not found: {}",
+            backend_path.display()
+        ));
         return exit_codes::FAILURE;
     }
 
@@ -1833,7 +1947,10 @@ fn run_supabase_deploy(function: Option<&str>, backend_path: &PathBuf) -> i32 {
     }
 
     if !backend_path.exists() {
-        Status::error(&format!("Backend path not found: {}", backend_path.display()));
+        Status::error(&format!(
+            "Backend path not found: {}",
+            backend_path.display()
+        ));
         return exit_codes::FAILURE;
     }
 
@@ -1873,7 +1990,10 @@ fn run_supabase_logs(function: &str, tail: bool, limit: usize, backend_path: &Pa
     }
 
     if !backend_path.exists() {
-        Status::error(&format!("Backend path not found: {}", backend_path.display()));
+        Status::error(&format!(
+            "Backend path not found: {}",
+            backend_path.display()
+        ));
         return exit_codes::FAILURE;
     }
 

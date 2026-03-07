@@ -10,6 +10,7 @@ use std::time::Instant;
 /// LLM translation request
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct TranslateRequest {
     text: String,
     target_language: String,
@@ -20,6 +21,7 @@ struct TranslateRequest {
 /// LLM translation response
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct TranslateResponse {
     translated_text: Option<String>,
     source_language: Option<String>,
@@ -29,6 +31,7 @@ struct TranslateResponse {
 }
 
 /// Run the test-llm command
+#[allow(dead_code)]
 pub async fn run(
     text: &str,
     source_lang: &str,
@@ -42,7 +45,15 @@ pub async fn run(
     let api_key = std::env::var("LLM_TRANSLATION_API_KEY").ok();
 
     if format == "json" {
-        return run_json(&endpoint, api_key.as_deref(), text, source_lang, target_lang, context).await;
+        return run_json(
+            &endpoint,
+            api_key.as_deref(),
+            text,
+            source_lang,
+            target_lang,
+            context,
+        )
+        .await;
     }
 
     println!("{}", "Testing LLM Translation Endpoint".bold().cyan());
@@ -130,6 +141,7 @@ pub async fn run(
 }
 
 /// Run in JSON output mode
+#[allow(dead_code)]
 async fn run_json(
     endpoint: &str,
     api_key: Option<&str>,
@@ -139,7 +151,8 @@ async fn run_json(
     context: &str,
 ) -> Result<()> {
     let start = Instant::now();
-    let result = send_translation_request(endpoint, api_key, text, source_lang, target_lang, context).await;
+    let result =
+        send_translation_request(endpoint, api_key, text, source_lang, target_lang, context).await;
     let elapsed = start.elapsed();
 
     let output = match result {
@@ -176,6 +189,7 @@ async fn run_json(
 }
 
 /// Send translation request to the LLM endpoint
+#[allow(dead_code)]
 async fn send_translation_request(
     endpoint: &str,
     api_key: Option<&str>,

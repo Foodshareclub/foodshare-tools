@@ -45,8 +45,7 @@ pub async fn run(locale: &str, apply: bool, limit: usize, format: &str) -> Resul
     println!();
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!(
         "  {}",
@@ -54,8 +53,7 @@ pub async fn run(locale: &str, apply: bool, limit: usize, format: &str) -> Resul
     );
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!();
 
@@ -73,11 +71,7 @@ pub async fn run(locale: &str, apply: bool, limit: usize, format: &str) -> Resul
 
     let untranslated_count = audit.untranslated_count.unwrap_or(0);
     if untranslated_count == 0 {
-        println!(
-            "  {} No missing translations for {}",
-            "✓".green(),
-            locale
-        );
+        println!("  {} No missing translations for {}", "✓".green(), locale);
         println!();
         return Ok(());
     }
@@ -227,14 +221,12 @@ pub async fn sync_all(apply: bool, format: &str) -> Result<()> {
     println!();
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!("  {}", "🔄 Sync All Locales".blue().bold());
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!();
 
@@ -317,8 +309,7 @@ pub async fn sync_all(apply: bool, format: &str) -> Result<()> {
     println!();
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!(
         "  Summary: {} locales processed, {} total translations{}",

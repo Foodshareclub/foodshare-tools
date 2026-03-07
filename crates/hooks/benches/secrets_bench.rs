@@ -1,5 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use foodshare_hooks::{SecretScanner, Severity, PatternDef, PatternCategory};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use foodshare_hooks::{PatternCategory, PatternDef, SecretScanner, Severity};
 
 const SAMPLE_CONTENT: &str = r#"
 # Configuration
@@ -109,16 +109,15 @@ fn bench_scaling(c: &mut Criterion) {
 }
 
 fn bench_finding_callback(c: &mut Criterion) {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     let count = Arc::new(AtomicUsize::new(0));
     let count_clone = count.clone();
 
-    let scanner = SecretScanner::new()
-        .on_finding(move |_| {
-            count_clone.fetch_add(1, Ordering::Relaxed);
-        });
+    let scanner = SecretScanner::new().on_finding(move |_| {
+        count_clone.fetch_add(1, Ordering::Relaxed);
+    });
 
     c.bench_function("scan_with_callback", |b| {
         b.iter(|| {

@@ -1,6 +1,6 @@
 //! Brotli compression implementation.
 
-use crate::{CompressionError, Result};
+use crate::Result;
 use std::io::{Read, Write};
 
 /// Compress data using Brotli.

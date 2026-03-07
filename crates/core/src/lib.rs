@@ -52,11 +52,11 @@ pub use error::{Error, ErrorCode, Result, ResultExt};
 pub mod prelude {
     pub use crate::audit::{AuditAction, AuditEvent, AuditLog};
     pub use crate::cache::{Cache, CacheConfig};
-    pub use crate::error::{exit_codes, Error, ErrorCode, Result, ResultExt};
+    pub use crate::error::{Error, ErrorCode, Result, ResultExt, exit_codes};
     pub use crate::feature_flags::{FeatureFlags, Flag, FlagValue};
     pub use crate::git::GitRepo;
     pub use crate::health::{HealthChecker, HealthReport, HealthStatus};
     pub use crate::rate_limit::{RateLimitConfig, RateLimiter};
-    pub use crate::retry::{retry, CircuitBreaker, RetryConfig};
+    pub use crate::retry::{CircuitBreaker, RetryConfig, retry};
     pub use crate::validation::{ValidationResult, Validator};
 }

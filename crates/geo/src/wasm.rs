@@ -3,7 +3,9 @@
 //! These bindings allow the geo crate to be used from JavaScript/TypeScript
 //! in both browser and Deno environments.
 
-use crate::{batch::LocationItem, calculate_distances, haversine_distance, parse_postgis_point, Coordinate};
+use crate::{
+    Coordinate, batch::LocationItem, calculate_distances, haversine_distance, parse_postgis_point,
+};
 use wasm_bindgen::prelude::*;
 
 /// Calculate distance between two coordinates.
@@ -35,7 +37,11 @@ pub fn distance(lat1: f64, lng1: f64, lat2: f64, lng2: f64) -> f64 {
 /// # Returns
 /// JSON string of products with added distance field
 #[wasm_bindgen]
-pub fn calculate_product_distances(user_lat: f64, user_lng: f64, products_json: &str) -> Result<String, JsValue> {
+pub fn calculate_product_distances(
+    user_lat: f64,
+    user_lng: f64,
+    products_json: &str,
+) -> Result<String, JsValue> {
     // Parse input JSON
     let items: Vec<LocationItem> = serde_json::from_str(products_json)
         .map_err(|e| JsValue::from_str(&format!("JSON parse error: {}", e)))?;
@@ -92,7 +98,11 @@ pub fn calculate_distances_sorted(
     let items: Vec<LocationItem> = serde_json::from_str(products_json)
         .map_err(|e| JsValue::from_str(&format!("JSON parse error: {}", e)))?;
 
-    let max = if max_results == 0 { None } else { Some(max_results as usize) };
+    let max = if max_results == 0 {
+        None
+    } else {
+        Some(max_results as usize)
+    };
     let results = crate::batch::calculate_distances_sorted(user_lat, user_lng, &items, max);
 
     serde_json::to_string(&results)
@@ -119,7 +129,8 @@ pub fn filter_within_radius(
     let items: Vec<LocationItem> = serde_json::from_str(products_json)
         .map_err(|e| JsValue::from_str(&format!("JSON parse error: {}", e)))?;
 
-    let results = crate::batch::calculate_distances_within_radius(user_lat, user_lng, &items, radius_km);
+    let results =
+        crate::batch::calculate_distances_within_radius(user_lat, user_lng, &items, radius_km);
 
     serde_json::to_string(&results)
         .map_err(|e| JsValue::from_str(&format!("JSON serialize error: {}", e)))

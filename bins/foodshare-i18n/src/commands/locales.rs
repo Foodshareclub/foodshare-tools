@@ -34,14 +34,12 @@ pub async fn run(format: &str) -> Result<()> {
     println!();
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!("  {}", "🌍 Supported Locales".blue().bold());
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!();
 
@@ -59,10 +57,7 @@ pub async fn run(format: &str) -> Result<()> {
         "Native".dimmed(),
         "RTL".dimmed()
     );
-    println!(
-        "  {}",
-        "─".repeat(60).dimmed()
-    );
+    println!("  {}", "─".repeat(60).dimmed());
 
     for info in &locale_info {
         let rtl_indicator = if info.rtl {
@@ -85,25 +80,15 @@ pub async fn run(format: &str) -> Result<()> {
 
         println!(
             "  {:<6} {:<4} {:<15} {:<20} {}",
-            code_display,
-            info.flag,
-            info.name,
-            info.native_name,
-            rtl_indicator
+            code_display, info.flag, info.name, info.native_name, rtl_indicator
         );
     }
 
     println!();
-    println!(
-        "  Total: {} locales",
-        locale_info.len().to_string().green()
-    );
+    println!("  Total: {} locales", locale_info.len().to_string().green());
 
     if let Some(api) = api_locales {
-        println!(
-            "  Default: {}",
-            api.default.cyan()
-        );
+        println!("  Default: {}", api.default.cyan());
     }
 
     println!();

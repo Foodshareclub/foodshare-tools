@@ -18,18 +18,20 @@
 //! assert!((distance_km - 878.0).abs() < 10.0); // ~878 km
 //! ```
 
-mod haversine;
-mod postgis;
 pub mod batch;
 mod error;
+mod haversine;
+mod postgis;
 
 #[cfg(feature = "wasm")]
 mod wasm;
 
-pub use haversine::{haversine_distance, haversine_distance_meters, EARTH_RADIUS_KM, EARTH_RADIUS_M};
-pub use postgis::{parse_postgis_point, PostGISPoint};
-pub use batch::{calculate_distances, DistanceResult};
+pub use batch::{DistanceResult, calculate_distances};
 pub use error::{GeoError, Result};
+pub use haversine::{
+    EARTH_RADIUS_KM, EARTH_RADIUS_M, haversine_distance, haversine_distance_meters,
+};
+pub use postgis::{PostGISPoint, parse_postgis_point};
 
 /// A geographic coordinate with latitude and longitude.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -48,7 +50,10 @@ impl Coordinate {
     /// * `longitude` - Longitude in degrees (-180 to 180)
     #[inline]
     pub fn new(latitude: f64, longitude: f64) -> Self {
-        Self { latitude, longitude }
+        Self {
+            latitude,
+            longitude,
+        }
     }
 
     /// Returns true if the coordinate has valid values.

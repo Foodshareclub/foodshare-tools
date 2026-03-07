@@ -22,7 +22,7 @@
 //! ```
 
 use crate::error::{Error, ErrorCode, Result};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
@@ -51,7 +51,7 @@ impl Default for CacheConfig {
 
         Self {
             cache_dir,
-            default_ttl_secs: 3600, // 1 hour
+            default_ttl_secs: 3600,            // 1 hour
             max_size_bytes: 100 * 1024 * 1024, // 100MB
             memory_cache: true,
         }
@@ -103,10 +103,9 @@ impl Cache {
 
         // Try memory cache first
         if let Some(ref memory) = self.memory {
-            let guard = memory.read().map_err(|_| Error::new(
-                ErrorCode::Internal,
-                "Failed to acquire cache read lock",
-            ))?;
+            let guard = memory.read().map_err(|_| {
+                Error::new(ErrorCode::Internal, "Failed to acquire cache read lock")
+            })?;
 
             if let Some((entry, data)) = guard.get(&cache_key) {
                 if !self.is_expired(entry) {
@@ -165,8 +164,7 @@ impl Cache {
             .unwrap()
             .as_secs();
 
-        let ttl_secs = ttl
-            .map_or(self.config.default_ttl_secs, |d| d.as_secs());
+        let ttl_secs = ttl.map_or(self.config.default_ttl_secs, |d| d.as_secs());
 
         let entry = CacheEntry {
             created_at: now,
@@ -260,7 +258,8 @@ impl Cache {
             }
         }
 
-        let memory_entries = self.memory
+        let memory_entries = self
+            .memory
             .as_ref()
             .and_then(|m| m.read().ok())
             .map_or(0, |g| g.len());
@@ -370,12 +369,7 @@ pub struct CacheStats {
 }
 
 /// Cached command execution
-pub fn cached_command<F, T>(
-    cache: &Cache,
-    key: &str,
-    ttl: Option<Duration>,
-    f: F,
-) -> Result<T>
+pub fn cached_command<F, T>(cache: &Cache, key: &str, ttl: Option<Duration>, f: F) -> Result<T>
 where
     F: FnOnce() -> Result<T>,
     T: Serialize + DeserializeOwned,
@@ -412,7 +406,9 @@ mod tests {
     fn test_set_and_get() {
         let (cache, _temp) = test_cache();
 
-        cache.set("test_key", &"test_value".to_string(), None).unwrap();
+        cache
+            .set("test_key", &"test_value".to_string(), None)
+            .unwrap();
         let value: Option<String> = cache.get("test_key").unwrap();
 
         assert_eq!(value, Some("test_value".to_string()));
@@ -449,11 +445,20 @@ mod tests {
         let cache = Cache::new(config).unwrap();
 
         // Set with 1 second TTL
-        cache.set("expires", &"value".to_string(), Some(Duration::from_secs(1))).unwrap();
+        cache
+            .set(
+                "expires",
+                &"value".to_string(),
+                Some(Duration::from_secs(1)),
+            )
+            .unwrap();
 
         // Should exist immediately
         let value: Option<String> = cache.get("expires").unwrap();
-        assert!(value.is_some(), "Value should exist immediately after setting");
+        assert!(
+            value.is_some(),
+            "Value should exist immediately after setting"
+        );
 
         // Wait for expiry (2 seconds to ensure we're past the expiry time)
         std::thread::sleep(Duration::from_secs(2));

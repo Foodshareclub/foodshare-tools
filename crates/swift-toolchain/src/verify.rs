@@ -1,4 +1,4 @@
-use crate::detect::{SwiftToolchain, SwiftVersion};
+use crate::detect::SwiftToolchain;
 use crate::error::{Result, SwiftError};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
@@ -77,12 +77,7 @@ impl VerificationReport {
             .into_iter()
             .filter_map(|e| e.ok())
         {
-            if entry
-                .path()
-                .extension()
-                .and_then(|s| s.to_str())
-                == Some("xcodeproj")
-            {
+            if entry.path().extension().and_then(|s| s.to_str()) == Some("xcodeproj") {
                 if let Ok(info) = Self::check_xcode_project(entry.path(), required_version) {
                     if !info.matches_required {
                         issues.push(format!(
@@ -120,16 +115,14 @@ impl VerificationReport {
 
     fn check_package_swift(path: &Path, required_version: &str) -> Result<PackageSwiftInfo> {
         let content = std::fs::read_to_string(path)?;
-        
+
         // Extract swift-tools-version from first line
         let tools_version = content
             .lines()
             .next()
             .and_then(|line| {
                 if line.contains("swift-tools-version") {
-                    line.split(':')
-                        .nth(1)
-                        .map(|v| v.trim().to_string())
+                    line.split(':').nth(1).map(|v| v.trim().to_string())
                 } else {
                     None
                 }
@@ -154,7 +147,7 @@ impl VerificationReport {
         }
 
         let content = std::fs::read_to_string(&pbxproj)?;
-        
+
         // Count SWIFT_VERSION occurrences
         let mut swift_versions = Vec::new();
         for line in content.lines() {
@@ -167,7 +160,10 @@ impl VerificationReport {
         }
 
         let configuration_count = swift_versions.len();
-        let swift_version = swift_versions.first().cloned().unwrap_or_else(|| "unknown".to_string());
+        let swift_version = swift_versions
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
         let matches_required = swift_version.starts_with(required_version);
 
         Ok(XcodeProjectInfo {
@@ -237,7 +233,6 @@ impl VerificationReport {
 
     /// Export report as JSON
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string_pretty(self)
-            .map_err(|e| SwiftError::Config(e.to_string()))
+        serde_json::to_string_pretty(self).map_err(|e| SwiftError::Config(e.to_string()))
     }
 }

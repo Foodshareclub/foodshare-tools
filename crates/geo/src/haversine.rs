@@ -59,8 +59,7 @@ fn haversine_distance_with_radius(from: &Coordinate, to: &Coordinate, radius: f6
     let d_lat = lat2 - lat1;
     let d_lon = lon2 - lon1;
 
-    let a = (d_lat / 2.0).sin().powi(2)
-        + lat1.cos() * lat2.cos() * (d_lon / 2.0).sin().powi(2);
+    let a = (d_lat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (d_lon / 2.0).sin().powi(2);
 
     let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
 
@@ -79,6 +78,7 @@ fn haversine_distance_with_radius(from: &Coordinate, to: &Coordinate, radius: f6
 /// # Returns
 /// Approximate distance in kilometers
 #[inline]
+#[allow(dead_code)]
 pub fn approximate_distance(from: &Coordinate, to: &Coordinate) -> f64 {
     let (lat1, lon1) = from.to_radians();
     let (lat2, lon2) = to.to_radians();
@@ -94,10 +94,22 @@ mod tests {
     use super::*;
 
     // Test data: known distances between cities
-    const BERLIN: Coordinate = Coordinate { latitude: 52.5200, longitude: 13.4050 };
-    const PARIS: Coordinate = Coordinate { latitude: 48.8566, longitude: 2.3522 };
-    const NEW_YORK: Coordinate = Coordinate { latitude: 40.7128, longitude: -74.0060 };
-    const TOKYO: Coordinate = Coordinate { latitude: 35.6762, longitude: 139.6503 };
+    const BERLIN: Coordinate = Coordinate {
+        latitude: 52.5200,
+        longitude: 13.4050,
+    };
+    const PARIS: Coordinate = Coordinate {
+        latitude: 48.8566,
+        longitude: 2.3522,
+    };
+    const NEW_YORK: Coordinate = Coordinate {
+        latitude: 40.7128,
+        longitude: -74.0060,
+    };
+    const TOKYO: Coordinate = Coordinate {
+        latitude: 35.6762,
+        longitude: 139.6503,
+    };
 
     #[test]
     fn test_berlin_to_paris() {

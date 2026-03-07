@@ -3,10 +3,10 @@
 //! Provides wrappers for Gradle commands.
 
 use foodshare_core::error::Result;
-use foodshare_core::process::{run_command_in_dir, CommandResult};
+use foodshare_core::process::{CommandResult, run_command_in_dir};
 use std::path::Path;
 
-/// Run a Gradle task
+/// Run a specified Gradle task in the project directory
 pub fn run_task(project_dir: &Path, task: &str) -> Result<CommandResult> {
     let gradle_wrapper = if cfg!(windows) {
         "gradlew.bat"

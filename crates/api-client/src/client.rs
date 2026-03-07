@@ -5,10 +5,10 @@ use crate::endpoints::{BffApi, HealthApi, LocalizationApi, ProductsApi, Translat
 use crate::error::{ApiError, ApiResult};
 use foodshare_core::rate_limit::RateLimiter;
 use foodshare_core::retry::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue, USER_AGENT};
 use reqwest::{Client, Method, RequestBuilder, Response};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, instrument, warn};
@@ -378,10 +378,7 @@ impl FoodshareClient {
     }
 
     /// Get duration timing for a URL request
-    pub async fn timed_get_url<T: DeserializeOwned>(
-        &self,
-        url: &str,
-    ) -> ApiResult<(T, Duration)> {
+    pub async fn timed_get_url<T: DeserializeOwned>(&self, url: &str) -> ApiResult<(T, Duration)> {
         let start = Instant::now();
         let result = self.get_url(url).await?;
         Ok((result, start.elapsed()))

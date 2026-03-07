@@ -87,7 +87,8 @@ pub enum AuditAction {
 
 impl AuditAction {
     /// Get the severity level of this action
-    #[must_use] pub fn severity(&self) -> AuditSeverity {
+    #[must_use]
+    pub fn severity(&self) -> AuditSeverity {
         match self {
             AuditAction::SecretDetected
             | AuditAction::SecurityCheckFailed
@@ -165,13 +166,15 @@ impl AuditEvent {
     }
 
     /// Mark as failed
-    #[must_use] pub fn failed(mut self) -> Self {
+    #[must_use]
+    pub fn failed(mut self) -> Self {
         self.success = false;
         self
     }
 
     /// Set duration
-    #[must_use] pub fn with_duration(mut self, duration_ms: u64) -> Self {
+    #[must_use]
+    pub fn with_duration(mut self, duration_ms: u64) -> Self {
         self.duration_ms = Some(duration_ms);
         self
     }
@@ -183,7 +186,8 @@ impl AuditEvent {
     }
 
     /// Set severity override
-    #[must_use] pub fn with_severity(mut self, severity: AuditSeverity) -> Self {
+    #[must_use]
+    pub fn with_severity(mut self, severity: AuditSeverity) -> Self {
         self.severity = severity;
         self
     }
@@ -263,7 +267,8 @@ impl AuditLog {
     }
 
     /// Create a no-op audit log (for testing)
-    #[must_use] pub fn noop() -> Self {
+    #[must_use]
+    pub fn noop() -> Self {
         Self {
             config: AuditConfig::default(),
             writer: Mutex::new(None),
@@ -350,7 +355,10 @@ impl AuditLog {
         // Rotate files
         for i in (1..self.config.max_files).rev() {
             let from = self.config.log_path.with_extension(format!("log.{i}"));
-            let to = self.config.log_path.with_extension(format!("log.{}", i + 1));
+            let to = self
+                .config
+                .log_path
+                .with_extension(format!("log.{}", i + 1));
             if from.exists() {
                 let _ = std::fs::rename(&from, &to);
             }
@@ -431,9 +439,11 @@ fn machine_id() -> String {
 }
 
 /// Global audit log instance
-#[must_use] pub fn global_audit() -> &'static AuditLog {
+#[must_use]
+pub fn global_audit() -> &'static AuditLog {
     use once_cell::sync::Lazy;
-    static AUDIT: Lazy<AuditLog> = Lazy::new(|| AuditLog::new().unwrap_or_else(|_| AuditLog::noop()));
+    static AUDIT: Lazy<AuditLog> =
+        Lazy::new(|| AuditLog::new().unwrap_or_else(|_| AuditLog::noop()));
     &AUDIT
 }
 

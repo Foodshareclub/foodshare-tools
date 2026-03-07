@@ -1,7 +1,7 @@
 //! Benchmarks for image processing.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use foodshare_image::{detect_format, calculate_target_width};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use foodshare_image::{calculate_target_width, detect_format};
 
 fn bench_format_detection(c: &mut Criterion) {
     // JPEG magic bytes

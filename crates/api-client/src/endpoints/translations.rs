@@ -309,7 +309,10 @@ mod tests {
         let response: TranslationResponse = serde_json::from_str(json).unwrap();
         assert!(response.success);
         assert!(response.data.is_some());
-        assert_eq!(response.data.as_ref().unwrap().locale, Some("de".to_string()));
+        assert_eq!(
+            response.data.as_ref().unwrap().locale,
+            Some("de".to_string())
+        );
     }
 
     #[test]

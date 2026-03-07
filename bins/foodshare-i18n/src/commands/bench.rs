@@ -45,8 +45,7 @@ pub async fn run(count: usize, locale: &str, format: &str) -> Result<()> {
     println!();
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!(
         "  {}",
@@ -56,8 +55,7 @@ pub async fn run(count: usize, locale: &str, format: &str) -> Result<()> {
     );
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!();
 
@@ -80,14 +78,12 @@ pub async fn run(count: usize, locale: &str, format: &str) -> Result<()> {
     // Comparison
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!("  {}", "📊 Comparison".blue().bold());
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .blue()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".blue()
     );
     println!();
 
@@ -192,8 +188,14 @@ fn calculate_stats(times: &[Duration]) -> Stats {
         max: *ms_times.last().unwrap_or(&0),
         avg,
         p50: ms_times.get(p50_idx).copied().unwrap_or(0),
-        p95: ms_times.get(p95_idx.min(ms_times.len() - 1)).copied().unwrap_or(0),
-        p99: ms_times.get(p99_idx.min(ms_times.len() - 1)).copied().unwrap_or(0),
+        p95: ms_times
+            .get(p95_idx.min(ms_times.len() - 1))
+            .copied()
+            .unwrap_or(0),
+        p99: ms_times
+            .get(p99_idx.min(ms_times.len() - 1))
+            .copied()
+            .unwrap_or(0),
         success_rate: 100.0,
         count: ms_times.len(),
     }
@@ -202,30 +204,12 @@ fn calculate_stats(times: &[Duration]) -> Stats {
 fn print_stats(name: &str, stats: &Stats) {
     println!();
     println!("  {} ({} requests):", name.cyan(), stats.count);
-    println!(
-        "    Min:  {}ms",
-        stats.min.to_string().green()
-    );
-    println!(
-        "    Max:  {}ms",
-        stats.max.to_string().yellow()
-    );
-    println!(
-        "    Avg:  {:.1}ms",
-        stats.avg
-    );
-    println!(
-        "    P50:  {}ms",
-        stats.p50
-    );
-    println!(
-        "    P95:  {}ms",
-        stats.p95.to_string().yellow()
-    );
-    println!(
-        "    P99:  {}ms",
-        stats.p99.to_string().red()
-    );
+    println!("    Min:  {}ms", stats.min.to_string().green());
+    println!("    Max:  {}ms", stats.max.to_string().yellow());
+    println!("    Avg:  {:.1}ms", stats.avg);
+    println!("    P50:  {}ms", stats.p50);
+    println!("    P95:  {}ms", stats.p95.to_string().yellow());
+    println!("    P99:  {}ms", stats.p99.to_string().red());
 }
 
 async fn run_json(client: &ApiClient, count: usize, locale: &str) -> Result<()> {

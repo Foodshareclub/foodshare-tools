@@ -43,7 +43,8 @@ pub enum FlagValue {
 
 impl FlagValue {
     /// Check if flag is enabled (truthy)
-    #[must_use] pub fn is_enabled(&self) -> bool {
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
         match self {
             FlagValue::Bool(b) => *b,
             FlagValue::String(s) => !s.is_empty() && s != "false" && s != "0",
@@ -53,12 +54,14 @@ impl FlagValue {
     }
 
     /// Get as boolean
-    #[must_use] pub fn as_bool(&self) -> bool {
+    #[must_use]
+    pub fn as_bool(&self) -> bool {
         self.is_enabled()
     }
 
     /// Get as string
-    #[must_use] pub fn as_string(&self) -> String {
+    #[must_use]
+    pub fn as_string(&self) -> String {
         match self {
             FlagValue::Bool(b) => b.to_string(),
             FlagValue::String(s) => s.clone(),
@@ -68,7 +71,8 @@ impl FlagValue {
     }
 
     /// Get as number
-    #[must_use] pub fn as_number(&self) -> Option<f64> {
+    #[must_use]
+    pub fn as_number(&self) -> Option<f64> {
         match self {
             FlagValue::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
             FlagValue::String(s) => s.parse().ok(),
@@ -143,13 +147,15 @@ impl Flag {
     }
 
     /// Add tags
-    #[must_use] pub fn with_tags(mut self, tags: Vec<String>) -> Self {
+    #[must_use]
+    pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
         self
     }
 
     /// Check if enabled (considering env override)
-    #[must_use] pub fn is_enabled(&self) -> bool {
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
         // Check environment override first
         if let Some(ref env_var) = self.env_var {
             if let Ok(val) = env::var(env_var) {
@@ -160,11 +166,14 @@ impl Flag {
     }
 
     /// Check if enabled for a specific user/key (for percentage rollouts)
-    #[must_use] pub fn is_enabled_for(&self, key: &str) -> bool {
+    #[must_use]
+    pub fn is_enabled_for(&self, key: &str) -> bool {
         match &self.value {
             FlagValue::Percentage(p) => {
                 // Simple hash-based rollout
-                let hash = key.bytes().fold(0u64, |acc, b| acc.wrapping_add(u64::from(b)));
+                let hash = key
+                    .bytes()
+                    .fold(0u64, |acc, b| acc.wrapping_add(u64::from(b)));
                 (hash % 100) < u64::from(*p)
             }
             _ => self.is_enabled(),
@@ -185,7 +194,8 @@ impl Default for FeatureFlags {
 
 impl FeatureFlags {
     /// Create a new feature flags manager
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             flags: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -203,7 +213,8 @@ impl FeatureFlags {
     }
 
     /// Load flags from environment variables with a prefix
-    #[must_use] pub fn from_env(prefix: &str) -> Self {
+    #[must_use]
+    pub fn from_env(prefix: &str) -> Self {
         let mut flags = HashMap::new();
 
         for (key, value) in env::vars() {
@@ -247,7 +258,8 @@ impl FeatureFlags {
     }
 
     /// Add a flag definition
-    #[must_use] pub fn with_flag_def(self, flag: Flag) -> Self {
+    #[must_use]
+    pub fn with_flag_def(self, flag: Flag) -> Self {
         let mut flags = self.flags.write().unwrap();
         flags.insert(flag.name.clone(), flag);
         drop(flags);
@@ -255,33 +267,36 @@ impl FeatureFlags {
     }
 
     /// Check if a flag is enabled
-    #[must_use] pub fn is_enabled(&self, name: &str) -> bool {
+    #[must_use]
+    pub fn is_enabled(&self, name: &str) -> bool {
         let flags = self.flags.read().unwrap();
         flags.get(name).is_some_and(Flag::is_enabled)
     }
 
     /// Check if a flag is enabled for a specific key
-    #[must_use] pub fn is_enabled_for(&self, name: &str, key: &str) -> bool {
+    #[must_use]
+    pub fn is_enabled_for(&self, name: &str, key: &str) -> bool {
         let flags = self.flags.read().unwrap();
-        flags
-            .get(name)
-            .is_some_and(|f| f.is_enabled_for(key))
+        flags.get(name).is_some_and(|f| f.is_enabled_for(key))
     }
 
     /// Get a flag value
-    #[must_use] pub fn get(&self, name: &str) -> Option<FlagValue> {
+    #[must_use]
+    pub fn get(&self, name: &str) -> Option<FlagValue> {
         let flags = self.flags.read().unwrap();
         flags.get(name).map(|f| f.value.clone())
     }
 
     /// Get a flag as string
-    #[must_use] pub fn get_string(&self, name: &str) -> Option<String> {
+    #[must_use]
+    pub fn get_string(&self, name: &str) -> Option<String> {
         let flags = self.flags.read().unwrap();
         flags.get(name).map(|f| f.value.as_string())
     }
 
     /// Get a flag as number
-    #[must_use] pub fn get_number(&self, name: &str) -> Option<f64> {
+    #[must_use]
+    pub fn get_number(&self, name: &str) -> Option<f64> {
         let flags = self.flags.read().unwrap();
         flags.get(name).and_then(|f| f.value.as_number())
     }
@@ -297,13 +312,15 @@ impl FeatureFlags {
     }
 
     /// List all flags
-    #[must_use] pub fn list(&self) -> Vec<Flag> {
+    #[must_use]
+    pub fn list(&self) -> Vec<Flag> {
         let flags = self.flags.read().unwrap();
         flags.values().cloned().collect()
     }
 
     /// List flags by tag
-    #[must_use] pub fn list_by_tag(&self, tag: &str) -> Vec<Flag> {
+    #[must_use]
+    pub fn list_by_tag(&self, tag: &str) -> Vec<Flag> {
         let flags = self.flags.read().unwrap();
         flags
             .values()
@@ -313,7 +330,8 @@ impl FeatureFlags {
     }
 
     /// Export flags to JSON
-    #[must_use] pub fn to_json(&self) -> String {
+    #[must_use]
+    pub fn to_json(&self) -> String {
         let flags = self.flags.read().unwrap();
         serde_json::to_string_pretty(&*flags).unwrap_or_default()
     }
@@ -331,7 +349,8 @@ impl FeatureFlags {
 }
 
 /// Default feature flags for the tooling
-#[must_use] pub fn default_flags() -> FeatureFlags {
+#[must_use]
+pub fn default_flags() -> FeatureFlags {
     FeatureFlags::new()
         .with_flag_def(
             Flag::bool("telemetry", true)

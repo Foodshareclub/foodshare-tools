@@ -2,7 +2,7 @@
 
 use crate::api::ApiClient;
 use crate::config::base_url;
-use crate::types::{EndpointHealth, JsonHealthOutput};
+use crate::types::EndpointHealth;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 use std::collections::HashMap;
@@ -55,13 +55,24 @@ async fn run_summary(client: &ApiClient) -> Result<()> {
 
     // Features
     if let Some(features) = &health.features {
-        let delta = if features.delta_sync.unwrap_or(false) { "on" } else { "off" };
-        let prefetch = if features.prefetch.unwrap_or(false) { "on" } else { "off" };
+        let delta = if features.delta_sync.unwrap_or(false) {
+            "on"
+        } else {
+            "off"
+        };
+        let prefetch = if features.prefetch.unwrap_or(false) {
+            "on"
+        } else {
+            "off"
+        };
         println!("Features: delta={}, prefetch={}", delta, prefetch);
     }
 
     println!();
-    println!("Run with {} for detailed endpoint checks", "--detailed".cyan());
+    println!(
+        "Run with {} for detailed endpoint checks",
+        "--detailed".cyan()
+    );
 
     Ok(())
 }
@@ -77,30 +88,65 @@ async fn run_detailed(client: &ApiClient) -> Result<()> {
     // BFF
     print!("BFF               ");
     match client.bff_info().await {
-        Ok((info, elapsed)) => println!("{} v{} ({}ms)", "OK".green(), info.version, elapsed.as_millis()),
-        Err(_) => { println!("{}", "FAIL".red()); all_healthy = false; }
+        Ok((info, elapsed)) => println!(
+            "{} v{} ({}ms)",
+            "OK".green(),
+            info.version,
+            elapsed.as_millis()
+        ),
+        Err(_) => {
+            println!("{}", "FAIL".red());
+            all_healthy = false;
+        }
     }
 
     // BFF translations
     print!("BFF/translations  ");
     match client.fetch_bff_translations("en", None).await {
-        Ok((resp, elapsed)) if resp.success => println!("{} ({}ms)", "OK".green(), elapsed.as_millis()),
-        _ => { println!("{}", "FAIL".red()); all_healthy = false; }
+        Ok((resp, elapsed)) if resp.success => {
+            println!("{} ({}ms)", "OK".green(), elapsed.as_millis())
+        }
+        _ => {
+            println!("{}", "FAIL".red());
+            all_healthy = false;
+        }
     }
 
     // get-translations
     print!("get-translations  ");
     match client.health_check().await {
         Ok((health, elapsed)) if health.status == "ok" => {
-            println!("{} v{} ({}ms)", "OK".green(), health.version, elapsed.as_millis());
+            println!(
+                "{} v{} ({}ms)",
+                "OK".green(),
+                health.version,
+                elapsed.as_millis()
+            );
             if let Some(features) = &health.features {
                 let delta = features.delta_sync.unwrap_or(false);
                 let prefetch = features.prefetch.unwrap_or(false);
-                println!("  delta_sync: {}", if delta { "on".green() } else { "off".red() });
-                println!("  prefetch:   {}", if prefetch { "on".green() } else { "off".red() });
+                println!(
+                    "  delta_sync: {}",
+                    if delta {
+                        "on".green().to_string()
+                    } else {
+                        "off".red().to_string()
+                    }
+                );
+                println!(
+                    "  prefetch:   {}",
+                    if prefetch {
+                        "on".green().to_string()
+                    } else {
+                        "off".red().to_string()
+                    }
+                );
             }
         }
-        _ => { println!("{}", "FAIL".red()); all_healthy = false; }
+        _ => {
+            println!("{}", "FAIL".red());
+            all_healthy = false;
+        }
     }
 
     // translation-audit
@@ -108,22 +154,34 @@ async fn run_detailed(client: &ApiClient) -> Result<()> {
     let audit_url = format!("{}/translation-audit", base_url());
     match client.check_endpoint(&audit_url).await {
         Ok((200, elapsed)) => println!("{} ({}ms)", "OK".green(), elapsed.as_millis()),
-        Ok((status, _)) => { println!("{} HTTP {}", "FAIL".red(), status); all_healthy = false; }
-        Err(_) => { println!("{}", "FAIL".red()); all_healthy = false; }
+        Ok((status, _)) => {
+            println!("{} HTTP {}", "FAIL".red(), status);
+            all_healthy = false;
+        }
+        Err(_) => {
+            println!("{}", "FAIL".red());
+            all_healthy = false;
+        }
     }
 
     // delta-sync
     print!("delta-sync        ");
     match client.test_delta_sync("en", "20260101000000").await {
         Ok(resp) if resp.success => println!("{}", "OK".green()),
-        _ => { println!("{}", "FAIL".red()); all_healthy = false; }
+        _ => {
+            println!("{}", "FAIL".red());
+            all_healthy = false;
+        }
     }
 
     // locales
     print!("locales           ");
     match client.get_locales().await {
         Ok(resp) if resp.success => println!("{} ({} languages)", "OK".green(), resp.locales.len()),
-        _ => { println!("{}", "FAIL".red()); all_healthy = false; }
+        _ => {
+            println!("{}", "FAIL".red());
+            all_healthy = false;
+        }
     }
 
     println!();
@@ -190,9 +248,18 @@ async fn run_json(client: &ApiClient, detailed: bool) -> Result<()> {
     }
 
     // Summary info
-    let locales = client.get_locales().await.ok().map(|l| l.locales.len()).unwrap_or(0);
-    let english_keys = client.fetch_direct_translations("en").await.ok()
-        .and_then(|(t, _)| t.data.map(|d| count_keys(&d.messages))).unwrap_or(0);
+    let locales = client
+        .get_locales()
+        .await
+        .ok()
+        .map(|l| l.locales.len())
+        .unwrap_or(0);
+    let english_keys = client
+        .fetch_direct_translations("en")
+        .await
+        .ok()
+        .and_then(|(t, _)| t.data.map(|d| count_keys(&d.messages)))
+        .unwrap_or(0);
 
     let output = serde_json::json!({
         "overall": if all_healthy { "healthy" } else { "degraded" },
@@ -207,9 +274,18 @@ async fn run_json(client: &ApiClient, detailed: bool) -> Result<()> {
 
 fn count_keys(value: &serde_json::Value) -> usize {
     match value {
-        serde_json::Value::Object(map) => {
-            map.values().map(|v| if v.is_string() { 1 } else if v.is_object() { count_keys(v) } else { 0 }).sum()
-        }
+        serde_json::Value::Object(map) => map
+            .values()
+            .map(|v| {
+                if v.is_string() {
+                    1
+                } else if v.is_object() {
+                    count_keys(v)
+                } else {
+                    0
+                }
+            })
+            .sum(),
         _ => 0,
     }
 }

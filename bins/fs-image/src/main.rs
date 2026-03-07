@@ -1,12 +1,12 @@
 //! fs-image: CLI tool for image processing and optimization.
 
 use clap::{Parser, Subcommand};
-use foodshare_image::{detect_format, extract_metadata, calculate_target_width};
-use std::path::PathBuf;
-use walkdir::WalkDir;
+use foodshare_image::{calculate_target_width, detect_format, extract_metadata};
+use image::GenericImageView;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
-use image::GenericImageView;
+use std::path::PathBuf;
+use walkdir::WalkDir;
 
 #[derive(Parser)]
 #[command(name = "fs-image")]
@@ -126,7 +126,16 @@ fn main() -> anyhow::Result<()> {
                         println!("Dimensions: {}x{}", meta.width, meta.height);
                         println!("Aspect Ratio: {:.2}", meta.aspect_ratio());
                         println!("Size: {} bytes", meta.size_bytes);
-                        println!("Orientation: {}", if meta.is_landscape() { "Landscape" } else if meta.is_portrait() { "Portrait" } else { "Square" });
+                        println!(
+                            "Orientation: {}",
+                            if meta.is_landscape() {
+                                "Landscape"
+                            } else if meta.is_portrait() {
+                                "Portrait"
+                            } else {
+                                "Square"
+                            }
+                        );
                     }
                 }
                 None => {
@@ -153,7 +162,8 @@ fn main() -> anyhow::Result<()> {
                 pb.inc(1);
                 if let Ok(data) = std::fs::read(entry.path()) {
                     if let Some(meta) = extract_metadata(&data) {
-                        let target_width = calculate_target_width(meta.size_bytes, meta.width, meta.height);
+                        let target_width =
+                            calculate_target_width(meta.size_bytes, meta.width, meta.height);
                         results.push(serde_json::json!({
                             "path": entry.path().to_string_lossy(),
                             "format": meta.format,
@@ -172,7 +182,8 @@ fn main() -> anyhow::Result<()> {
                 println!("{}", serde_json::to_string_pretty(&results)?);
             } else {
                 println!("\nFound {} images", results.len());
-                let needs_resize: Vec<_> = results.iter()
+                let needs_resize: Vec<_> = results
+                    .iter()
                     .filter(|r| r["needs_resize"].as_bool().unwrap_or(false))
                     .collect();
                 println!("{} images need resizing", needs_resize.len());
@@ -185,9 +196,14 @@ fn main() -> anyhow::Result<()> {
                 Some(meta) => {
                     let target = calculate_target_width(meta.size_bytes, meta.width, meta.height);
                     if target > 0 {
-                        println!("Recommended resize: {} -> {} pixels wide", meta.width, target);
+                        println!(
+                            "Recommended resize: {} -> {} pixels wide",
+                            meta.width, target
+                        );
                         let (_, new_height) = foodshare_image::smart_width::calculate_dimensions(
-                            meta.width, meta.height, target
+                            meta.width,
+                            meta.height,
+                            target,
                         );
                         println!("New dimensions: {}x{}", target, new_height);
                     } else {
@@ -201,12 +217,20 @@ fn main() -> anyhow::Result<()> {
             }
         }
 
-        Commands::RemoveAlpha { path, background, overwrite, output, recursive, dry_run, filter_dimensions } => {
-            use foodshare_image::{process_image_file, has_alpha_channel, AlphaRemovalOptions};
-            
+        Commands::RemoveAlpha {
+            path,
+            background,
+            overwrite,
+            output,
+            recursive,
+            dry_run,
+            filter_dimensions,
+        } => {
+            use foodshare_image::{AlphaRemovalOptions, has_alpha_channel, process_image_file};
+
             // Parse background color
             let bg_color = parse_hex_color(&background)?;
-            
+
             // Parse filter dimensions if provided
             let dimension_filter = if let Some(ref dims) = filter_dimensions {
                 let parts: Vec<&str> = dims.split('x').collect();
@@ -219,7 +243,7 @@ fn main() -> anyhow::Result<()> {
             } else {
                 None
             };
-            
+
             // Collect files to process
             let files: Vec<PathBuf> = if path.is_dir() {
                 let walker = if recursive {
@@ -227,7 +251,7 @@ fn main() -> anyhow::Result<()> {
                 } else {
                     WalkDir::new(&path).max_depth(1)
                 };
-                
+
                 walker
                     .into_iter()
                     .filter_map(|e| e.ok())
@@ -257,12 +281,13 @@ fn main() -> anyhow::Result<()> {
                         if let Some((filter_w, filter_h)) = dimension_filter {
                             let (w, h) = img.dimensions();
                             // Allow both portrait and landscape orientations
-                            let matches = (w == filter_w && h == filter_h) || (w == filter_h && h == filter_w);
+                            let matches = (w == filter_w && h == filter_h)
+                                || (w == filter_h && h == filter_w);
                             if !matches {
                                 return None;
                             }
                         }
-                        
+
                         if has_alpha_channel(&img) {
                             Some(file_path.clone())
                         } else {
@@ -309,38 +334,39 @@ fn main() -> anyhow::Result<()> {
                 output_format: None,
             };
 
-            let results: Vec<Result<PathBuf, (PathBuf, foodshare_image::ImageError)>> = files_with_alpha
-                .par_iter()
-                .map(|file_path: &PathBuf| {
-                    // Extract file name with fallback to full path for display
-                    let file_name = file_path
-                        .file_name()
-                        .unwrap_or_else(|| file_path.as_os_str());
+            let results: Vec<Result<PathBuf, (PathBuf, foodshare_image::ImageError)>> =
+                files_with_alpha
+                    .par_iter()
+                    .map(|file_path: &PathBuf| {
+                        // Extract file name with fallback to full path for display
+                        let file_name = file_path
+                            .file_name()
+                            .unwrap_or_else(|| file_path.as_os_str());
 
-                    let output_path = if overwrite {
-                        file_path.clone()
-                    } else if let Some(ref out_dir) = output {
-                        out_dir.join(file_name)
-                    } else {
-                        unreachable!()
-                    };
+                        let output_path = if overwrite {
+                            file_path.clone()
+                        } else if let Some(ref out_dir) = output {
+                            out_dir.join(file_name)
+                        } else {
+                            unreachable!()
+                        };
 
-                    let result = process_image_file(file_path, &output_path, &options);
-                    pb.inc(1);
+                        let result = process_image_file(file_path, &output_path, &options);
+                        pb.inc(1);
 
-                    let display_name = file_name.to_string_lossy();
-                    match result {
-                        Ok(_) => {
-                            pb.set_message(format!("✓ {display_name}"));
-                            Ok(file_path.clone())
+                        let display_name = file_name.to_string_lossy();
+                        match result {
+                            Ok(_) => {
+                                pb.set_message(format!("✓ {display_name}"));
+                                Ok(file_path.clone())
+                            }
+                            Err(e) => {
+                                pb.set_message(format!("✗ {display_name}"));
+                                Err((file_path.clone(), e))
+                            }
                         }
-                        Err(e) => {
-                            pb.set_message(format!("✗ {display_name}"));
-                            Err((file_path.clone(), e))
-                        }
-                    }
-                })
-                .collect();
+                    })
+                    .collect();
 
             pb.finish_with_message("Done");
 
@@ -349,7 +375,7 @@ fn main() -> anyhow::Result<()> {
             let failures: Vec<_> = results.iter().filter_map(|r| r.as_ref().err()).collect();
 
             println!("\n✓ Successfully processed {} file(s)", successes.len());
-            
+
             if !failures.is_empty() {
                 println!("✗ Failed to process {} file(s):", failures.len());
                 for (path, err) in failures {
@@ -358,9 +384,18 @@ fn main() -> anyhow::Result<()> {
             }
         }
 
-        Commands::Resize { path, width, height, preset, output, recursive, quality, dry_run } => {
+        Commands::Resize {
+            path,
+            width,
+            height,
+            preset,
+            output,
+            recursive,
+            quality: _,
+            dry_run,
+        } => {
             use image::imageops::FilterType;
-            
+
             // Determine target dimensions
             let (target_width, target_height) = if let Some(preset_name) = preset {
                 match preset_name.as_str() {
@@ -370,7 +405,10 @@ fn main() -> anyhow::Result<()> {
                     "iphone-6.9-landscape" | "iphone69-landscape" => (2778, 1284),
                     "ipad-12.9-portrait" | "ipad129-portrait" => (2048, 2732),
                     "ipad-12.9-landscape" | "ipad129-landscape" => (2732, 2048),
-                    _ => anyhow::bail!("Unknown preset: {}. Available: iphone-6.5-portrait, iphone-6.5-landscape, iphone-6.9-portrait, iphone-6.9-landscape, ipad-12.9-portrait, ipad-12.9-landscape", preset_name),
+                    _ => anyhow::bail!(
+                        "Unknown preset: {}. Available: iphone-6.5-portrait, iphone-6.5-landscape, iphone-6.9-portrait, iphone-6.9-landscape, ipad-12.9-portrait, ipad-12.9-landscape",
+                        preset_name
+                    ),
                 }
             } else if let (Some(w), Some(h)) = (width, height) {
                 (w, h)
@@ -385,7 +423,7 @@ fn main() -> anyhow::Result<()> {
                 } else {
                     WalkDir::new(&path).max_depth(1)
                 };
-                
+
                 walker
                     .into_iter()
                     .filter_map(|e| e.ok())
@@ -412,8 +450,14 @@ fn main() -> anyhow::Result<()> {
                 for file in &files {
                     if let Ok(img) = image::open(file) {
                         let (w, h) = img.dimensions();
-                        println!("  {} ({}x{} -> {}x{})", 
-                            file.display(), w, h, target_width, target_height);
+                        println!(
+                            "  {} ({}x{} -> {}x{})",
+                            file.display(),
+                            w,
+                            h,
+                            target_width,
+                            target_height
+                        );
                     }
                 }
                 return Ok(());
@@ -482,7 +526,7 @@ fn main() -> anyhow::Result<()> {
 
             println!("\n✓ Successfully processed {} file(s)", successes.len());
             println!("Output directory: {}", output.display());
-            
+
             if !failures.is_empty() {
                 println!("✗ Failed to process {} file(s):", failures.len());
                 for (path, err) in failures {
@@ -498,15 +542,15 @@ fn main() -> anyhow::Result<()> {
 /// Parse hex color string to RGB array
 fn parse_hex_color(hex: &str) -> anyhow::Result<[u8; 3]> {
     let hex = hex.trim_start_matches('#');
-    
+
     if hex.len() != 6 {
         anyhow::bail!("Invalid hex color format. Expected 6 characters (e.g., ffffff)");
     }
-    
+
     let r = u8::from_str_radix(&hex[0..2], 16)?;
     let g = u8::from_str_radix(&hex[2..4], 16)?;
     let b = u8::from_str_radix(&hex[4..6], 16)?;
-    
+
     Ok([r, g, b])
 }
 
@@ -514,7 +558,10 @@ fn parse_hex_color(hex: &str) -> anyhow::Result<[u8; 3]> {
 fn is_image_file(path: &std::path::Path) -> bool {
     if let Some(ext) = path.extension() {
         let ext = ext.to_string_lossy().to_lowercase();
-        matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff" | "tif")
+        matches!(
+            ext.as_str(),
+            "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff" | "tif"
+        )
     } else {
         false
     }

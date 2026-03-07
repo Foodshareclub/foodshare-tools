@@ -8,32 +8,48 @@ use owo_colors::OwoColorize;
 use regex::Regex;
 use std::path::Path;
 
-/// Security issue severity
+/// Severity level of a security finding
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
+    /// General information about the application's security posture
     Info,
+    /// Low impact/probability issue
     Low,
+    /// Moderate impact/probability issue
     Medium,
+    /// Significant security risk
     High,
+    /// Urgent security vulnerability that must be addressed immediately
     Critical,
 }
 
-/// OWASP category
+/// OWASP Top 10 category for the security finding
 #[derive(Debug, Clone)]
 pub enum OwaspCategory {
+    /// Broken Access Control
     A01BrokenAccessControl,
+    /// Cryptographic Failures
     A02CryptographicFailures,
+    /// Injection
     A03Injection,
+    /// Insecure Design
     A04InsecureDesign,
+    /// Security Misconfiguration
     A05SecurityMisconfiguration,
+    /// Vulnerable and Outdated Components
     A06VulnerableComponents,
+    /// Identification and Authentication Failures
     A07IdentificationFailures,
+    /// Software and Data Integrity Failures
     A08SoftwareIntegrity,
+    /// Security Logging and Monitoring Failures
     A09SecurityLogging,
+    /// Server-Side Request Forgery (SSRF)
     A10Ssrf,
 }
 
 impl OwaspCategory {
+    /// Get the OWASP category code (e.g., "A01:2021")
     pub fn code(&self) -> &'static str {
         match self {
             Self::A01BrokenAccessControl => "A01:2021",
@@ -50,14 +66,20 @@ impl OwaspCategory {
     }
 }
 
-/// Security finding
+/// A specific security finding found during scanning
 #[derive(Debug)]
 pub struct SecurityFinding {
+    /// Path to the file containing the finding
     pub file: String,
+    /// Line number of the finding
     pub line: usize,
+    /// Severity level of the finding
     pub severity: Severity,
+    /// OWASP category of the finding
     pub category: OwaspCategory,
+    /// Description of the security issue
     pub message: String,
+    /// The specific text that matched the security pattern
     pub matched_text: String,
 }
 
@@ -146,8 +168,14 @@ pub fn print_results(findings: &[SecurityFinding]) -> i32 {
         return exit_codes::SUCCESS;
     }
 
-    let critical = findings.iter().filter(|f| f.severity == Severity::Critical).count();
-    let high = findings.iter().filter(|f| f.severity == Severity::High).count();
+    let critical = findings
+        .iter()
+        .filter(|f| f.severity == Severity::Critical)
+        .count();
+    let high = findings
+        .iter()
+        .filter(|f| f.severity == Severity::High)
+        .count();
 
     eprintln!(
         "{} Found {} security issue(s): {} critical, {} high",

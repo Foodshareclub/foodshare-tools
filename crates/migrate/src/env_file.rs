@@ -12,9 +12,8 @@ use std::path::Path;
 /// Skips empty lines, comments (`#`), and lines without `=`.
 /// Values are trimmed but not unquoted (quotes are preserved).
 pub fn parse_env_file(path: &Path) -> Result<HashMap<String, String>> {
-    let content = std::fs::read_to_string(path).map_err(|e| {
-        MigrateError::env_file_at(format!("failed to read: {e}"), path)
-    })?;
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| MigrateError::env_file_at(format!("failed to read: {e}"), path))?;
 
     let mut vars = HashMap::new();
     for line in content.lines() {
@@ -64,7 +63,9 @@ pub fn append_missing_vars(path: &Path, vars: &[(String, String)]) -> Result<App
         let mut file = std::fs::OpenOptions::new()
             .append(true)
             .open(path)
-            .map_err(|e| MigrateError::env_file_at(format!("failed to open for append: {e}"), path))?;
+            .map_err(|e| {
+                MigrateError::env_file_at(format!("failed to open for append: {e}"), path)
+            })?;
 
         writeln!(file)?;
         writeln!(file, "# Added by foodshare-migrate")?;
@@ -97,7 +98,10 @@ pub fn missing_env_var_groups() -> Vec<EnvVarGroup> {
         EnvVarGroup {
             section: "whatsapp",
             vars: &[
-                ("meta_webhook_verify_token", "your-meta-webhook-verify-token"),
+                (
+                    "meta_webhook_verify_token",
+                    "your-meta-webhook-verify-token",
+                ),
                 ("FACEBOOK_APP_ID", "your-facebook-app-id"),
                 ("WHATSAPP_ACCESS_TOKEN", "your-whatsapp-access-token"),
                 ("WHATSAPP_APP_SECRET", "your-whatsapp-app-secret"),
@@ -167,9 +171,7 @@ pub fn missing_env_var_groups() -> Vec<EnvVarGroup> {
 /// Compute which env vars from the known groups are missing from the given file.
 ///
 /// Returns `(key, default_value)` pairs for variables not present.
-pub fn compute_missing_vars(
-    existing: &HashMap<String, String>,
-) -> Vec<(String, String)> {
+pub fn compute_missing_vars(existing: &HashMap<String, String>) -> Vec<(String, String)> {
     let groups = missing_env_var_groups();
     let mut missing = Vec::new();
 

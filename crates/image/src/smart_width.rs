@@ -100,7 +100,11 @@ pub fn calculate_target_width(size_bytes: usize, current_width: u32, current_hei
 ///
 /// # Returns
 /// (new_width, new_height) maintaining aspect ratio
-pub fn calculate_dimensions(current_width: u32, current_height: u32, target_width: u32) -> (u32, u32) {
+pub fn calculate_dimensions(
+    current_width: u32,
+    current_height: u32,
+    target_width: u32,
+) -> (u32, u32) {
     if target_width == 0 || current_width <= target_width {
         return (current_width, current_height);
     }

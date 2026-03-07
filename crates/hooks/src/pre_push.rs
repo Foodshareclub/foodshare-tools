@@ -7,31 +7,46 @@ use foodshare_core::process::{command_exists, run_command};
 use owo_colors::OwoColorize;
 use std::time::{Duration, Instant};
 
-/// Check definition
+/// Check definition for pre-push validation
 pub struct Check {
+    /// Display name of the check
     pub name: &'static str,
+    /// Summary of what the check does
     pub description: &'static str,
+    /// Command to execute
     pub command: &'static str,
+    /// Arguments to pass to the command
     pub args: Vec<&'static str>,
+    /// Whether this check must pass to allow the push
     pub required: bool,
+    /// Max duration before the check is timed out
     pub timeout: Duration,
 }
 
-/// Check result
+/// Result of a single pre-push check
 #[derive(Debug)]
 pub struct CheckResult {
+    /// Name of the check performed
     pub name: String,
+    /// Whether the check passed
     pub success: bool,
+    /// Duration of the check execution
     pub duration: Duration,
+    /// Combined stdout and stderr output
     pub output: Option<String>,
+    /// Whether the check was skipped
     pub skipped: bool,
 }
 
-/// Pre-push configuration
+/// Configuration for pre-push checks
 pub struct PrePushConfig {
+    /// Whether to stop immediately after the first failure
     pub fail_fast: bool,
+    /// Whether to skip non-essential checks
     pub quick_mode: bool,
+    /// Max duration for the entire suite of checks
     pub timeout: Duration,
+    /// List of check names to explicitly skip
     pub skip_checks: Vec<String>,
 }
 
@@ -63,7 +78,12 @@ pub fn run_checks(checks: &[Check], config: &PrePushConfig) -> Vec<CheckResult> 
                 output: None,
                 skipped: true,
             });
-            println!("  {} {} {}", "⊘".dimmed(), check.name.dimmed(), "(skipped)".dimmed());
+            println!(
+                "  {} {} {}",
+                "⊘".dimmed(),
+                check.name.dimmed(),
+                "(skipped)".dimmed()
+            );
             continue;
         }
 
@@ -76,7 +96,12 @@ pub fn run_checks(checks: &[Check], config: &PrePushConfig) -> Vec<CheckResult> 
                 output: None,
                 skipped: true,
             });
-            println!("  {} {} {}", "⊘".dimmed(), check.name.dimmed(), "(quick mode)".dimmed());
+            println!(
+                "  {} {} {}",
+                "⊘".dimmed(),
+                check.name.dimmed(),
+                "(quick mode)".dimmed()
+            );
             continue;
         }
 

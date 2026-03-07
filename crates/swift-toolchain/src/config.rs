@@ -1,4 +1,4 @@
-use crate::error::{Result, SwiftError};
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -13,11 +13,11 @@ impl SwiftConfig {
     /// Load configuration from .swift-version file
     pub fn from_swift_version_file(project_root: &Path) -> Result<Self> {
         let swift_version_file = project_root.join(".swift-version");
-        
+
         if swift_version_file.exists() {
             let content = std::fs::read_to_string(&swift_version_file)?;
             let version = content.trim();
-            
+
             // Extract version number from snapshot name
             let required_version = if version.contains("6.3") {
                 "6.3".to_string()
@@ -41,10 +41,7 @@ impl SwiftConfig {
     pub fn generate_env_exports(&self, toolchain_path: &Path) -> Vec<String> {
         vec![
             "export TOOLCHAINS=swift".to_string(),
-            format!(
-                "export PATH=\"{}/usr/bin:$PATH\"",
-                toolchain_path.display()
-            ),
+            format!("export PATH=\"{}/usr/bin:$PATH\"", toolchain_path.display()),
         ]
     }
 }

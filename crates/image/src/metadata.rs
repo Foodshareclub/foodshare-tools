@@ -148,9 +148,24 @@ mod tests {
 
     #[test]
     fn test_orientation() {
-        let landscape = ImageMetadata { width: 1920, height: 1080, format: ImageFormat::Jpeg, size_bytes: 0 };
-        let portrait = ImageMetadata { width: 1080, height: 1920, format: ImageFormat::Jpeg, size_bytes: 0 };
-        let square = ImageMetadata { width: 1000, height: 1000, format: ImageFormat::Jpeg, size_bytes: 0 };
+        let landscape = ImageMetadata {
+            width: 1920,
+            height: 1080,
+            format: ImageFormat::Jpeg,
+            size_bytes: 0,
+        };
+        let portrait = ImageMetadata {
+            width: 1080,
+            height: 1920,
+            format: ImageFormat::Jpeg,
+            size_bytes: 0,
+        };
+        let square = ImageMetadata {
+            width: 1000,
+            height: 1000,
+            format: ImageFormat::Jpeg,
+            size_bytes: 0,
+        };
 
         assert!(landscape.is_landscape());
         assert!(!landscape.is_portrait());

@@ -70,7 +70,13 @@ impl VaultClient {
 
         let result = process::run_command(
             "docker",
-            &["ps", "--format", "{{.Names}}", "--filter", &format!("name=^{}$", self.container)],
+            &[
+                "ps",
+                "--format",
+                "{{.Names}}",
+                "--filter",
+                &format!("name=^{}$", self.container),
+            ],
         )
         .map_err(|e| MigrateError::docker(format!("failed to check container: {e}")))?;
 
@@ -125,7 +131,10 @@ impl VaultClient {
     /// `None` if the result is null or empty.
     pub fn verify_function(&self, fn_name: &str) -> Result<Option<String>> {
         // Validate function name to prevent injection (only alphanumeric + underscore)
-        if !fn_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        if !fn_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
             return Err(MigrateError::verification(format!(
                 "invalid function name: {fn_name}"
             )));

@@ -3,15 +3,15 @@
 //! Provides tools for building Swift code for Android using the Swift SDK.
 
 use foodshare_core::error::Result;
-use foodshare_core::process::{command_exists, run_command, run_command_in_dir, CommandResult};
+use foodshare_core::process::{CommandResult, command_exists, run_command, run_command_in_dir};
 use std::path::Path;
 
-/// Target architecture for Android
+/// Target architecture for Android cross-compilation
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AndroidTarget {
-    /// ARM64 for physical devices
+    /// ARM64 architecture for physical Android devices
     Arm64,
-    /// x86_64 for emulator
+    /// x86_64 architecture for Android emulators
     X86_64,
 }
 
@@ -103,7 +103,12 @@ pub fn test_host(package_dir: &Path, filter: Option<&str>) -> Result<CommandResu
 /// Get Swift version
 pub fn swift_version() -> Result<String> {
     let result = run_command("swift", &["--version"])?;
-    Ok(result.stdout.lines().next().unwrap_or("Unknown").to_string())
+    Ok(result
+        .stdout
+        .lines()
+        .next()
+        .unwrap_or("Unknown")
+        .to_string())
 }
 
 /// Verify swift-java installation

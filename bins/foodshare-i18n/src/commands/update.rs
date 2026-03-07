@@ -40,8 +40,8 @@ pub async fn run_from_file(locale: &str, file_path: &str, format: &str) -> Resul
     println!("File:   {}", file_path.cyan());
     println!();
 
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {}", file_path))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("Failed to read {}", file_path))?;
 
     let translations: serde_json::Value = serde_json::from_str(&content)
         .with_context(|| format!("Failed to parse JSON from {}", file_path))?;
@@ -106,10 +106,84 @@ async fn run_from_file_json(locale: &str, file_path: &str) -> Result<()> {
     Ok(())
 }
 
-/// Run the update command for multiple locales from inline data
-pub async fn run_batch(locales: &[String], format: &str) -> Result<()> {
+/// Run the update command for a specific locale using preset translations
+pub async fn run_preset(locale: &str, format: &str) -> Result<()> {
     if format == "json" {
-        return run_batch_json(locales).await;
+        return run_preset_json(locale).await;
+    }
+
+    println!("{}", "Updating Locale from Preset".bold().cyan());
+    println!("{}", "=".repeat(40).dimmed());
+    println!();
+
+    println!("Locale: {}", locale.cyan());
+    println!();
+
+    let translations = get_preset_translations(locale).context(format!(
+        "No preset translations available for locale: {}",
+        locale
+    ))?;
+
+    // Count keys
+    let key_count = count_keys(&translations);
+    println!("Keys to update: {}", key_count);
+    println!();
+
+    // Send to API
+    let result = update_locale(locale, &translations).await?;
+
+    if result.success {
+        println!(
+            "{} {} updated successfully from preset",
+            "✓".green(),
+            locale.green().bold()
+        );
+        if let Some(added) = result.added {
+            println!("   Added: {} keys", added);
+        }
+    } else {
+        println!("{} {} failed:", "✗".red(), locale.red().bold());
+        if let Some(err) = result.error {
+            println!("   {}", err);
+        }
+    }
+
+    Ok(())
+}
+
+/// Run preset in JSON mode
+async fn run_preset_json(locale: &str) -> Result<()> {
+    let result = if let Some(translations) = get_preset_translations(locale) {
+        match update_locale(locale, &translations).await {
+            Ok(resp) => serde_json::json!({
+                "locale": locale,
+                "success": resp.success,
+                "added": resp.added,
+                "total": resp.total,
+                "error": resp.error
+            }),
+            Err(e) => serde_json::json!({
+                "locale": locale,
+                "success": false,
+                "error": e.to_string()
+            }),
+        }
+    } else {
+        serde_json::json!({
+            "locale": locale,
+            "success": false,
+            "error": "No preset translations available"
+        })
+    };
+
+    println!("{}", serde_json::to_string_pretty(&result)?);
+    Ok(())
+}
+
+/// Run the update command for multiple locales from inline data
+pub async fn _run_batch(locales: &[String], format: &str) -> Result<()> {
+    if format == "json" {
+        return _run_batch_json(locales).await;
     }
 
     println!("{}", "Batch Update Translations".bold().cyan());
@@ -138,11 +212,7 @@ pub async fn run_batch(locales: &[String], format: &str) -> Result<()> {
 
         match result {
             Ok(resp) if resp.success => {
-                println!(
-                    " {} (added: {})",
-                    "✓".green(),
-                    resp.added.unwrap_or(0)
-                );
+                println!(" {} (added: {})", "✓".green(), resp.added.unwrap_or(0));
                 success_count += 1;
             }
             Ok(resp) => {
@@ -167,7 +237,7 @@ pub async fn run_batch(locales: &[String], format: &str) -> Result<()> {
 }
 
 /// Run batch in JSON mode
-async fn run_batch_json(locales: &[String]) -> Result<()> {
+async fn _run_batch_json(locales: &[String]) -> Result<()> {
     let mut results = Vec::new();
 
     for locale in locales {
@@ -211,8 +281,8 @@ async fn run_batch_json(locales: &[String]) -> Result<()> {
 
 /// Send translations to the API
 async fn update_locale(locale: &str, translations: &serde_json::Value) -> Result<UpdateResponse> {
-    let base_url = std::env::var("SUPABASE_URL")
-        .unwrap_or_else(|_| "https://api.foodshare.club".to_string());
+    let base_url =
+        std::env::var("SUPABASE_URL").unwrap_or_else(|_| "https://api.foodshare.club".to_string());
 
     let service_key = std::env::var("SUPABASE_SERVICE_ROLE_KEY")
         .or_else(|_| std::env::var("SUPABASE_ANON_KEY"))

@@ -1,6 +1,6 @@
 //! Benchmarks for compression algorithms.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use foodshare_compression::{brotli_compress, gzip_compress};
 
 fn generate_test_data(size: usize) -> Vec<u8> {

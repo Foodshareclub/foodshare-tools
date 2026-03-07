@@ -83,13 +83,29 @@ const DEFAULT_MAX_LINE_LENGTH: usize = 120;
 #[derive(Debug, Clone)]
 pub enum ScanError {
     /// Failed to read a file.
-    FileRead { path: PathBuf, message: String },
+    FileRead {
+        /// Path to the file that failed to read.
+        path: PathBuf,
+        /// Error message.
+        message: String,
+    },
     /// Invalid regex pattern.
-    InvalidPattern { pattern: String, message: String },
+    InvalidPattern {
+        /// The invalid regex pattern string.
+        pattern: String,
+        /// Error message from the regex engine.
+        message: String,
+    },
     /// Configuration error.
-    Config { message: String },
+    Config {
+        /// Error message.
+        message: String,
+    },
     /// I/O error.
-    Io { message: String },
+    Io {
+        /// Error message.
+        message: String,
+    },
 }
 
 impl std::fmt::Display for ScanError {
@@ -111,7 +127,9 @@ impl std::error::Error for ScanError {}
 
 impl From<std::io::Error> for ScanError {
     fn from(e: std::io::Error) -> Self {
-        Self::Io { message: e.to_string() }
+        Self::Io {
+            message: e.to_string(),
+        }
     }
 }
 
@@ -351,13 +369,19 @@ impl ScanOutput {
     /// Get findings filtered by severity.
     #[must_use]
     pub fn findings_by_severity(&self, severity: Severity) -> Vec<&Finding> {
-        self.findings.iter().filter(|f| f.severity == severity).collect()
+        self.findings
+            .iter()
+            .filter(|f| f.severity == severity)
+            .collect()
     }
 
     /// Get findings filtered by category.
     #[must_use]
     pub fn findings_by_category(&self, category: PatternCategory) -> Vec<&Finding> {
-        self.findings.iter().filter(|f| f.category == category).collect()
+        self.findings
+            .iter()
+            .filter(|f| f.category == category)
+            .collect()
     }
 
     /// Get scan statistics.
@@ -449,10 +473,18 @@ pub struct ScannerConfig {
     pub include_line_content: bool,
 }
 
-fn default_api_version() -> u32 { CONFIG_API_VERSION }
-fn default_entropy_threshold() -> f64 { DEFAULT_ENTROPY_THRESHOLD }
-fn default_entropy_min_length() -> usize { DEFAULT_ENTROPY_MIN_LENGTH }
-fn default_max_line_length() -> usize { DEFAULT_MAX_LINE_LENGTH }
+fn default_api_version() -> u32 {
+    CONFIG_API_VERSION
+}
+fn default_entropy_threshold() -> f64 {
+    DEFAULT_ENTROPY_THRESHOLD
+}
+fn default_entropy_min_length() -> usize {
+    DEFAULT_ENTROPY_MIN_LENGTH
+}
+fn default_max_line_length() -> usize {
+    DEFAULT_MAX_LINE_LENGTH
+}
 
 impl Default for ScannerConfig {
     fn default() -> Self {
@@ -483,11 +515,10 @@ impl ScannerConfig {
 
     /// Load configuration from a TOML file.
     pub fn from_toml_file(path: impl AsRef<Path>) -> ScanResult<Self> {
-        let content = std::fs::read_to_string(path.as_ref())
-            .map_err(|e| ScanError::FileRead {
-                path: path.as_ref().to_path_buf(),
-                message: e.to_string(),
-            })?;
+        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| ScanError::FileRead {
+            path: path.as_ref().to_path_buf(),
+            message: e.to_string(),
+        })?;
         Self::from_toml(&content)
     }
 
@@ -500,11 +531,10 @@ impl ScannerConfig {
 
     /// Load configuration from a JSON file.
     pub fn from_json_file(path: impl AsRef<Path>) -> ScanResult<Self> {
-        let content = std::fs::read_to_string(path.as_ref())
-            .map_err(|e| ScanError::FileRead {
-                path: path.as_ref().to_path_buf(),
-                message: e.to_string(),
-            })?;
+        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| ScanError::FileRead {
+            path: path.as_ref().to_path_buf(),
+            message: e.to_string(),
+        })?;
         Self::from_json(&content)
     }
 
@@ -548,7 +578,8 @@ static BUILTIN_PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
         PatternDef {
             id: "aws-secret-key".into(),
             name: "AWS Secret Key".into(),
-            pattern: r#"(?i)aws[_\-]?secret[_\-]?access[_\-]?key\s*[=:]\s*["']?[A-Za-z0-9/+=]{40}"#.into(),
+            pattern: r#"(?i)aws[_\-]?secret[_\-]?access[_\-]?key\s*[=:]\s*["']?[A-Za-z0-9/+=]{40}"#
+                .into(),
             severity: Severity::Critical,
             category: PatternCategory::CloudProvider,
             description: "AWS Secret Access Key".into(),
@@ -581,7 +612,6 @@ static BUILTIN_PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
             description: "Heroku API Key (UUID format)".into(),
             enabled: true,
         },
-
         // Source Control
         PatternDef {
             id: "github-token".into(),
@@ -610,7 +640,6 @@ static BUILTIN_PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
             description: "PyPI API Token".into(),
             enabled: true,
         },
-
         // Database
         PatternDef {
             id: "database-url".into(),
@@ -630,7 +659,6 @@ static BUILTIN_PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
             description: "Supabase service role JWT (anon keys are also matched)".into(),
             enabled: true,
         },
-
         // Payment
         PatternDef {
             id: "stripe-secret-key".into(),
@@ -641,12 +669,12 @@ static BUILTIN_PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
             description: "Stripe Secret API Key".into(),
             enabled: true,
         },
-
         // Communication
         PatternDef {
             id: "slack-webhook".into(),
             name: "Slack Webhook".into(),
-            pattern: r"https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+".into(),
+            pattern: r"https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+"
+                .into(),
             severity: Severity::Medium,
             category: PatternCategory::Communication,
             description: "Slack Incoming Webhook URL".into(),
@@ -670,7 +698,6 @@ static BUILTIN_PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
             description: "Twilio Auth Token".into(),
             enabled: true,
         },
-
         // Email
         PatternDef {
             id: "sendgrid-api-key".into(),
@@ -681,7 +708,6 @@ static BUILTIN_PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
             description: "SendGrid API Key".into(),
             enabled: true,
         },
-
         // Authentication
         PatternDef {
             id: "private-key".into(),
@@ -710,12 +736,12 @@ static BUILTIN_PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
             description: "Generic API key pattern".into(),
             enabled: true,
         },
-
         // Debug (lower severity)
         PatternDef {
             id: "debug-print".into(),
             name: "Debug Print".into(),
-            pattern: r#"(?i)(console\.log|print|NSLog|debugPrint)\s*\(\s*["'].*password.*["']"#.into(),
+            pattern: r#"(?i)(console\.log|print|NSLog|debugPrint)\s*\(\s*["'].*password.*["']"#
+                .into(),
             severity: Severity::Low,
             category: PatternCategory::Debug,
             description: "Debug statement containing password".into(),
@@ -801,9 +827,8 @@ fn is_high_entropy_secret(s: &str, threshold: f64, min_length: usize) -> bool {
 }
 
 /// Regex for extracting potential secret values.
-static ASSIGNMENT_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"[=:]\s*["']?([A-Za-z0-9_+/=-]{20,})["']?"#).unwrap()
-});
+static ASSIGNMENT_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"[=:]\s*["']?([A-Za-z0-9_+/=-]{20,})["']?"#).unwrap());
 
 // =============================================================================
 // Utility Functions
@@ -940,7 +965,9 @@ impl SecretScanner {
     /// Add a fingerprint to suppress.
     #[must_use]
     pub fn allowlist_fingerprint(mut self, fingerprint: impl Into<String>) -> Self {
-        self.config.allowlist_fingerprints.insert(fingerprint.into());
+        self.config
+            .allowlist_fingerprints
+            .insert(fingerprint.into());
         self
     }
 
@@ -1024,7 +1051,12 @@ impl SecretScanner {
 
         for (line_num, line) in lines.iter().enumerate() {
             // Skip excluded lines
-            if self.config.exclude_patterns.iter().any(|p| line.contains(p)) {
+            if self
+                .config
+                .exclude_patterns
+                .iter()
+                .any(|p| line.contains(p))
+            {
                 continue;
             }
 
@@ -1048,9 +1080,8 @@ impl SecretScanner {
                         continue;
                     }
 
-                    let fingerprint = Finding::generate_fingerprint(
-                        &cp.def.id, file_name, line_num + 1, matched
-                    );
+                    let fingerprint =
+                        Finding::generate_fingerprint(&cp.def.id, file_name, line_num + 1, matched);
 
                     // Check fingerprint allowlist
                     if self.config.allowlist_fingerprints.contains(&fingerprint) {
@@ -1108,9 +1139,8 @@ impl SecretScanner {
                         continue;
                     }
 
-                    let fingerprint = Finding::generate_fingerprint(
-                        &cp.def.id, file_name, line_num + 1, matched
-                    );
+                    let fingerprint =
+                        Finding::generate_fingerprint(&cp.def.id, file_name, line_num + 1, matched);
 
                     if self.config.allowlist_fingerprints.contains(&fingerprint) {
                         continue;
@@ -1154,17 +1184,23 @@ impl SecretScanner {
                         let val_str = value.as_str();
 
                         // Skip if already matched
-                        let already_matched = output.findings.iter().any(|f| {
-                            f.line == line_num + 1 && f.file == file_name
-                        });
+                        let already_matched = output
+                            .findings
+                            .iter()
+                            .any(|f| f.line == line_num + 1 && f.file == file_name);
 
-                        if !already_matched && is_high_entropy_secret(
-                            val_str,
-                            self.config.entropy_threshold,
-                            self.config.entropy_min_length,
-                        ) {
+                        if !already_matched
+                            && is_high_entropy_secret(
+                                val_str,
+                                self.config.entropy_threshold,
+                                self.config.entropy_min_length,
+                            )
+                        {
                             let fingerprint = Finding::generate_fingerprint(
-                                "entropy-detection", file_name, line_num + 1, val_str
+                                "entropy-detection",
+                                file_name,
+                                line_num + 1,
+                                val_str,
                             );
 
                             if !self.config.allowlist_fingerprints.contains(&fingerprint)
@@ -1207,10 +1243,14 @@ impl SecretScanner {
         output.stats.duration_ms = start.elapsed().as_millis() as u64;
 
         for finding in &output.findings {
-            *output.stats.by_severity
+            *output
+                .stats
+                .by_severity
                 .entry(finding.severity.to_string())
                 .or_insert(0) += 1;
-            *output.stats.by_category
+            *output
+                .stats
+                .by_category
                 .entry(format!("{:?}", finding.category))
                 .or_insert(0) += 1;
         }
@@ -1224,7 +1264,12 @@ impl SecretScanner {
         let file_str = path.to_string_lossy();
 
         // Check file exclusions
-        if self.config.exclude_files.iter().any(|e| file_str.contains(e)) {
+        if self
+            .config
+            .exclude_files
+            .iter()
+            .any(|e| file_str.contains(e))
+        {
             let mut output = ScanOutput::new();
             output.stats.files_skipped = 1;
             return output;
@@ -1341,7 +1386,8 @@ pub fn scan_content(content: &str, file_name: &str, config: &SecretsConfig) -> V
         scanner = scanner.add_pattern_regex(format!("custom-{}", pattern.len()), pattern);
     }
 
-    scanner.scan_str(content, file_name)
+    scanner
+        .scan_str(content, file_name)
         .findings
         .into_iter()
         .map(SecretMatch::from)
@@ -1364,7 +1410,8 @@ pub fn scan_content_with_entropy(
         scanner = scanner.exclude_file(file);
     }
 
-    scanner.scan_str(content, file_name)
+    scanner
+        .scan_str(content, file_name)
         .findings
         .into_iter()
         .map(SecretMatch::from)
@@ -1405,10 +1452,7 @@ pub fn scan_files_with_stats(
 
     let output = scanner.scan_files(paths);
 
-    let matches: Vec<SecretMatch> = output.findings
-        .into_iter()
-        .map(SecretMatch::from)
-        .collect();
+    let matches: Vec<SecretMatch> = output.findings.into_iter().map(SecretMatch::from).collect();
 
     let mut stats = output.stats;
     stats.findings_count = matches.len();
@@ -1453,12 +1497,7 @@ pub fn print_results_with_stats(matches: &[SecretMatch], stats: Option<&ScanStat
             Severity::Low => "LOW".dimmed().to_string(),
         };
 
-        eprintln!(
-            "  [{}] {} (line {})",
-            severity_str,
-            m.file,
-            m.line
-        );
+        eprintln!("  [{}] {} (line {})", severity_str, m.file, m.line);
         eprintln!("    Pattern: {}", m.pattern_name.cyan());
         eprintln!("    Match: {}", m.matched_text.dimmed());
 
@@ -1510,11 +1549,7 @@ mod tests {
     fn test_pattern_ids_unique() {
         let mut ids = HashSet::new();
         for def in BUILTIN_PATTERNS.iter() {
-            assert!(
-                ids.insert(&def.id),
-                "Duplicate pattern ID: {}",
-                def.id
-            );
+            assert!(ids.insert(&def.id), "Duplicate pattern ID: {}", def.id);
         }
     }
 
@@ -1532,8 +1567,8 @@ mod tests {
 
     #[test]
     fn test_aws_access_key_in_context() {
-        let result = SecretScanner::new()
-            .scan_str("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE", "test.env");
+        let result =
+            SecretScanner::new().scan_str("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE", "test.env");
         assert!(result.has_secrets());
     }
 
@@ -1551,8 +1586,8 @@ mod tests {
 
     #[test]
     fn test_github_token() {
-        let result = SecretScanner::new()
-            .scan_str("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "test.env");
+        let result =
+            SecretScanner::new().scan_str("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "test.env");
         assert!(result.has_secrets());
         assert_eq!(result.findings()[0].pattern_id, "github-token");
     }
@@ -1572,16 +1607,15 @@ mod tests {
 
     #[test]
     fn test_database_url() {
-        let result = SecretScanner::new()
-            .scan_str("postgres://user:password@localhost:5432/db", "test.env");
+        let result =
+            SecretScanner::new().scan_str("postgres://user:password@localhost:5432/db", "test.env");
         assert!(result.has_secrets());
         assert_eq!(result.findings()[0].pattern_id, "database-url");
     }
 
     #[test]
     fn test_database_url_no_password() {
-        let result = SecretScanner::new()
-            .scan_str("postgres://localhost:5432/db", "test.env");
+        let result = SecretScanner::new().scan_str("postgres://localhost:5432/db", "test.env");
         assert!(!result.has_secrets());
     }
 
@@ -1591,8 +1625,8 @@ mod tests {
 
     #[test]
     fn test_stripe_secret_key() {
-        let result = SecretScanner::new()
-            .scan_str("sk_test_EXAMPLEKEYDONOTUSE12345678", "test.env");
+        let result =
+            SecretScanner::new().scan_str("sk_test_EXAMPLEKEYDONOTUSE12345678", "test.env");
         assert!(result.has_secrets());
         assert_eq!(result.findings()[0].pattern_id, "stripe-secret-key");
         assert_eq!(result.findings()[0].severity, Severity::Critical);
@@ -1600,10 +1634,10 @@ mod tests {
 
     #[test]
     fn test_stripe_public_key_not_matched() {
-        let result = SecretScanner::new()
-            .scan_str("pk_live_abc123", "test.env");
+        let result = SecretScanner::new().scan_str("pk_live_abc123", "test.env");
         // Public keys don't match the secret key pattern
-        let stripe_findings: Vec<_> = result.findings()
+        let stripe_findings: Vec<_> = result
+            .findings()
             .iter()
             .filter(|f| f.pattern_id == "stripe-secret-key")
             .collect();
@@ -1788,8 +1822,7 @@ mod tests {
 
     #[test]
     fn test_finding_has_column() {
-        let result = SecretScanner::new()
-            .scan_str("KEY=AKIAIOSFODNN7EXAMPLE", "test.env");
+        let result = SecretScanner::new().scan_str("KEY=AKIAIOSFODNN7EXAMPLE", "test.env");
         assert!(result.findings()[0].column > 1);
     }
 

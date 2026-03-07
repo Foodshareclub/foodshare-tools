@@ -10,10 +10,13 @@ use regex::Regex;
 use std::fs;
 use std::path::Path;
 
-/// Validation result
+/// Validation result for a single check
 pub struct ValidationResult {
+    /// Whether the validation passed
     pub valid: bool,
+    /// Exit code to return if this check fails
     pub exit_code: i32,
+    /// Optional message describing the result
     pub message: Option<String>,
 }
 

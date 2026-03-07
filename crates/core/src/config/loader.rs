@@ -16,9 +16,7 @@ pub struct Config {
 impl Config {
     /// Load configuration from a file path or use defaults
     pub fn load(path: Option<&str>) -> Result<Self> {
-        let config_path = path
-            .map(String::from)
-            .or_else(find_config_file);
+        let config_path = path.map(String::from).or_else(find_config_file);
 
         let schema = if let Some(ref p) = config_path {
             load_config_file(p)?
@@ -33,7 +31,8 @@ impl Config {
     }
 
     /// Load with defaults only (no file)
-    #[must_use] pub fn default() -> Self {
+    #[must_use]
+    pub fn default() -> Self {
         Self {
             schema: ConfigSchema::default(),
             path: None,

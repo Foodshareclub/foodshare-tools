@@ -105,12 +105,14 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// Get the numeric code
-    #[must_use] pub fn code(&self) -> u32 {
+    #[must_use]
+    pub fn code(&self) -> u32 {
         *self as u32
     }
 
     /// Get a human-readable category
-    #[must_use] pub fn category(&self) -> &'static str {
+    #[must_use]
+    pub fn category(&self) -> &'static str {
         match self.code() / 1000 {
             1 => "General",
             2 => "IO",
@@ -191,7 +193,8 @@ impl Error {
     }
 
     /// Convert to a serializable report
-    #[must_use] pub fn to_report(&self) -> ErrorReport {
+    #[must_use]
+    pub fn to_report(&self) -> ErrorReport {
         ErrorReport {
             code: self.code,
             code_str: self.code.to_string(),
@@ -239,7 +242,8 @@ impl Error {
     }
 
     /// Create a not-a-git-repo error
-    #[must_use] pub fn not_a_git_repo() -> Self {
+    #[must_use]
+    pub fn not_a_git_repo() -> Self {
         Self::new(ErrorCode::NotAGitRepo, "Not a git repository")
             .with_suggestion("Run this command from within a git repository")
     }
@@ -250,7 +254,8 @@ impl Error {
     }
 
     /// Create a command not found error
-    #[must_use] pub fn command_not_found(cmd: &str) -> Self {
+    #[must_use]
+    pub fn command_not_found(cmd: &str) -> Self {
         Self::new(
             ErrorCode::CommandNotFound,
             format!("Command not found: {cmd}"),
@@ -269,7 +274,8 @@ impl Error {
     }
 
     /// Create a secret detected error
-    #[must_use] pub fn secret_detected(file: &str, line: usize) -> Self {
+    #[must_use]
+    pub fn secret_detected(file: &str, line: usize) -> Self {
         Self::new(
             ErrorCode::SecretDetected,
             format!("Potential secret detected in {file} at line {line}"),
@@ -338,22 +344,27 @@ impl From<std::io::Error> for Error {
 
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
-        Error::new(ErrorCode::ConfigParseError, format!("JSON parse error: {err}"))
-            .with_source(err)
+        Error::new(
+            ErrorCode::ConfigParseError,
+            format!("JSON parse error: {err}"),
+        )
+        .with_source(err)
     }
 }
 
 impl From<toml::de::Error> for Error {
     fn from(err: toml::de::Error) -> Self {
-        Error::new(ErrorCode::ConfigParseError, format!("TOML parse error: {err}"))
-            .with_source(err)
+        Error::new(
+            ErrorCode::ConfigParseError,
+            format!("TOML parse error: {err}"),
+        )
+        .with_source(err)
     }
 }
 
 impl From<regex::Error> for Error {
     fn from(err: regex::Error) -> Self {
-        Error::new(ErrorCode::InvalidFormat, format!("Regex error: {err}"))
-            .with_source(err)
+        Error::new(ErrorCode::InvalidFormat, format!("Regex error: {err}")).with_source(err)
     }
 }
 
@@ -394,8 +405,8 @@ mod tests {
 
     #[test]
     fn test_error_with_context() {
-        let err = Error::file_not_found("/path/to/file")
-            .with_context("While loading configuration");
+        let err =
+            Error::file_not_found("/path/to/file").with_context("While loading configuration");
 
         assert_eq!(err.code, ErrorCode::FileNotFound);
         assert!(err.context.is_some());
@@ -404,8 +415,7 @@ mod tests {
 
     #[test]
     fn test_error_report_serialization() {
-        let err = Error::git("Failed to get staged files")
-            .with_context("During pre-commit hook");
+        let err = Error::git("Failed to get staged files").with_context("During pre-commit hook");
 
         let report = err.to_report();
         let json = serde_json::to_string(&report).unwrap();

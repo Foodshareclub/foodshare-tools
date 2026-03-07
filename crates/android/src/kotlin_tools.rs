@@ -3,15 +3,15 @@
 //! Provides wrappers for Kotlin development tools.
 
 use foodshare_core::error::Result;
-use foodshare_core::process::{command_exists, run_command, run_command_in_dir, CommandResult};
+use foodshare_core::process::{CommandResult, command_exists, run_command, run_command_in_dir};
 use std::path::Path;
 
-/// Check if ktlint is available
+/// Returns true if the ktlint CLI tool is installed and available
 pub fn has_ktlint() -> bool {
     command_exists("ktlint")
 }
 
-/// Check if detekt is available
+/// Returns true if the detekt CLI tool is installed and available
 pub fn has_detekt() -> bool {
     command_exists("detekt")
 }

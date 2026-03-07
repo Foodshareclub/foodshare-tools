@@ -76,7 +76,9 @@ impl ImageFormat {
 /// ```
 pub fn detect_format(data: &[u8]) -> Result<ImageFormat> {
     if data.len() < 4 {
-        return Err(ImageError::InvalidData("Not enough data for format detection".into()));
+        return Err(ImageError::InvalidData(
+            "Not enough data for format detection".into(),
+        ));
     }
 
     // JPEG: FF D8 FF

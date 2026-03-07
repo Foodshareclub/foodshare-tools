@@ -137,6 +137,14 @@ enum Commands {
         /// Dry run (preview translations without writing files)
         #[arg(long)]
         dry_run: bool,
+
+        /// Skip cache and force re-translation
+        #[arg(long)]
+        skip_cache: bool,
+
+        /// Path to JSON file with custom strings (defaults to built-in permissions)
+        #[arg(short, long)]
+        file: Option<String>,
     },
 }
 
@@ -160,7 +168,11 @@ enum TestTarget {
     /// Test LLM translation endpoint
     Llm {
         /// Text to translate
-        #[arg(short, long, default_value = "Fresh apples from my garden, ready to share!")]
+        #[arg(
+            short,
+            long,
+            default_value = "Fresh apples from my garden, ready to share!"
+        )]
         text: String,
 
         /// Source language
@@ -206,22 +218,35 @@ async fn main() -> ExitCode {
         Commands::Health { detailed } => health::run(detailed, &cli.format).await,
 
         Commands::Test { target } => match target {
-            TestTarget::Fetch { locale, delta, cache } => {
-                test::run(&locale, delta, cache, &cli.format).await
-            }
-            TestTarget::Llm { text, source, target, context } => {
-                test::run_llm(&text, &source, &target, &context, &cli.format).await
-            }
-            TestTarget::Posts { locale, limit, skip_trigger } => {
-                test::run_posts(&locale, limit, skip_trigger, cli.verbose, &cli.format).await
-            }
+            TestTarget::Fetch {
+                locale,
+                delta,
+                cache,
+            } => test::run(&locale, delta, cache, &cli.format).await,
+            TestTarget::Llm {
+                text,
+                source,
+                target,
+                context,
+            } => test::run_llm(&text, &source, &target, &context, &cli.format).await,
+            TestTarget::Posts {
+                locale,
+                limit,
+                skip_trigger,
+            } => test::run_posts(&locale, limit, skip_trigger, cli.verbose, &cli.format).await,
         },
 
-        Commands::Audit { locale, missing, limit } => {
-            audit::run(locale.as_deref(), missing, limit, &cli.format).await
-        }
+        Commands::Audit {
+            locale,
+            missing,
+            limit,
+        } => audit::run(locale.as_deref(), missing, limit, &cli.format).await,
 
-        Commands::Translate { locale, apply, limit } => {
+        Commands::Translate {
+            locale,
+            apply,
+            limit,
+        } => {
             if locale == "all" {
                 translate::sync_all(apply, &cli.format).await
             } else {
@@ -235,9 +260,11 @@ async fn main() -> ExitCode {
 
         Commands::Locales => commands::locales::run(&cli.format).await,
 
-        Commands::Deploy { no_migrations, no_functions, no_test } => {
-            deploy::run(!no_migrations, !no_functions, !no_test, &cli.format).await
-        }
+        Commands::Deploy {
+            no_migrations,
+            no_functions,
+            no_test,
+        } => deploy::run(!no_migrations, !no_functions, !no_test, &cli.format).await,
 
         Commands::Update { locale, file } => {
             if let Some(file_path) = file {
@@ -247,13 +274,18 @@ async fn main() -> ExitCode {
             }
         }
 
-        Commands::Backfill { batch_size, delay, limit, dry_run } => {
-            backfill::run(batch_size, delay, limit, dry_run, &cli.format).await
-        }
+        Commands::Backfill {
+            batch_size,
+            delay,
+            limit,
+            dry_run,
+        } => backfill::run(batch_size, delay, limit, dry_run, &cli.format).await,
 
-        Commands::GenerateInfoplist { dry_run } => {
-            generate_infoplist::run(dry_run, &cli.format).await
-        }
+        Commands::GenerateInfoplist {
+            dry_run,
+            skip_cache,
+            file,
+        } => generate_infoplist::run(dry_run, skip_cache, file.as_deref(), &cli.format).await,
     };
 
     match result {

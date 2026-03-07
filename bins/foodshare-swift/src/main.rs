@@ -5,11 +5,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use owo_colors::OwoColorize;
 use foodshare_swift_toolchain::{
     detect::SwiftToolchain, migrate::SwiftMigrator, verify::VerificationReport,
     REQUIRED_SWIFT_VERSION,
 };
+use owo_colors::OwoColorize;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -268,7 +268,11 @@ fn cmd_list() -> Result<()> {
         println!("{}", "Installed:".bold());
         for tc in toolchains {
             let is_active = tc.path == active.path;
-            let marker = if is_active { "→".green() } else { " ".normal() };
+            let marker = if is_active {
+                "→".green()
+            } else {
+                " ".normal()
+            };
             let version_str = tc.version.short_version();
             let version = if is_active {
                 version_str.cyan().bold().to_string()

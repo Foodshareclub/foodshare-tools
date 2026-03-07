@@ -231,7 +231,8 @@ pub struct GenerateInfoPlistStringsResponse {
     #[serde(rename = "lprojFolders")]
     pub lproj_folders: HashMap<String, String>,
     pub stats: Option<InfoPlistStats>,
-    pub errors: Option<Vec<String>>,
+    #[serde(default)]
+    pub errors: Vec<String>,
 }
 
 /// InfoPlist.strings generation statistics
@@ -243,6 +244,8 @@ pub struct InfoPlistStats {
     pub total_strings: usize,
     #[serde(rename = "translatedCount")]
     pub translated_count: usize,
+    #[serde(rename = "fromCache")]
+    pub from_cache: usize,
     #[serde(rename = "failedCount")]
     pub failed_count: usize,
     #[serde(rename = "durationMs")]

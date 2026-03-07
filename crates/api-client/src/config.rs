@@ -115,8 +115,7 @@ impl ClientConfig {
             .unwrap_or_else(|_| DEFAULT_SUPABASE_URL.to_string());
 
         // BFF URL defaults to base_url + /bff
-        let bff_url =
-            env::var("FOODSHARE_BFF_URL").unwrap_or_else(|_| format!("{base_url}/bff"));
+        let bff_url = env::var("FOODSHARE_BFF_URL").unwrap_or_else(|_| format!("{base_url}/bff"));
 
         let anon_key = env::var("SUPABASE_ANON_KEY").ok();
         let service_role_key = env::var("SUPABASE_SERVICE_ROLE_KEY").ok();
@@ -263,7 +262,9 @@ impl ClientConfig {
         }
 
         if !self.base_url.starts_with("http://") && !self.base_url.starts_with("https://") {
-            return Err(ApiError::config("base_url must start with http:// or https://"));
+            return Err(ApiError::config(
+                "base_url must start with http:// or https://",
+            ));
         }
 
         if self.timeout.is_zero() {
@@ -299,10 +300,7 @@ mod tests {
             .with_base_url("https://test.supabase.co/functions/v1")
             .with_timeout(Duration::from_secs(60));
 
-        assert_eq!(
-            config.base_url,
-            "https://test.supabase.co/functions/v1"
-        );
+        assert_eq!(config.base_url, "https://test.supabase.co/functions/v1");
         assert_eq!(config.timeout, Duration::from_secs(60));
     }
 
