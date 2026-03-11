@@ -2,10 +2,10 @@
 
 [![CI](https://github.com/Foodshareclub/foodshare-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/Foodshareclub/foodshare-tools/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![codecov](https://codecov.io/gh/Foodshareclub/foodshare-tools/branch/main/graph/badge.svg)](https://codecov.io/gh/Foodshareclub/foodshare-tools)
 
-Enterprise-grade Rust CLI for git hooks and development tools across all Foodshare platforms (iOS, Android, Web).
+Enterprise-grade Rust CLI workspace for git hooks, code quality, and development tooling across all Foodshare platforms.
 
 ## Features
 
@@ -19,14 +19,13 @@ Enterprise-grade Rust CLI for git hooks and development tools across all Foodsha
 ## Quick Start
 
 ```bash
-# Clone the repository
 git clone https://github.com/Foodshareclub/foodshare-tools.git
 cd foodshare-tools
 
 # Build all binaries
 cargo build --release
 
-# Or install globally
+# Or install individually
 cargo install --path bins/foodshare-ios
 cargo install --path bins/foodshare-android
 cargo install --path bins/lefthook-rs
@@ -36,18 +35,38 @@ cargo install --path bins/lefthook-rs
 
 ```
 foodshare-tools/
-├── crates/
-│   ├── core/         # Shared: git, file scanning, process, health checks
-│   ├── hooks/        # Git hooks: commit-msg, secrets, migrations
-│   ├── cli/          # CLI utilities: terminal output, progress
-│   ├── ios/          # iOS: Xcode, simulators, Swift tools, xcodeproj
-│   ├── android/      # Android: Gradle, emulators, Kotlin, Swift-Android
-│   ├── web/          # Web: Next.js security, bundle analysis
-│   └── telemetry/    # Observability: logging, metrics, tracing
-├── bins/
-│   ├── foodshare-ios/      # iOS CLI binary
-│   ├── foodshare-android/  # Android CLI binary
-│   └── lefthook-rs/        # Web CLI binary
+├── crates/                    # Library crates (16)
+│   ├── core/                  # Shared: git, file scanning, process, health
+│   ├── hooks/                 # Git hooks: commit-msg, secrets, migrations
+│   ├── cli/                   # CLI utilities: terminal output, progress
+│   ├── ios/                   # iOS: Xcode, simulators, Swift tools
+│   ├── android/               # Android: Gradle, emulators, Kotlin
+│   ├── web/                   # Web: Next.js security, bundle analysis
+│   ├── telemetry/             # Observability: logging, metrics, tracing
+│   ├── geo/                   # Geospatial utilities
+│   ├── crypto/                # HMAC, constant-time comparison
+│   ├── search/                # Search utilities
+│   ├── compression/           # Brotli compression
+│   ├── image/                 # Image processing (JPEG, PNG, WebP, GIF)
+│   ├── swift-toolchain/       # Swift version management
+│   ├── api-client/            # API client utilities
+│   ├── migrate/               # Migration tooling
+│   └── motherduck-sync/       # MotherDuck data sync
+├── bins/                      # Binary crates (7)
+│   ├── foodshare-ios/         # iOS CLI
+│   ├── foodshare-android/     # Android CLI
+│   ├── lefthook-rs/           # Web CLI (git hooks)
+│   ├── fs-image/              # Image processing CLI
+│   ├── foodshare-i18n/        # Internationalization CLI
+│   ├── foodshare-swift/       # Swift toolchain CLI
+│   └── foodshare-migrate/     # Migration CLI
+├── scripts/                   # Utility scripts
+├── tests/                     # Integration tests
+├── docs/                      # Documentation
+└── .github/workflows/
+    ├── ci.yml                 # CI: lint, test (3 OS), coverage, build, docs
+    ├── publish.yml            # Publish crates to crates.io
+    └── release.yml            # Build release binaries + GitHub Release
 ```
 
 ## Usage
@@ -68,154 +87,57 @@ foodshare-tools/
 <binary> pre-push
 ```
 
-### iOS
+### iOS (used with foodshare-app)
 
 ```bash
-# Format Swift code
-foodshare-ios format --staged
-
-# Lint with strict mode
-foodshare-ios lint --strict
-
-# Build project
+foodshare-ios format --staged        # Format Swift code
+foodshare-ios lint --strict          # Lint with strict mode
 foodshare-ios build --configuration release
-
-# Manage simulators
-foodshare-ios simulator list
-foodshare-ios simulator boot --device "iPhone 15 Pro"
-
-# Xcode project analysis
-foodshare-ios project status
-foodshare-ios project missing    # Files on disk not in project
-foodshare-ios project broken     # Broken file references
-
-# Environment check
-foodshare-ios doctor
+foodshare-ios simulator list         # Manage simulators
+foodshare-ios project status         # Xcode project analysis
+foodshare-ios doctor                 # Environment check
 ```
 
-### Android
+### Android (used with foodshare-app)
 
 ```bash
-# Format Kotlin code
 foodshare-android format --lang kotlin
-
-# Lint code
 foodshare-android lint
-
-# Build Swift core for Android
-foodshare-android swift-core build --target arm64
-foodshare-android swift-core copy --output app/libs
-
-# Manage emulators
 foodshare-android emulator list
 foodshare-android emulator boot pixel_7
 ```
 
-### Web
+### Web (used with foodshare-web)
 
 ```bash
-# Security checks
-lefthook-rs security
-lefthook-rs nextjs-security
-
-# Bundle size analysis
+lefthook-rs security                 # Security checks
+lefthook-rs nextjs-security          # Next.js specific
 lefthook-rs bundle-size --threshold 500kb
-
-# Conventional commit validation
 lefthook-rs conventional-commit .git/COMMIT_MSG
 ```
 
-## Configuration
+## Related Repositories
 
-Create `.foodshare-hooks.toml` in your project root:
+| Repository | Purpose |
+|------------|---------|
+| [`foodshare-app`](https://github.com/Foodshareclub/foodshare-app) | Unified cross-platform app (Skip Fuse: iOS + Android) |
+| [`foodshare-web`](https://github.com/Foodshareclub/foodshare-web) | Next.js 16 web app |
+| [`foodshare-backend`](https://github.com/Foodshareclub/foodshare-backend) | Self-hosted Supabase backend |
+| [`foodshare-runner`](https://github.com/Foodshareclub/foodshare-runner) | GitHub Actions self-hosted runner |
 
-```toml
-[commit_msg]
-types = ["feat", "fix", "docs", "style", "refactor", "test", "chore", "ci", "perf"]
-max_subject_length = 72
-require_scope = false
-
-[secrets]
-exclude_files = ["*.test.ts", "*.spec.ts", "*.mock.ts"]
-exclude_patterns = ["EXAMPLE_", "PLACEHOLDER_"]
-
-[migrations]
-directory = "supabase/migrations"
-require_down = true
-check_naming = true
-```
-
-## Health Checks
-
-Run environment diagnostics:
-
-```bash
-# iOS environment
-foodshare-ios doctor --json
-
-# Output:
-{
-  "status": "healthy",
-  "checks": [
-    {"name": "git", "status": "healthy", "version": "2.43.0"},
-    {"name": "xcodebuild", "status": "healthy", "version": "15.2"},
-    {"name": "swift", "status": "healthy", "version": "5.9.2"},
-    {"name": "swiftformat", "status": "healthy"},
-    {"name": "swiftlint", "status": "healthy"}
-  ]
-}
-```
-
-## Integration with Lefthook
-
-Add to your `lefthook.yml`:
-
-```yaml
-pre-commit:
-  parallel: true
-  commands:
-    format:
-      glob: "*.swift"
-      run: foodshare-ios format --staged
-    secrets:
-      run: foodshare-ios secrets
-
-commit-msg:
-  commands:
-    validate:
-      run: foodshare-ios commit-msg {1}
-
-pre-push:
-  commands:
-    checks:
-      run: foodshare-ios pre-push --fail-fast
-```
+> **Note**: The legacy `foodshare-ios` and `foodshare-android` repos have been merged into `foodshare-app`.
 
 ## Development
 
 ```bash
-# Run all tests
-cargo test --workspace
-
-# Run tests with coverage
-cargo llvm-cov --workspace
-
-# Run benchmarks
-cargo bench --workspace
-
-# Check all targets
-cargo check --workspace --all-targets
-
-# Format code
-cargo fmt --all
-
-# Lint code
-cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace              # Run all tests
+cargo llvm-cov --workspace          # Coverage report
+cargo bench --workspace             # Run benchmarks
+cargo fmt --all -- --check          # Check formatting
+cargo clippy --workspace --all-targets -- -D warnings  # Lint
 ```
 
 ## Error Codes
-
-All errors include structured codes for programmatic handling:
 
 | Code Range | Category | Example |
 |------------|----------|---------|
@@ -228,109 +150,6 @@ All errors include structured codes for programmatic handling:
 | E7xxx | Security | E7001 Secret detected |
 | E8xxx | Platform | E8001 Xcode error |
 
-## Performance
-
-Benchmarks on Apple M1 Pro:
-
-| Operation | Time |
-|-----------|------|
-| Secret scan (100 files) | ~15ms |
-| Commit message validation | ~1ms |
-| Format check (staged) | ~50ms |
-| Full pre-push suite | ~2s |
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
 ## License
 
-MIT - see [LICENSE](LICENSE) for details.
-
-## Support
-
-- 📖 [Documentation](https://github.com/Foodshareclub/foodshare-tools/wiki)
-- 🐛 [Issue Tracker](https://github.com/Foodshareclub/foodshare-tools/issues)
-- 💬 [Discussions](https://github.com/Foodshareclub/foodshare-tools/discussions)
-
-
----
-
-## Swift Version Management Scripts
-
-This directory also contains Swift version management scripts for the Foodshare monorepo:
-
-### Available Scripts
-
-#### `use-swift-6.3.sh`
-Configure your environment to use Swift 6.3 development snapshot.
-
-```bash
-source foodshare-tools/use-swift-6.3.sh
-```
-
-Sets:
-- `TOOLCHAINS=swift`
-- Adds Swift 6.3 toolchain to PATH
-- Verifies Swift version
-
-#### `verify-swift-version.sh`
-Verify Swift version consistency across the project.
-
-```bash
-./foodshare-tools/verify-swift-version.sh
-```
-
-Checks:
-- Installed Swift version
-- Package.swift files
-- Xcode project configuration
-- Reports mismatches
-
-#### `verify-swift-6.3.sh`
-Detailed verification specifically for Swift 6.3 migration.
-
-```bash
-./foodshare-tools/verify-swift-6.3.sh
-```
-
-Verifies:
-- Swift 6.3 toolchain installation
-- Package manifests
-- Xcode project settings
-- CI scripts
-- Documentation
-
-#### `revert-to-swift-6.2.sh`
-Rollback script to revert to Swift 6.2 if needed.
-
-```bash
-./foodshare-tools/revert-to-swift-6.2.sh
-```
-
-Reverts:
-- All Package.swift files to 6.2
-- Xcode project to 6.2
-- Documentation references
-- Cleans build artifacts
-
-### Swift 6.3 Migration
-
-For complete Swift 6.3 migration documentation, see:
-- `../SWIFT_6.3_MIGRATION_COMPLETE.md` - Complete migration guide
-- `../SWIFT_VERSION_STRATEGY.md` - Strategic decision document
-- `../.swift-version` - Project version specification
-
-### Quick Start with Swift 6.3
-
-```bash
-# 1. Configure environment
-source foodshare-tools/use-swift-6.3.sh
-
-# 2. Verify setup
-./foodshare-tools/verify-swift-version.sh
-
-# 3. Build projects
-swift build --package-path foodshare-core
-xcodebuild -project foodshare-ios/FoodShare.xcodeproj -scheme FoodShare
-```
+MIT — see [LICENSE](LICENSE) for details.
