@@ -1,0 +1,138 @@
+# Centralized Lefthook Configuration for FoodShare Ecosystem
+# This file lives in foodshare-tools and is shared by all repositories.
+#
+# Usage (in each individual repo's lefthook.yml):
+#   extends: ../foodshare-tools/lefthook.yml
+
+pre-commit:
+  parallel: false
+  commands:
+    # 1. Global Security Check (Every Repo)
+    # -------------------------------------------------------------------------
+    security:
+      priority: 1
+      run: |
+        REPO_ROOT="$(git rev-parse --show-toplevel)"
+        HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/release/lefthook-rs}"
+        [ ! -f "$HOOKS_BIN" ] && HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/debug/lefthook-rs}"
+        if [ -f "$HOOKS_BIN" ]; then
+          "$HOOKS_BIN" security {staged_files}
+        fi
+
+    # 2. Web Repositories (Next.js / Bun)
+    # -------------------------------------------------------------------------
+    web-format:
+      glob: "src/**/*.{ts,tsx,js,jsx,json,css,scss,md,yaml,yml}"
+      run: |
+        if [ -f bun.lockb ] || [ -f bun.lock ]; then
+          bunx prettier --write --cache --cache-strategy metadata {staged_files}
+        fi
+      stage_fixed: true
+      priority: 2
+
+    web-lint:
+      glob: "src/**/*.{ts,tsx,js,jsx}"
+      run: |
+        if [ -f package.json ]; then
+          bunx eslint {staged_files} --fix --max-warnings=0 --no-warn-ignored
+        fi
+      stage_fixed: true
+      priority: 2
+
+    web-type-check:
+      run: |
+        if [ -f tsconfig.json ]; then
+          bunx tsc --noEmit --incremental
+        fi
+      priority: 3
+
+    # 3. Backend Repositories (Deno)
+    # -------------------------------------------------------------------------
+    backend-lint:
+      glob: "supabase/functions/**/*.ts"
+      run: |
+        if command -v deno >/dev/null 2>&1; then
+          deno lint {staged_files}
+        fi
+      priority: 2
+
+    backend-format:
+      glob: "supabase/functions/**/*.ts"
+      run: |
+        if command -v deno >/dev/null 2>&1; then
+          deno fmt {staged_files}
+        fi
+      stage_fixed: true
+      priority: 2
+
+    # 4. Mobile Repositories (Swift / Skip)
+    # -------------------------------------------------------------------------
+    mobile-format:
+      glob: "**/*.swift"
+      run: |
+        if command -v swiftformat >/dev/null 2>&1; then
+          swiftformat {staged_files}
+        fi
+      stage_fixed: true
+      priority: 2
+
+commit-msg:
+  commands:
+    conventional-commit:
+      run: |
+        REPO_ROOT="$(git rev-parse --show-toplevel)"
+        HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/release/lefthook-rs}"
+        [ ! -f "$HOOKS_BIN" ] && HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/debug/lefthook-rs}"
+        if [ -f "$HOOKS_BIN" ]; then
+          "$HOOKS_BIN" conventional-commit {1}
+        fi
+
+pre-push:
+  parallel: false
+  commands:
+    protected-branch:
+      priority: 1
+      run: |
+        REPO_ROOT="$(git rev-parse --show-toplevel)"
+        HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/release/lefthook-rs}"
+        [ ! -f "$HOOKS_BIN" ] && HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/debug/lefthook-rs}"
+        if [ -f "$HOOKS_BIN" ]; then
+          "$HOOKS_BIN" protected-branch
+        fi
+
+    large-files:
+      priority: 2
+      run: |
+        REPO_ROOT="$(git rev-parse --show-toplevel)"
+        HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/release/lefthook-rs}"
+        [ ! -f "$HOOKS_BIN" ] && HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/debug/lefthook-rs}"
+        if [ -f "$HOOKS_BIN" ]; then
+          "$HOOKS_BIN" large-files --max-size 1024
+        fi
+
+# Maintenance Awareness
+post-checkout:
+  commands:
+    env-awareness:
+      run: |
+        if git diff --name-only {1} {2} 2>/dev/null | grep -qE "^\.env"; then
+          echo "⚠️  Environment files may have changed. Review .env or .env.functions"
+        fi
+    dependency-awareness:
+      run: |
+        if git diff --name-only {1} {2} 2>/dev/null | grep -qE "^(package.json|bun.lockb|bun.lock|Package.swift)$"; then
+          echo "📦 Dependencies may have changed. Consider running your package manager's install command."
+        fi
+
+post-merge:
+  commands:
+    env-awareness:
+      run: |
+        if git diff-tree -r --name-only --no-commit-id HEAD@{1} HEAD | grep -qE "^\.env"; then
+          echo "⚠️  Environment files changed. Review .env or .env.functions"
+        fi
+    dependency-awareness:
+      run: |
+        if git diff-tree -r --name-only --no-commit-id HEAD@{1} HEAD | grep -qE "^(package.json|bun.lockb|bun.lock|Package.swift)$"; then
+          echo "📦 Dependencies changed. Consider running your package manager's install command."
+        fi
