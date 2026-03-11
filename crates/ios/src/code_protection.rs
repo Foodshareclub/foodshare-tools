@@ -17,19 +17,19 @@
 //!
 //! ```bash
 //! # List all snapshots
-//! foodshare-ios protect list
+//! fs-ios protect list
 //!
 //! # Restore from latest snapshot
-//! foodshare-ios protect restore --latest
+//! fs-ios protect restore --latest
 //!
 //! # Restore specific file from snapshot
-//! foodshare-ios protect restore --snapshot <id> --file <path>
+//! fs-ios protect restore --snapshot <id> --file <path>
 //!
 //! # Show what would be committed
-//! foodshare-ios protect commit-guard
+//! fs-ios protect commit-guard
 //!
 //! # Show what would be pushed
-//! foodshare-ios protect push-guard
+//! fs-ios protect push-guard
 //! ```
 
 use chrono::{DateTime, Local, Utc};
@@ -1152,8 +1152,8 @@ pub fn print_snapshot_list(snapshots: &[SnapshotIndexEntry]) {
 
     println!();
     println!("  {}", "Recovery commands:".bold());
-    println!("    foodshare-ios protect restore --latest");
-    println!("    foodshare-ios protect restore --snapshot <ID>");
+    println!("    fs-ios protect restore --latest");
+    println!("    fs-ios protect restore --snapshot <ID>");
     println!("{}", "═".repeat(70));
 }
 

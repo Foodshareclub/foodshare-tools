@@ -2,7 +2,7 @@
 
 ## Common Commands
 
-These commands are available across all platform binaries (`foodshare-ios`, `foodshare-android`, `lefthook-rs`).
+These commands are available across all platform binaries (`fs-ios`, `fs-android`, `lefthook-rs`).
 
 ### commit-msg
 
@@ -77,16 +77,16 @@ Check environment health.
 
 ---
 
-## iOS Commands (`foodshare-ios`)
+## iOS Commands (`fs-ios`)
 
 ### format
 
 Format Swift code using SwiftFormat.
 
 ```bash
-foodshare-ios format
-foodshare-ios format --staged    # Only staged files
-foodshare-ios format --check     # Check without modifying
+fs-ios format
+fs-ios format --staged    # Only staged files
+fs-ios format --check     # Check without modifying
 ```
 
 Options:
@@ -99,9 +99,9 @@ Options:
 Lint Swift code using SwiftLint.
 
 ```bash
-foodshare-ios lint
-foodshare-ios lint --strict
-foodshare-ios lint --fix
+fs-ios lint
+fs-ios lint --strict
+fs-ios lint --fix
 ```
 
 Options:
@@ -114,9 +114,9 @@ Options:
 Build Xcode project.
 
 ```bash
-foodshare-ios build
-foodshare-ios build --configuration release
-foodshare-ios build --scheme MyScheme
+fs-ios build
+fs-ios build --configuration release
+fs-ios build --scheme MyScheme
 ```
 
 Options:
@@ -129,9 +129,9 @@ Options:
 Manage iOS simulators.
 
 ```bash
-foodshare-ios simulator list
-foodshare-ios simulator boot --device "iPhone 15 Pro"
-foodshare-ios simulator shutdown
+fs-ios simulator list
+fs-ios simulator boot --device "iPhone 15 Pro"
+fs-ios simulator shutdown
 ```
 
 Subcommands:
@@ -144,24 +144,24 @@ Subcommands:
 Analyze Xcode project.
 
 ```bash
-foodshare-ios project status
-foodshare-ios project missing    # Files on disk not in project
-foodshare-ios project broken     # Broken file references
-foodshare-ios project sync       # Sync project with disk
+fs-ios project status
+fs-ios project missing    # Files on disk not in project
+fs-ios project broken     # Broken file references
+fs-ios project sync       # Sync project with disk
 ```
 
 ---
 
-## Android Commands (`foodshare-android`)
+## Android Commands (`fs-android`)
 
 ### format
 
 Format Kotlin/Java code.
 
 ```bash
-foodshare-android format
-foodshare-android format --lang kotlin
-foodshare-android format --staged
+fs-android format
+fs-android format --lang kotlin
+fs-android format --staged
 ```
 
 Options:
@@ -173,8 +173,8 @@ Options:
 Run Android lint.
 
 ```bash
-foodshare-android lint
-foodshare-android lint --strict
+fs-android lint
+fs-android lint --strict
 ```
 
 ### swift-core
@@ -182,8 +182,8 @@ foodshare-android lint --strict
 Build Swift core library for Android.
 
 ```bash
-foodshare-android swift-core build --target arm64
-foodshare-android swift-core copy --output app/libs
+fs-android swift-core build --target arm64
+fs-android swift-core copy --output app/libs
 ```
 
 Subcommands:
@@ -195,9 +195,9 @@ Subcommands:
 Manage Android emulators.
 
 ```bash
-foodshare-android emulator list
-foodshare-android emulator boot pixel_7
-foodshare-android emulator shutdown
+fs-android emulator list
+fs-android emulator boot pixel_7
+fs-android emulator shutdown
 ```
 
 ---

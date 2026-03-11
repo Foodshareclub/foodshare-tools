@@ -286,8 +286,8 @@ fn write_files(response: &GenerateInfoPlistStringsResponse) -> Result<()> {
 fn find_resources_path() -> Result<PathBuf> {
     let candidates = [
         "FoodShare/Resources",
-        "../foodshare-ios/FoodShare/Resources",
-        "../../foodshare-ios/FoodShare/Resources",
+        "../fs-ios/FoodShare/Resources",
+        "../../fs-ios/FoodShare/Resources",
         "../FoodShare/Resources",
     ];
 
@@ -303,14 +303,14 @@ fn find_resources_path() -> Result<PathBuf> {
     // Try from current dir
     let cwd = std::env::current_dir()?;
 
-    // In foodshare-ios
+    // In fs-ios
     let ios = cwd.join("FoodShare/Resources");
     if ios.exists() {
         return Ok(ios);
     }
 
     // In foodshare monorepo
-    let mono = cwd.join("foodshare-ios/FoodShare/Resources");
+    let mono = cwd.join("fs-ios/FoodShare/Resources");
     if mono.exists() {
         return Ok(mono);
     }
@@ -318,7 +318,7 @@ fn find_resources_path() -> Result<PathBuf> {
     anyhow::bail!(
         "Cannot find iOS Resources directory.\n\
          Expected: FoodShare/Resources\n\
-         Run from: foodshare-ios/ or foodshare/ directory"
+         Run from: fs-ios/ or foodshare/ directory"
     )
 }
 

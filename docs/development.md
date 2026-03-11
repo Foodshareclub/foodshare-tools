@@ -31,7 +31,7 @@ foodshare-tools/
 # Build
 cargo build                          # Debug build
 cargo build --release                # Release build
-cargo build -p foodshare-ios         # Single crate
+cargo build -p fs-ios         # Single crate
 
 # Test
 cargo test --workspace               # All tests
@@ -227,7 +227,7 @@ See [PUBLISHING.md](../PUBLISHING.md) for release instructions.
 ### Verbose Output
 
 ```bash
-RUST_LOG=debug cargo run -p foodshare-ios -- doctor
+RUST_LOG=debug cargo run -p fs-ios -- doctor
 ```
 
 ### Backtrace
@@ -239,5 +239,5 @@ RUST_BACKTRACE=1 cargo test
 ### LLDB
 
 ```bash
-rust-lldb target/debug/foodshare-ios
+rust-lldb target/debug/fs-ios
 ```

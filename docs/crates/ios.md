@@ -1,4 +1,4 @@
-# foodshare-ios
+# fs-ios
 
 iOS development tools for Xcode projects, Swift formatting, and simulator management.
 
@@ -14,25 +14,25 @@ iOS development tools for Xcode projects, Swift formatting, and simulator manage
 
 ```bash
 # Format Swift code
-foodshare-ios format --staged
+fs-ios format --staged
 
 # Lint code
-foodshare-ios lint --strict
+fs-ios lint --strict
 
 # Build project
-foodshare-ios build --configuration release
+fs-ios build --configuration release
 
 # Manage simulators
-foodshare-ios simulator list
-foodshare-ios simulator boot --device "iPhone 15 Pro"
+fs-ios simulator list
+fs-ios simulator boot --device "iPhone 15 Pro"
 
 # Project analysis
-foodshare-ios project status
-foodshare-ios project missing
-foodshare-ios project broken
+fs-ios project status
+fs-ios project missing
+fs-ios project broken
 
 # Environment check
-foodshare-ios doctor
+fs-ios doctor
 ```
 
 ## Library Usage
@@ -157,7 +157,7 @@ configuration = "Debug"
 ## Health Check
 
 ```bash
-foodshare-ios doctor --json
+fs-ios doctor --json
 ```
 
 Output:

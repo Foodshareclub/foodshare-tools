@@ -1,5 +1,5 @@
 [package]
-name = "foodshare-ios-cli"
+name = "fs-ios-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,14 +8,14 @@ rust-version.workspace = true
 description = "CLI for Foodshare iOS development"
 
 [[bin]]
-name = "foodshare-ios"
+name = "fs-ios"
 path = "src/main.rs"
 
 [dependencies]
 foodshare-core.workspace = true
 foodshare-hooks.workspace = true
 foodshare-cli.workspace = true
-foodshare-ios.workspace = true
+fs-ios.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 owo-colors.workspace = true

@@ -10,7 +10,7 @@ use foodshare_core::error::exit_codes;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "foodshare-android")]
+#[command(name = "fs-android")]
 #[command(about = "Git hooks and development tools for Foodshare Android")]
 #[command(version)]
 struct Cli {
@@ -238,7 +238,7 @@ fn main() -> Result<()> {
 }
 
 fn run_format(_files: &[PathBuf], _check: bool, _staged: bool, lang: &str) -> i32 {
-    use foodshare_android::kotlin_tools;
+    use fs_android::kotlin_tools;
 
     if lang == "kotlin" || lang == "both" {
         if !kotlin_tools::has_ktlint() {
@@ -271,7 +271,7 @@ fn run_format(_files: &[PathBuf], _check: bool, _staged: bool, lang: &str) -> i3
 }
 
 fn run_lint(_files: &[PathBuf], strict: bool, _fix: bool, lang: &str) -> i32 {
-    use foodshare_android::kotlin_tools;
+    use fs_android::kotlin_tools;
 
     if lang == "kotlin" || lang == "both" {
         if !kotlin_tools::has_ktlint() {
@@ -353,7 +353,7 @@ fn run_migrations(dir: &std::path::Path) -> i32 {
 }
 
 fn run_build(configuration: &str, clean: bool, bundle: bool) -> i32 {
-    use foodshare_android::gradle;
+    use fs_android::gradle;
 
     let project_dir = std::path::Path::new(".");
 
@@ -402,7 +402,7 @@ fn run_build(configuration: &str, clean: bool, bundle: bool) -> i32 {
 }
 
 fn run_test(_coverage: bool) -> i32 {
-    use foodshare_android::gradle;
+    use fs_android::gradle;
 
     Status::info("Running tests...");
 
@@ -425,7 +425,7 @@ fn run_test(_coverage: bool) -> i32 {
 }
 
 fn run_emulator(action: &str, name: Option<&str>) -> i32 {
-    use foodshare_android::emulator;
+    use fs_android::emulator;
 
     match action {
         "list" => match emulator::list_avds() {
@@ -473,7 +473,7 @@ fn run_emulator(action: &str, name: Option<&str>) -> i32 {
 }
 
 fn run_swift_build(target: &str, configuration: &str) -> i32 {
-    use foodshare_android::swift_android::{self, AndroidTarget};
+    use fs_android::swift_android::{self, AndroidTarget};
 
     if !swift_android::has_swift() {
         Status::error("Swift not found");
@@ -518,7 +518,7 @@ fn run_swift_build(target: &str, configuration: &str) -> i32 {
 }
 
 fn run_swift_java(action: &str) -> i32 {
-    use foodshare_android::swift_android;
+    use fs_android::swift_android;
 
     match action {
         "verify" => {
@@ -561,7 +561,7 @@ fn run_swift_java(action: &str) -> i32 {
 }
 
 fn run_doctor(_json: bool) -> i32 {
-    use foodshare_android::{emulator, kotlin_tools, swift_android};
+    use fs_android::{emulator, kotlin_tools, swift_android};
 
     println!("Environment Check");
     println!();
@@ -625,7 +625,7 @@ fn run_verify() -> i32 {
 }
 
 fn run_swift_core(action: SwiftCoreAction) -> i32 {
-    use foodshare_android::swift_core::{self, BuildConfig, SwiftAndroidTarget};
+    use fs_android::swift_core::{self, BuildConfig, SwiftAndroidTarget};
     use owo_colors::OwoColorize;
 
     match action {

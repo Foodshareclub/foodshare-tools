@@ -37,8 +37,8 @@ foodshare-tools/
 │   ├── migrate/               # Migration tooling
 │   └── motherduck-sync/       # MotherDuck data sync
 ├── bins/                      # Binary crates (7)
-│   ├── foodshare-ios/         # iOS CLI
-│   ├── foodshare-android/     # Android CLI
+│   ├── fs-ios/         # iOS CLI
+│   ├── fs-android/     # Android CLI
 │   ├── lefthook-rs/           # Web CLI (git hooks)
 │   ├── fs-image/              # Image processing CLI
 │   ├── foodshare-i18n/        # Internationalization CLI
@@ -70,8 +70,8 @@ Three workflows:
 | `foodshare-core` | Git operations, file scanning, process management |
 | `foodshare-hooks` | Commit message validation, secret scanning (15+ patterns) |
 | `foodshare-cli` | Terminal output, progress bars, colored output |
-| `foodshare-ios` | Xcode project analysis, simulator management |
-| `foodshare-android` | Gradle integration, emulator management |
+| `fs-ios` | Xcode project analysis, simulator management |
+| `fs-android` | Gradle integration, emulator management |
 | `foodshare-web` | Next.js security checks, bundle analysis |
 | `foodshare-telemetry` | Structured logging, Prometheus metrics |
 | `foodshare-geo` | Geospatial utilities |

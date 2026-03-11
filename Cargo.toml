@@ -16,8 +16,8 @@ members = [
     "crates/motherduck-sync",
     "crates/swift-toolchain",
     "crates/api-client",
-    "bins/foodshare-ios",
-    "bins/foodshare-android",
+    "bins/fs-ios",
+    "bins/fs-android",
     "bins/lefthook-rs",
     "bins/fs-image",
     "bins/foodshare-i18n",
@@ -145,8 +145,8 @@ unicode-segmentation = "1.10"
 foodshare-core = { path = "crates/core" }
 foodshare-hooks = { path = "crates/hooks" }
 foodshare-cli = { path = "crates/cli" }
-foodshare-ios = { path = "crates/ios" }
-foodshare-android = { path = "crates/android" }
+fs-ios = { path = "crates/ios" }
+fs-android = { path = "crates/android" }
 foodshare-web = { path = "crates/web" }
 foodshare-telemetry = { path = "crates/telemetry" }
 foodshare-geo = { path = "crates/geo" }

@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "foodshare-ios")]
+#[command(name = "fs-ios")]
 #[command(about = "Git hooks and development tools for Foodshare iOS")]
 #[command(version)]
 struct Cli {
@@ -494,8 +494,8 @@ fn run_format(
     audit: bool,
     create_snapshot: bool,
 ) -> i32 {
-    use foodshare_ios::hooks::{SafeFormat, SafeFormatConfig, print_format_summary};
-    use foodshare_ios::swift_tools;
+    use fs_ios::hooks::{SafeFormat, SafeFormatConfig, print_format_summary};
+    use fs_ios::swift_tools;
 
     if !swift_tools::has_swiftformat() {
         Status::error("swiftformat not found. Install with: brew install swiftformat");
@@ -585,7 +585,7 @@ fn run_format(
 
 /// Legacy format check (swiftformat --lint)
 fn run_legacy_format_check(files: &[PathBuf]) -> i32 {
-    use foodshare_ios::swift_tools;
+    use fs_ios::swift_tools;
 
     Status::info("Running format check (legacy mode)...");
 
@@ -611,7 +611,7 @@ fn run_legacy_format_check(files: &[PathBuf]) -> i32 {
 }
 
 fn run_lint(files: &[PathBuf], strict: bool, fix: bool) -> i32 {
-    use foodshare_ios::swift_tools;
+    use fs_ios::swift_tools;
 
     if !swift_tools::has_swiftlint() {
         Status::error("swiftlint not found. Install with: brew install swiftlint");
@@ -693,7 +693,7 @@ fn run_migrations(dir: &PathBuf) -> i32 {
 }
 
 fn run_build(configuration: &str, clean: bool) -> i32 {
-    use foodshare_ios::xcode;
+    use fs_ios::xcode;
 
     if !xcode::is_xcode_available() {
         Status::error("Xcode not found");
@@ -726,7 +726,7 @@ fn run_build(configuration: &str, clean: bool) -> i32 {
 }
 
 fn run_test(coverage: bool) -> i32 {
-    use foodshare_ios::xcode;
+    use fs_ios::xcode;
 
     Status::info("Running tests...");
 
@@ -753,7 +753,7 @@ fn run_test(coverage: bool) -> i32 {
 }
 
 fn run_app(clean: bool, logs: bool, release: bool, device: Option<&str>) -> i32 {
-    use foodshare_ios::{simulator, xcode};
+    use fs_ios::{simulator, xcode};
 
     let device_name = device.unwrap_or("iPhone 17 Pro Max");
     let configuration = if release { "Release" } else { "Debug" };
@@ -876,7 +876,7 @@ fn run_app(clean: bool, logs: bool, release: bool, device: Option<&str>) -> i32 
 }
 
 fn run_simulator(action: &str, device: Option<&str>) -> i32 {
-    use foodshare_ios::simulator;
+    use fs_ios::simulator;
 
     match action {
         "list" => match simulator::list_devices() {
@@ -924,7 +924,7 @@ fn run_simulator(action: &str, device: Option<&str>) -> i32 {
 }
 
 fn run_doctor(json: bool) -> i32 {
-    use foodshare_ios::{swift_tools, xcode};
+    use fs_ios::{swift_tools, xcode};
 
     if json {
         // TODO: JSON output
@@ -1000,7 +1000,7 @@ fn run_pre_push(
     skip: Vec<String>,
     detailed: bool,
 ) -> i32 {
-    use foodshare_ios::hooks::{PrePushConfig, print_pre_push_summary, run_pre_push_checks};
+    use fs_ios::hooks::{PrePushConfig, print_pre_push_summary, run_pre_push_checks};
 
     // Check for quick mode environment variable
     let quick_mode = quick || std::env::var("FOODSHARE_QUICK_MODE").is_ok();
@@ -1026,7 +1026,7 @@ fn run_pre_push(
 }
 
 fn run_deps(action: DepsAction) -> i32 {
-    use foodshare_ios::swift_tools;
+    use fs_ios::swift_tools;
 
     // Extract path and determine action type
     let (path, is_update) = match &action {
@@ -1096,7 +1096,7 @@ fn run_deps(action: DepsAction) -> i32 {
 }
 
 fn run_project(action: ProjectAction) -> i32 {
-    use foodshare_ios::xcodeproj::XcodeProject;
+    use fs_ios::xcodeproj::XcodeProject;
     use owo_colors::OwoColorize;
 
     match action {
@@ -1297,7 +1297,7 @@ fn run_project(action: ProjectAction) -> i32 {
 // ============================================================================
 
 fn run_protect(action: ProtectAction) -> i32 {
-    use foodshare_ios::code_protection::{
+    use fs_ios::code_protection::{
         CommitGuard, OperationHistory, ProtectionConfig, PushGuard, SnapshotManager,
         SnapshotTrigger, print_pending_commit, print_pending_push, print_restore_result,
         print_snapshot_list, verify_build,
@@ -1373,7 +1373,7 @@ fn run_protect(action: ProtectAction) -> i32 {
                     println!("  Recovery command:");
                     println!(
                         "    {} protect restore --snapshot {}",
-                        "foodshare-ios".cyan(),
+                        "fs-ios".cyan(),
                         snapshot.id
                     );
                     println!();

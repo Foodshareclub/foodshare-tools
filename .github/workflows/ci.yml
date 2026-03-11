@@ -92,8 +92,8 @@ jobs:
         with:
           name: binaries-${{ matrix.target }}
           path: |
-            target/${{ matrix.target }}/release/foodshare-ios
-            target/${{ matrix.target }}/release/foodshare-android
+            target/${{ matrix.target }}/release/fs-ios
+            target/${{ matrix.target }}/release/fs-android
             target/${{ matrix.target }}/release/lefthook-rs
 
   docs:

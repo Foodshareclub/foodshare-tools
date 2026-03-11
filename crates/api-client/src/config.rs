@@ -282,7 +282,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = ClientConfig::default();
-        assert!(config.base_url.contains("supabase.co"));
+        assert!(config.base_url.contains("api.foodshare.club"));
         assert!(config.bff_url.ends_with("/bff"));
         assert_eq!(config.timeout, Duration::from_secs(30));
     }

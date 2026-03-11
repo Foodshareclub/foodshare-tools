@@ -18,8 +18,8 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 
 | Crate | Description |
 |-------|-------------|
-| [foodshare-ios](./crates/ios.md) | iOS development tools (Xcode, Swift, simulators) |
-| [foodshare-android](./crates/android.md) | Android development tools (Gradle, Kotlin, emulators) |
+| [fs-ios](./crates/ios.md) | iOS development tools (Xcode, Swift, simulators) |
+| [fs-android](./crates/android.md) | Android development tools (Gradle, Kotlin, emulators) |
 | [foodshare-web](./crates/web.md) | Web development tools (Next.js security, bundle analysis) |
 
 ### Core Libraries
@@ -45,8 +45,8 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 
 | Binary | Description |
 |--------|-------------|
-| `foodshare-ios` | iOS CLI |
-| `foodshare-android` | Android CLI |
+| `fs-ios` | iOS CLI |
+| `fs-android` | Android CLI |
 | `lefthook-rs` | Web CLI |
 | `fs-image` | Image processing CLI |
 | `motherduck-sync` | Database sync CLI |

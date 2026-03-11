@@ -31,8 +31,8 @@ foodshare-tools/
 │   ├── api-client/           # API client
 │   └── migrate/              # Migration utilities
 ├── bins/                     # Binary crates
-│   ├── foodshare-ios/        # iOS CLI binary
-│   ├── foodshare-android/    # Android CLI binary
+│   ├── fs-ios/        # iOS CLI binary
+│   ├── fs-android/    # Android CLI binary
 │   ├── lefthook-rs/          # Web CLI binary
 │   ├── fs-image/             # Image CLI
 │   ├── foodshare-i18n/       # i18n CLI

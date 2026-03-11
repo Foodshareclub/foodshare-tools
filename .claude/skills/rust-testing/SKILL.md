@@ -114,17 +114,17 @@ use predicates::prelude::*;
 
 #[test]
 fn cli_prints_version() {
-    Command::cargo_bin("foodshare-ios")
+    Command::cargo_bin("fs-ios")
         .unwrap()
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("foodshare-ios"));
+        .stdout(predicate::str::contains("fs-ios"));
 }
 
 #[test]
 fn cli_fails_on_invalid_commit() {
-    Command::cargo_bin("foodshare-ios")
+    Command::cargo_bin("fs-ios")
         .unwrap()
         .args(["commit-msg", "--message", "bad message"])
         .assert()

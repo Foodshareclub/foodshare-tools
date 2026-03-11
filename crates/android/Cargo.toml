@@ -1,5 +1,5 @@
 [package]
-name = "foodshare-android"
+name = "fs-android"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

@@ -1,4 +1,4 @@
-# foodshare-android
+# fs-android
 
 Android development tools for Gradle projects, Kotlin formatting, and emulator management.
 
@@ -13,21 +13,21 @@ Android development tools for Gradle projects, Kotlin formatting, and emulator m
 
 ```bash
 # Format Kotlin code
-foodshare-android format --lang kotlin
+fs-android format --lang kotlin
 
 # Lint code
-foodshare-android lint
+fs-android lint
 
 # Build Swift core for Android
-foodshare-android swift-core build --target arm64
-foodshare-android swift-core copy --output app/libs
+fs-android swift-core build --target arm64
+fs-android swift-core copy --output app/libs
 
 # Manage emulators
-foodshare-android emulator list
-foodshare-android emulator boot pixel_7
+fs-android emulator list
+fs-android emulator boot pixel_7
 
 # Environment check
-foodshare-android doctor
+fs-android doctor
 ```
 
 ## Library Usage
@@ -146,5 +146,5 @@ swift_core_output = "app/libs"
 ## Health Check
 
 ```bash
-foodshare-android doctor --json
+fs-android doctor --json
 ```
