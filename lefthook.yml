@@ -22,7 +22,7 @@ pre-commit:
     # 2. Web Repositories (Next.js / Bun)
     # -------------------------------------------------------------------------
     web-format:
-      glob: "src/**/*.{ts,tsx,js,jsx,json,css,scss,md,yaml,yml}"
+      glob: "*.{ts,tsx,js,jsx,json,css,scss,md,yaml,yml}"
       run: |
         if [ -f bun.lockb ] || [ -f bun.lock ]; then
           bunx prettier --write --cache --cache-strategy metadata {staged_files}
@@ -31,7 +31,7 @@ pre-commit:
       priority: 2
 
     web-lint:
-      glob: "src/**/*.{ts,tsx,js,jsx}"
+      glob: "*.{ts,tsx,js,jsx}"
       run: |
         if [ -f package.json ]; then
           bunx eslint {staged_files} --fix --max-warnings=0 --no-warn-ignored
