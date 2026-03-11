@@ -125,8 +125,6 @@ lefthook-rs conventional-commit .git/COMMIT_MSG
 | [`foodshare-backend`](https://github.com/Foodshareclub/foodshare-backend) | Self-hosted Supabase backend |
 | [`foodshare-runner`](https://github.com/Foodshareclub/foodshare-runner) | GitHub Actions self-hosted runner |
 
-> **Note**: The legacy `foodshare-ios` and `foodshare-android` repos have been merged into `foodshare-app`.
-
 ## Development
 
 ```bash
