@@ -480,7 +480,7 @@ pub fn print_format_summary(result: &SafeFormatResult) {
 
     if let Some(ref snapshot) = result.snapshot_id {
         println!(
-            "  {} Snapshot: fs-ios protect restore --snapshot {}",
+            "  {} Snapshot: fs-app protect restore --snapshot {}",
             "📸".blue(),
             snapshot
         );

@@ -26,8 +26,7 @@ cd foodshare-tools
 cargo build --release
 
 # Or install individually
-cargo install --path bins/fs-ios
-cargo install --path bins/fs-android
+cargo install --path bins/fs-app
 cargo install --path bins/lefthook-rs
 ```
 
@@ -53,8 +52,7 @@ foodshare-tools/
 │   ├── migrate/               # Migration tooling
 │   └── motherduck-sync/       # MotherDuck data sync
 ├── bins/                      # Binary crates (7)
-│   ├── fs-ios/         # iOS CLI
-│   ├── fs-android/     # Android CLI
+│   ├── fs-app/         # Cross-platform CLI
 │   ├── lefthook-rs/           # Web CLI (git hooks)
 │   ├── fs-image/              # Image processing CLI
 │   ├── foodshare-i18n/        # Internationalization CLI
@@ -90,21 +88,21 @@ foodshare-tools/
 ### iOS (used with foodshare-app)
 
 ```bash
-fs-ios format --staged        # Format Swift code
-fs-ios lint --strict          # Lint with strict mode
-fs-ios build --configuration release
-fs-ios simulator list         # Manage simulators
-fs-ios project status         # Xcode project analysis
-fs-ios doctor                 # Environment check
+fs-app format --staged        # Format Swift code
+fs-app lint --strict          # Lint with strict mode
+fs-app build --configuration release
+fs-app simulator list         # Manage simulators
+fs-app project status         # Xcode project analysis
+fs-app doctor                 # Environment check
 ```
 
 ### Android (used with foodshare-app)
 
 ```bash
-fs-android format --lang kotlin
-fs-android lint
-fs-android emulator list
-fs-android emulator boot pixel_7
+fs-app format --lang kotlin
+fs-app lint
+fs-app emulator list
+fs-app emulator boot pixel_7
 ```
 
 ### Web (used with foodshare-web)

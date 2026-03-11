@@ -51,8 +51,8 @@ jobs:
       - name: Package
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/fs-ios dist/ 2>/dev/null || true
-          cp target/${{ matrix.target }}/release/fs-android dist/ 2>/dev/null || true
+          cp target/${{ matrix.target }}/release/fs-app dist/ 2>/dev/null || true
+          cp target/${{ matrix.target }}/release/fs-app dist/ 2>/dev/null || true
           cp target/${{ matrix.target }}/release/lefthook-rs dist/ 2>/dev/null || true
           cp README.md LICENSE dist/
           cd dist && tar -czvf ../foodshare-tools-${{ matrix.artifact }}.tar.gz .

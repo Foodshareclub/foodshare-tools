@@ -26,10 +26,10 @@ ls target/release/foodshare-*
 
 ```bash
 # iOS tools
-cargo install --path bins/fs-ios
+cargo install --path bins/fs-app
 
 # Android tools
-cargo install --path bins/fs-android
+cargo install --path bins/fs-app
 
 # Web tools (lefthook-rs)
 cargo install --path bins/lefthook-rs
@@ -55,7 +55,7 @@ Required tools:
 
 ```bash
 # Verify environment
-fs-ios doctor
+fs-app doctor
 
 # Expected output:
 # ✓ git (2.43.0)
@@ -74,7 +74,7 @@ Required tools:
 
 ```bash
 # Verify environment
-fs-android doctor
+fs-app doctor
 ```
 
 ### Web Development
@@ -115,17 +115,17 @@ pre-commit:
   parallel: true
   commands:
     secrets:
-      run: fs-ios secrets  # or fs-android, lefthook-rs
+      run: fs-app secrets  # or fs-app, lefthook-rs
 
 commit-msg:
   commands:
     validate:
-      run: fs-ios commit-msg {1}
+      run: fs-app commit-msg {1}
 
 pre-push:
   commands:
     checks:
-      run: fs-ios pre-push
+      run: fs-app pre-push
 ```
 
 ### 3. Install Git Hooks
@@ -138,16 +138,16 @@ lefthook install
 
 ```bash
 # Check for secrets in staged files
-fs-ios secrets
+fs-app secrets
 
 # Validate a commit message
-echo "feat: add new feature" | fs-ios commit-msg -
+echo "feat: add new feature" | fs-app commit-msg -
 
 # Run all pre-push checks
-fs-ios pre-push
+fs-app pre-push
 
 # Format Swift code (iOS)
-fs-ios format --staged
+fs-app format --staged
 ```
 
 ## Next Steps

@@ -1,11 +1,11 @@
 [package]
-name = "fs-android"
+name = "fs-app"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Android-specific tools for Foodshare"
+description = "App-specific tools for Foodshare"
 
 [dependencies]
 foodshare-core.workspace = true
@@ -19,6 +19,11 @@ serde_json.workspace = true
 owo-colors.workspace = true
 walkdir.workspace = true
 glob.workspace = true
+handlebars.workspace = true
+flate2.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

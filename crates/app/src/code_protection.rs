@@ -17,19 +17,19 @@
 //!
 //! ```bash
 //! # List all snapshots
-//! fs-ios protect list
+//! fs-app protect list
 //!
 //! # Restore from latest snapshot
-//! fs-ios protect restore --latest
+//! fs-app protect restore --latest
 //!
 //! # Restore specific file from snapshot
-//! fs-ios protect restore --snapshot <id> --file <path>
+//! fs-app protect restore --snapshot <id> --file <path>
 //!
 //! # Show what would be committed
-//! fs-ios protect commit-guard
+//! fs-app protect commit-guard
 //!
 //! # Show what would be pushed
-//! fs-ios protect push-guard
+//! fs-app protect push-guard
 //! ```
 
 use chrono::{DateTime, Local, Utc};
@@ -1152,8 +1152,8 @@ pub fn print_snapshot_list(snapshots: &[SnapshotIndexEntry]) {
 
     println!();
     println!("  {}", "Recovery commands:".bold());
-    println!("    fs-ios protect restore --latest");
-    println!("    fs-ios protect restore --snapshot <ID>");
+    println!("    fs-app protect restore --latest");
+    println!("    fs-app protect restore --snapshot <ID>");
     println!("{}", "═".repeat(70));
 }
 

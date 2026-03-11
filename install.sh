@@ -35,16 +35,14 @@ echo ""
 echo -e "${GREEN}Build complete!${NC}"
 echo ""
 echo "Binaries available at:"
-echo "  - target/release/foodshare-ios"
-echo "  - target/release/fs-android"
+echo "  - target/release/fs-app"
 echo "  - target/release/lefthook-rs"
 
 # Optional: Install to cargo bin
 if [ "$1" = "--install" ]; then
     echo ""
     echo -e "${BLUE}Installing binaries to Cargo bin...${NC}"
-    cargo install --path bins/fs-ios
-    cargo install --path bins/fs-android
+    cargo install --path bins/fs-app
     cargo install --path bins/lefthook-rs
     echo -e "${GREEN}Installed!${NC}"
 fi
@@ -61,14 +59,9 @@ if [[ "$1" == "--symlink" ]]; then
     fi
     
     # Setup symlinks for testing if requested
-    if [[ -d "../fs-android/tools/target/release" ]]; then
-        ln -sf "$SCRIPT_DIR/target/release/fs-android" "../fs-android/tools/target/release/fs-hooks"
-        echo "  ✓ fs-android/tools/target/release/fs-hooks"
-    fi
-    
-    if [[ -d "../fs-ios/tools/target/release" ]]; then
-        ln -sf "$SCRIPT_DIR/target/release/fs-ios" "../fs-ios/tools/target/release/fs-hooks"
-        echo "  ✓ fs-ios/tools/target/release/fs-hooks"
+    if [[ -d "../foodshare-app/tools/target/release" ]]; then
+        ln -sf "$SCRIPT_DIR/target/release/fs-app" "../foodshare-app/tools/target/release/fs-hooks"
+        echo "  ✓ foodshare-app/tools/target/release/fs-hooks"
     fi
     
     echo -e "${GREEN}Symlinks created!${NC}"

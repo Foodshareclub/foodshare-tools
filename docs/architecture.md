@@ -16,8 +16,7 @@ foodshare-tools/
 │   ├── telemetry/    # Observability
 │   └── [libs]/       # Published libraries (geo, crypto, search, etc.)
 ├── bins/             # Binary entry points
-│   ├── fs-ios/
-│   ├── fs-android/
+│   ├── fs-app/         # Cross-platform CLI
 │   ├── lefthook-rs/
 │   └── fs-image/
 ├── tests/            # Integration tests
@@ -82,13 +81,13 @@ Terminal output utilities:
 
 ### Platform Crates
 
-#### iOS (`fs-ios`)
+#### iOS (`fs-app`)
 - Xcode project parsing (xcodeproj)
 - Swift formatting/linting
 - Simulator management
 - Build system integration
 
-#### Android (`fs-android`)
+#### Android (`fs-app`)
 - Gradle integration
 - Kotlin formatting/linting
 - Emulator management

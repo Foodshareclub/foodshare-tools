@@ -183,7 +183,7 @@ impl SwiftMigrator {
             println!();
             println!("Next steps:");
             println!("  1. Clean build artifacts: rm -rf .build */build");
-            println!("  2. Verify: fs-ios swift verify");
+            println!("  2. Verify: fs-app swift verify");
             println!("  3. Test builds: swift build");
         }
 

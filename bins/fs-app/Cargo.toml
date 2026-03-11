@@ -1,21 +1,21 @@
 [package]
-name = "fs-android-cli"
+name = "fs-app-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "CLI for Foodshare Android development"
+description = "CLI for Foodshare App development"
 
 [[bin]]
-name = "fs-android"
+name = "fs-app"
 path = "src/main.rs"
 
 [dependencies]
 foodshare-core.workspace = true
 foodshare-hooks.workspace = true
 foodshare-cli.workspace = true
-fs-android.workspace = true
+fs-app.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 owo-colors.workspace = true

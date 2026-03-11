@@ -7,13 +7,13 @@
 //!
 //! ```bash
 //! # Build for all architectures (debug)
-//! fs-android swift-core build --target all
+//! fs-app swift-core build --target all
 //!
 //! # Build for ARM64 only (release)
-//! fs-android swift-core build --target arm64 --configuration release
+//! fs-app swift-core build --target arm64 --configuration release
 //!
 //! # Check prerequisites
-//! fs-android swift-core check
+//! fs-app swift-core check
 //! ```
 
 use foodshare_core::error::Result;
@@ -410,8 +410,8 @@ pub fn copy_to_android_project(output_dir: &Path, android_project_dir: &Path) ->
 
 /// Detect Android project relative to FoodshareCore
 pub fn detect_android_project(project_dir: &Path) -> Option<PathBuf> {
-    // Check ../fs-android (matches shell script)
-    let android_dir = project_dir.join("../fs-android");
+    // Check ../fs-app (matches shell script)
+    let android_dir = project_dir.join("../fs-app");
     if android_dir.exists() {
         return Some(android_dir);
     }
@@ -435,10 +435,10 @@ pub fn print_setup_instructions() {
     println!("   export ANDROID_NDK_HOME=/path/to/android-ndk-r27d");
     println!();
     println!("4. Build FoodshareCore:");
-    println!("   fs-android swift-core build --target all");
+    println!("   fs-app swift-core build --target all");
     println!();
     println!("   Or from foodshare-core directory:");
-    println!("   fs-android swift-core build --target all --project-dir .");
+    println!("   fs-app swift-core build --target all --project-dir .");
     println!();
 }
 

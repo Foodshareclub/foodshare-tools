@@ -2,7 +2,7 @@
 
 ## Common Commands
 
-These commands are available across all platform binaries (`fs-ios`, `fs-android`, `lefthook-rs`).
+These commands are available across all platform binaries (`fs-app`, `fs-app`, `lefthook-rs`).
 
 ### commit-msg
 
@@ -77,16 +77,16 @@ Check environment health.
 
 ---
 
-## iOS Commands (`fs-ios`)
+## iOS Commands (`fs-app`)
 
 ### format
 
 Format Swift code using SwiftFormat.
 
 ```bash
-fs-ios format
-fs-ios format --staged    # Only staged files
-fs-ios format --check     # Check without modifying
+fs-app format
+fs-app format --staged    # Only staged files
+fs-app format --check     # Check without modifying
 ```
 
 Options:
@@ -99,9 +99,9 @@ Options:
 Lint Swift code using SwiftLint.
 
 ```bash
-fs-ios lint
-fs-ios lint --strict
-fs-ios lint --fix
+fs-app lint
+fs-app lint --strict
+fs-app lint --fix
 ```
 
 Options:
@@ -114,9 +114,9 @@ Options:
 Build Xcode project.
 
 ```bash
-fs-ios build
-fs-ios build --configuration release
-fs-ios build --scheme MyScheme
+fs-app build
+fs-app build --configuration release
+fs-app build --scheme MyScheme
 ```
 
 Options:
@@ -129,9 +129,9 @@ Options:
 Manage iOS simulators.
 
 ```bash
-fs-ios simulator list
-fs-ios simulator boot --device "iPhone 15 Pro"
-fs-ios simulator shutdown
+fs-app simulator list
+fs-app simulator boot --device "iPhone 15 Pro"
+fs-app simulator shutdown
 ```
 
 Subcommands:
@@ -144,24 +144,24 @@ Subcommands:
 Analyze Xcode project.
 
 ```bash
-fs-ios project status
-fs-ios project missing    # Files on disk not in project
-fs-ios project broken     # Broken file references
-fs-ios project sync       # Sync project with disk
+fs-app project status
+fs-app project missing    # Files on disk not in project
+fs-app project broken     # Broken file references
+fs-app project sync       # Sync project with disk
 ```
 
 ---
 
-## Android Commands (`fs-android`)
+## Android Commands (`fs-app`)
 
 ### format
 
 Format Kotlin/Java code.
 
 ```bash
-fs-android format
-fs-android format --lang kotlin
-fs-android format --staged
+fs-app format
+fs-app format --lang kotlin
+fs-app format --staged
 ```
 
 Options:
@@ -173,8 +173,8 @@ Options:
 Run Android lint.
 
 ```bash
-fs-android lint
-fs-android lint --strict
+fs-app lint
+fs-app lint --strict
 ```
 
 ### swift-core
@@ -182,8 +182,8 @@ fs-android lint --strict
 Build Swift core library for Android.
 
 ```bash
-fs-android swift-core build --target arm64
-fs-android swift-core copy --output app/libs
+fs-app swift-core build --target arm64
+fs-app swift-core copy --output app/libs
 ```
 
 Subcommands:
@@ -195,9 +195,9 @@ Subcommands:
 Manage Android emulators.
 
 ```bash
-fs-android emulator list
-fs-android emulator boot pixel_7
-fs-android emulator shutdown
+fs-app emulator list
+fs-app emulator boot pixel_7
+fs-app emulator shutdown
 ```
 
 ---
