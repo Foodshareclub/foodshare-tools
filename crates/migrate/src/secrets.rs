@@ -85,6 +85,223 @@ pub const VAULT_SECRETS: &[VaultSecretDef] = &[
         vault_name: "MOTHERDUCK_TOKEN",
         description: "MotherDuck token for analytics (used by api-v1-analytics)",
     },
+    // Core Infrastructure
+    VaultSecretDef {
+        env_key: "JWT_SECRET",
+        vault_name: "JWT_SECRET",
+        description: "Secret key for JWT generation and verification",
+    },
+    VaultSecretDef {
+        env_key: "CHAT_ENCRYPTION_KEY",
+        vault_name: "CHAT_ENCRYPTION_KEY",
+        description: "Key for encrypting and decrypting chat messages",
+    },
+    VaultSecretDef {
+        env_key: "CRON_SECRET",
+        vault_name: "CRON_SECRET",
+        description: "Secret for authorizing cron job triggers",
+    },
+    // Monitoring & Alerts
+    VaultSecretDef {
+        env_key: "SLACK_WEBHOOK_URL",
+        vault_name: "SLACK_WEBHOOK_URL",
+        description: "Slack webhook URL for alerts and notifications",
+    },
+    VaultSecretDef {
+        env_key: "ERROR_ALERT_WEBHOOK_URL",
+        vault_name: "ERROR_ALERT_WEBHOOK_URL",
+        description: "Slack webhook URL for error reporting",
+    },
+    VaultSecretDef {
+        env_key: "PAGERDUTY_ROUTING_KEY",
+        vault_name: "PAGERDUTY_ROUTING_KEY",
+        description: "PagerDuty routing key for incident alerting",
+    },
+    // External Services - Vector & Search
+    VaultSecretDef {
+        env_key: "UPSTASH_VECTOR_REST_URL",
+        vault_name: "UPSTASH_VECTOR_REST_URL",
+        description: "Upstash Vector REST endpoint",
+    },
+    VaultSecretDef {
+        env_key: "UPSTASH_VECTOR_REST_TOKEN",
+        vault_name: "UPSTASH_VECTOR_REST_TOKEN",
+        description: "Upstash Vector REST authentication token",
+    },
+    VaultSecretDef {
+        env_key: "UPSTASH_SEARCH_REST_URL",
+        vault_name: "UPSTASH_SEARCH_REST_URL",
+        description: "Upstash Search REST endpoint",
+    },
+    VaultSecretDef {
+        env_key: "UPSTASH_SEARCH_REST_TOKEN",
+        vault_name: "UPSTASH_SEARCH_REST_TOKEN",
+        description: "Upstash Search REST authentication token",
+    },
+    VaultSecretDef {
+        env_key: "QSTASH_URL",
+        vault_name: "QSTASH_URL",
+        description: "QStash messaging endpoint",
+    },
+    VaultSecretDef {
+        env_key: "QSTASH_TOKEN",
+        vault_name: "QSTASH_TOKEN",
+        description: "QStash authentication token",
+    },
+    // Additional Email Providers
+    VaultSecretDef {
+        env_key: "BREVO_API_KEY",
+        vault_name: "BREVO_API_KEY",
+        description: "Brevo (Sendinblue) email API key",
+    },
+    VaultSecretDef {
+        env_key: "MAILERSEND_API_KEY",
+        vault_name: "MAILERSEND_API_KEY",
+        description: "MailerSend email API key",
+    },
+    // Image Processing
+    VaultSecretDef {
+        env_key: "TINYPNG_API_KEY",
+        vault_name: "TINYPNG_API_KEY",
+        description: "TinyPNG API key for image compression",
+    },
+    VaultSecretDef {
+        env_key: "CLOUDINARY_CLOUD_NAME",
+        vault_name: "CLOUDINARY_CLOUD_NAME",
+        description: "Cloudinary cloud name",
+    },
+    VaultSecretDef {
+        env_key: "CLOUDINARY_API_KEY",
+        vault_name: "CLOUDINARY_API_KEY",
+        description: "Cloudinary API key",
+    },
+    VaultSecretDef {
+        env_key: "CLOUDINARY_API_SECRET",
+        vault_name: "CLOUDINARY_API_SECRET",
+        description: "Cloudinary API secret",
+    },
+    // AI - HuggingFace & Others
+    VaultSecretDef {
+        env_key: "HUGGINGFACE_TOKEN",
+        vault_name: "HUGGINGFACE_TOKEN",
+        description: "HuggingFace API token for AI models",
+    },
+    VaultSecretDef {
+        env_key: "GROQ_API_KEY",
+        vault_name: "GROQ_API_KEY",
+        description: "Groq API key for AI features",
+    },
+    VaultSecretDef {
+        env_key: "AI_GATEWAY_API_KEY",
+        vault_name: "AI_GATEWAY_API_KEY",
+        description: "AI Gateway API key",
+    },
+    // Comms - WhatsApp, Telegram, Twilio
+    VaultSecretDef {
+        env_key: "WHATSAPP_APP_SECRET",
+        vault_name: "WHATSAPP_APP_SECRET",
+        description: "WhatsApp/Meta app secret for webhook verification",
+    },
+    VaultSecretDef {
+        env_key: "BOT_TOKEN",
+        vault_name: "BOT_TOKEN",
+        description: "Telegram bot token",
+    },
+    VaultSecretDef {
+        env_key: "ADMIN_CHAT_ID",
+        vault_name: "ADMIN_CHAT_ID",
+        description: "Telegram admin chat ID for alerts",
+    },
+    VaultSecretDef {
+        env_key: "TWILIO_ACCOUNT_SID",
+        vault_name: "TWILIO_ACCOUNT_SID",
+        description: "Twilio Account SID",
+    },
+    VaultSecretDef {
+        env_key: "TWILIO_AUTH_TOKEN",
+        vault_name: "TWILIO_AUTH_TOKEN",
+        description: "Twilio Auth Token",
+    },
+    VaultSecretDef {
+        env_key: "TWILIO_VERIFY_SERVICE_SID",
+        vault_name: "TWILIO_VERIFY_SERVICE_SID",
+        description: "Twilio Verify Service SID",
+    },
+    // Storage - Cloudflare R2
+    VaultSecretDef {
+        env_key: "R2_ACCOUNT_ID",
+        vault_name: "R2_ACCOUNT_ID",
+        description: "Cloudflare R2 Account ID",
+    },
+    VaultSecretDef {
+        env_key: "R2_ACCESS_KEY_ID",
+        vault_name: "R2_ACCESS_KEY_ID",
+        description: "Cloudflare R2 Access Key ID",
+    },
+    VaultSecretDef {
+        env_key: "R2_SECRET_ACCESS_KEY",
+        vault_name: "R2_SECRET_ACCESS_KEY",
+        description: "Cloudflare R2 Secret Access Key",
+    },
+    VaultSecretDef {
+        env_key: "R2_BUCKET_NAME",
+        vault_name: "R2_BUCKET_NAME",
+        description: "Cloudflare R2 Bucket Name",
+    },
+    VaultSecretDef {
+        env_key: "R2_PUBLIC_URL",
+        vault_name: "R2_PUBLIC_URL",
+        description: "Cloudflare R2 Public URL",
+    },
+    // AWS - General / SES
+    VaultSecretDef {
+        env_key: "AWS_ACCESS_KEY_ID",
+        vault_name: "AWS_ACCESS_KEY_ID",
+        description: "AWS Access Key ID",
+    },
+    VaultSecretDef {
+        env_key: "AWS_SECRET_ACCESS_KEY",
+        vault_name: "AWS_SECRET_ACCESS_KEY",
+        description: "AWS Secret Access Key",
+    },
+    // Translation
+    VaultSecretDef {
+        env_key: "DEEPL_API_KEY",
+        vault_name: "DEEPL_API_KEY",
+        description: "DeepL API key for translations",
+    },
+     VaultSecretDef {
+        env_key: "GOOGLE_TRANSLATE_API_KEY",
+        vault_name: "GOOGLE_TRANSLATE_API_KEY",
+        description: "Google Translate API key",
+    },
+    // Webhooks & Payments
+    VaultSecretDef {
+        env_key: "STRIPE_WEBHOOK_SECRET",
+        vault_name: "STRIPE_WEBHOOK_SECRET",
+        description: "Stripe webhook signing secret",
+    },
+    // Apple Auth
+    VaultSecretDef {
+        env_key: "GOTRUE_EXTERNAL_APPLE_CLIENT_ID",
+        vault_name: "GOTRUE_EXTERNAL_APPLE_CLIENT_ID",
+        description: "Apple OAuth Client ID (Service ID)",
+    },
+    VaultSecretDef {
+        env_key: "GOTRUE_EXTERNAL_APPLE_TEAM_ID",
+        vault_name: "GOTRUE_EXTERNAL_APPLE_TEAM_ID",
+        description: "Apple Team ID",
+    },
+    VaultSecretDef {
+        env_key: "GOTRUE_EXTERNAL_APPLE_KEY_ID",
+        vault_name: "GOTRUE_EXTERNAL_APPLE_KEY_ID",
+        description: "Apple Key ID",
+    },
+    VaultSecretDef {
+        env_key: "GOTRUE_EXTERNAL_APPLE_PRIVATE_KEY",
+        vault_name: "GOTRUE_EXTERNAL_APPLE_PRIVATE_KEY",
+        description: "Apple Private Key (.p8 file content)",
+    },
 ];
 
 /// PG functions that read from vault and should be verified after migration.
@@ -96,7 +313,7 @@ mod tests {
 
     #[test]
     fn vault_secrets_has_expected_count() {
-        assert_eq!(VAULT_SECRETS.len(), 12);
+        assert_eq!(VAULT_SECRETS.len(), 53);
     }
 
     #[test]

@@ -75,6 +75,13 @@ enum EnvAction {
     Sync,
     /// Show what would be added (dry run)
     Diff,
+    /// Update or append a variable in the env file
+    Set {
+        /// Variable name (e.g. JWT_SECRET)
+        key: String,
+        /// Variable value
+        value: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -95,6 +102,7 @@ fn main() -> ExitCode {
         Commands::Env { action } => match action {
             EnvAction::Sync => cmd_env_sync(&cli),
             EnvAction::Diff => cmd_env_diff(&cli),
+            EnvAction::Set { key, value } => cmd_env_set(&cli, key, value),
         },
         Commands::Status => cmd_status(&cli),
         Commands::Run => cmd_run(&cli),
@@ -143,7 +151,13 @@ fn cmd_vault_sync(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Erro
         };
 
         if client.secret_exists(secret.vault_name)? {
-            skipped += 1;
+            if cli.dry_run {
+                Status::info(&format!("Would update: {}", secret.vault_name));
+            } else {
+                client.update_secret(&value, secret.vault_name)?;
+                Status::success(&format!("Updated: {}", secret.vault_name));
+            }
+            skipped += 1; // Counting updates as 'skipped' as per user's instruction
             continue;
         }
 
@@ -439,6 +453,36 @@ fn cmd_run(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     println!();
     Status::success("Migration complete. Run `docker compose restart functions` to apply.");
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// env set
+// ---------------------------------------------------------------------------
+
+fn cmd_env_set(
+    cli: &Cli,
+    key: &str,
+    value: &str,
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    Status::header("Env File Set");
+
+    if cli.dry_run {
+        Status::info(&format!(
+            "Would set {}={} in {} (dry run)",
+            key,
+            value,
+            cli.env_file.display()
+        ));
+    } else {
+        env_file::upsert_var(&cli.env_file, key, value)?;
+        Status::success(&format!(
+            "Updated {} in {}",
+            key,
+            cli.env_file.display()
+        ));
+    }
 
     Ok(())
 }

@@ -125,6 +125,24 @@ impl VaultClient {
         Ok(())
     }
 
+    /// Update an existing secret in the vault.
+    pub fn update_secret(&self, value: &str, name: &str) -> Result<()> {
+        let escaped_value = escape_sql_string(value);
+        let escaped_name = escape_sql_string(name);
+
+        self.run_sql(&format!(
+            "DO $$
+            DECLARE
+              sid UUID;
+            BEGIN
+              SELECT id INTO sid FROM vault.secrets WHERE name = '{escaped_name}';
+              PERFORM vault.update_secret(sid, new_secret := '{escaped_value}');
+            END $$;"
+        ))?;
+
+        Ok(())
+    }
+
     /// Test a PG function by calling `SELECT fn_name()` and returning the result.
     ///
     /// Returns `Some(value)` if the function returns a non-null result,
