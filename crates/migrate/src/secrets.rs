@@ -302,6 +302,28 @@ pub const VAULT_SECRETS: &[VaultSecretDef] = &[
         vault_name: "GOTRUE_EXTERNAL_APPLE_PRIVATE_KEY",
         description: "Apple Private Key (.p8 file content)",
     },
+    // Google Auth
+    VaultSecretDef {
+        env_key: "GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID",
+        vault_name: "GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID",
+        description: "Google OAuth Client ID",
+    },
+    VaultSecretDef {
+        env_key: "GOTRUE_EXTERNAL_GOOGLE_SECRET",
+        vault_name: "GOTRUE_EXTERNAL_GOOGLE_SECRET",
+        description: "Google OAuth Secret",
+    },
+    // Facebook Auth
+    VaultSecretDef {
+        env_key: "GOTRUE_EXTERNAL_FACEBOOK_CLIENT_ID",
+        vault_name: "GOTRUE_EXTERNAL_FACEBOOK_CLIENT_ID",
+        description: "Facebook OAuth Client ID",
+    },
+    VaultSecretDef {
+        env_key: "GOTRUE_EXTERNAL_FACEBOOK_SECRET",
+        vault_name: "GOTRUE_EXTERNAL_FACEBOOK_SECRET",
+        description: "Facebook OAuth Secret",
+    },
 ];
 
 /// PG functions that read from vault and should be verified after migration.
@@ -313,7 +335,7 @@ mod tests {
 
     #[test]
     fn vault_secrets_has_expected_count() {
-        assert_eq!(VAULT_SECRETS.len(), 53);
+        assert_eq!(VAULT_SECRETS.len(), 57);
     }
 
     #[test]

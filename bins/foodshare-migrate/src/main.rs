@@ -61,8 +61,30 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum VaultAction {
-    /// Read .env.functions and create missing vault secrets
-    Sync,
+    /// Read from environment or .env file and create/update vault secrets
+    Sync {
+        /// Use environment variables as the source instead of the .env file
+        #[arg(long)]
+        from_env: bool,
+
+        /// Sync all variables from the source, not just the hardcoded list
+        #[arg(long)]
+        all: bool,
+
+        /// Only sync variables with this prefix (e.g. FS_SECRET_)
+        #[arg(long)]
+        prefix: Option<String>,
+    },
+    /// Set a specific secret in the vault
+    Set {
+        /// Name of the secret
+        key: String,
+        /// Value of the secret
+        value: String,
+        /// Human-readable description
+        #[arg(long, default_value = "Manual secret update")]
+        description: String,
+    },
     /// List all vault secrets
     List,
     /// Test PG functions that read from vault
@@ -95,7 +117,8 @@ fn main() -> ExitCode {
 
     let result = match &cli.command {
         Commands::Vault { action } => match action {
-            VaultAction::Sync => cmd_vault_sync(&cli),
+            VaultAction::Sync { from_env, all, prefix } => cmd_vault_sync(&cli, *from_env, *all, prefix.as_deref()),
+            VaultAction::Set { key, value, description } => cmd_vault_set(&cli, key, value, description),
             VaultAction::List => cmd_vault_list(&cli),
             VaultAction::Verify => cmd_vault_verify(&cli),
         },
@@ -121,16 +144,30 @@ fn main() -> ExitCode {
 // vault sync
 // ---------------------------------------------------------------------------
 
-fn cmd_vault_sync(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Error>> {
+fn cmd_vault_sync(
+    cli: &Cli,
+    from_env: bool,
+    all: bool,
+    prefix: Option<&str>,
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
     Status::header("Vault Sync");
 
     let client = make_vault_client(cli)?;
-    let env_vars = env_file::parse_env_file(&cli.env_file)?;
+
+    let env_vars = if from_env {
+        Status::info("Source: System environment variables");
+        std::env::vars().collect::<std::collections::HashMap<String, String>>()
+    } else {
+        Status::info(&format!("Source: {}", cli.env_file.display()));
+        env_file::parse_env_file(&cli.env_file)?
+    };
 
     let mut created = 0u32;
+    let mut updated = 0u32;
     let mut skipped = 0u32;
     let mut missing = 0u32;
 
+    // 1. Hardcoded secrets
     let pb = progress::progress_bar(secrets::VAULT_SECRETS.len() as u64, "Syncing vault secrets");
 
     for secret in secrets::VAULT_SECRETS {
@@ -139,12 +176,12 @@ fn cmd_vault_sync(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Erro
         let value = match env_vars.get(secret.env_key) {
             Some(v) if !v.is_empty() => v.clone(),
             _ => {
-                Status::warning(&format!(
-                    "No value for {} in {} — skipping {}",
-                    secret.env_key,
-                    cli.env_file.display(),
-                    secret.vault_name,
-                ));
+                if !all && prefix.is_none() {
+                    Status::warning(&format!(
+                        "No value for {} in source — skipping {}",
+                        secret.env_key, secret.vault_name,
+                    ));
+                }
                 missing += 1;
                 continue;
             }
@@ -157,31 +194,112 @@ fn cmd_vault_sync(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Erro
                 client.update_secret(&value, secret.vault_name)?;
                 Status::success(&format!("Updated: {}", secret.vault_name));
             }
-            skipped += 1; // Counting updates as 'skipped' as per user's instruction
-            continue;
-        }
-
-        if cli.dry_run {
-            Status::info(&format!("Would create: {}", secret.vault_name));
-            created += 1;
+            updated += 1;
         } else {
-            client.create_secret(&value, secret.vault_name, secret.description)?;
-            Status::success(&format!("Created: {}", secret.vault_name));
+            if cli.dry_run {
+                Status::info(&format!("Would create: {}", secret.vault_name));
+            } else {
+                client.create_secret(&value, secret.vault_name, secret.description)?;
+                Status::success(&format!("Created: {}", secret.vault_name));
+            }
             created += 1;
         }
     }
 
-    progress::finish_success(&pb, "Done");
+    progress::finish_success(&pb, "Hardcoded sync done");
+
+    // 2. Dynamic sync (if --all or --prefix)
+    if all || prefix.is_some() {
+        Status::subheader("Dynamic Sync");
+        let pb_dynamic = progress::progress_bar(env_vars.len() as u64, "Scanning source for dynamic secrets");
+
+        for (key, value) in &env_vars {
+            pb_dynamic.inc(1);
+
+            // Skip if it's already in hardcoded list
+            if secrets::VAULT_SECRETS.iter().any(|s| s.env_key == key) {
+                continue;
+            }
+
+            // check prefix
+            if let Some(p) = prefix {
+                if !key.starts_with(p) {
+                    continue;
+                }
+            } else if !all {
+                continue;
+            }
+
+            // Exclude common system/shell vars if using --all from env
+            if all && from_env {
+                let excluded = ["PATH", "HOME", "USER", "PWD", "SHELL", "LS_COLORS", "_"];
+                if excluded.contains(&key.as_str()) {
+                    continue;
+                }
+            }
+
+            if value.is_empty() {
+                continue;
+            }
+
+            if client.secret_exists(key)? {
+                if cli.dry_run {
+                    Status::info(&format!("Would update (dynamic): {}", key));
+                } else {
+                    client.update_secret(value, key)?;
+                    Status::success(&format!("Updated (dynamic): {}", key));
+                }
+                updated += 1;
+            } else {
+                if cli.dry_run {
+                    Status::info(&format!("Would create (dynamic): {}", key));
+                } else {
+                    client.create_secret(value, key, "Dynamic secret via migrate tool")?;
+                    Status::success(&format!("Created (dynamic): {}", key));
+                }
+                created += 1;
+            }
+        }
+        progress::finish_success(&pb_dynamic, "Dynamic sync done");
+    }
 
     println!();
     if cli.dry_run {
         Status::info(&format!(
-            "Dry run: would create {created}, skip {skipped}, missing from env: {missing}"
+            "Dry run: would create {created}, update {updated}, missing from source: {missing}"
         ));
     } else {
         Status::success(&format!(
-            "Created: {created}, Skipped: {skipped}, Missing from env: {missing}"
+            "Created: {created}, Updated: {updated}, Missing from source: {missing}"
         ));
+    }
+
+    Ok(())
+}
+
+fn cmd_vault_set(
+    cli: &Cli,
+    key: &str,
+    value: &str,
+    description: &str,
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    Status::header("Vault Set");
+    let client = make_vault_client(cli)?;
+
+    if client.secret_exists(key)? {
+        if cli.dry_run {
+            Status::info(&format!("Would update: {} (dry run)", key));
+        } else {
+            client.update_secret(value, key)?;
+            Status::success(&format!("Updated: {}", key));
+        }
+    } else {
+        if cli.dry_run {
+            Status::info(&format!("Would create: {} (dry run)", key));
+        } else {
+            client.create_secret(value, key, description)?;
+            Status::success(&format!("Created: {}", key));
+        }
     }
 
     Ok(())
@@ -443,7 +561,7 @@ fn cmd_run(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Error>> {
     Status::header("Full Migration");
 
     Status::step(1, 3, "Syncing vault secrets...");
-    cmd_vault_sync(cli)?;
+    cmd_vault_sync(cli, false)?;
 
     Status::step(2, 3, "Syncing env file...");
     cmd_env_sync(cli)?;
