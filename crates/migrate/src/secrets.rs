@@ -101,6 +101,22 @@ pub const VAULT_SECRETS: &[VaultSecretDef] = &[
         vault_name: "CRON_SECRET",
         description: "Secret for authorizing cron job triggers",
     },
+    // Bootstrapping
+    VaultSecretDef {
+        env_key: "POSTGRES_PASSWORD",
+        vault_name: "POSTGRES_PASSWORD",
+        description: "Postgres root password",
+    },
+    VaultSecretDef {
+        env_key: "ANON_KEY",
+        vault_name: "ANON_KEY",
+        description: "Supabase anonymous API key",
+    },
+    VaultSecretDef {
+        env_key: "SERVICE_ROLE_KEY",
+        vault_name: "SERVICE_ROLE_KEY",
+        description: "Supabase service_role API key",
+    },
     // Monitoring & Alerts
     VaultSecretDef {
         env_key: "SLACK_WEBHOOK_URL",
@@ -335,7 +351,7 @@ mod tests {
 
     #[test]
     fn vault_secrets_has_expected_count() {
-        assert_eq!(VAULT_SECRETS.len(), 57);
+        assert_eq!(VAULT_SECRETS.len(), 60);
     }
 
     #[test]
