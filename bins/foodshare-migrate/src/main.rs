@@ -239,7 +239,13 @@ fn cmd_vault_sync(
 
             // Exclude common system/shell vars if using --all from env
             if all && from_env {
-                let excluded = ["PATH", "HOME", "USER", "PWD", "SHELL", "LS_COLORS", "_"];
+                let excluded = [
+                    "PATH", "HOME", "USER", "PWD", "SHELL", "LS_COLORS", "_",
+                    "SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "SSH_AUTH_SOCK",
+                    "LANG", "LC_ALL", "LANGUAGE", "DEBIAN_FRONTEND", "TERM",
+                    "MAIL", "OLDPWD", "SHLVL", "MOTD_SHOWN", "XDG_SESSION_ID",
+                    "XDG_RUNTIME_DIR", "S_COLORS",
+                ];
                 if excluded.contains(&key.as_str()) {
                     continue;
                 }
@@ -398,10 +404,10 @@ fn cmd_env_sync(cli: &Cli, from_vault: bool) -> std::result::Result<(), Box<dyn 
         let vault_secrets = client.get_decrypted_secrets()?;
         
         // Compute which vault secrets are missing from the env file
-        let mut to_add = std::collections::HashMap::new();
+        let mut to_add = Vec::new();
         for (name, value) in vault_secrets {
             if !existing.contains_key(&name) {
-                to_add.insert(name, value);
+                to_add.push((name, value));
             }
         }
         to_add

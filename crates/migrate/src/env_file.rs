@@ -1,7 +1,7 @@
-//! `.env.functions` file parsing and manipulation
-//!
-//! Provides utilities for reading KEY=VALUE env files and appending
-//! missing variables with default placeholder values.
+/// `.env.functions` file parsing and manipulation
+///
+/// Provides utilities for reading KEY=VALUE env files and appending
+/// missing variables with proper quoting and escaping.
 
 use crate::error::{MigrateError, Result};
 use std::collections::HashMap;
@@ -114,16 +114,7 @@ pub fn upsert_var(path: &Path, key: &str, value: &str) -> Result<()> {
         String::new()
     };
 
-    let needs_quotes = value.contains('\n') || value.contains(' ') || value.contains('=');
-    let formatted_value = if needs_quotes {
-        format!(
-            "\"{}\"",
-            value.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\n")
-        )
-    } else {
-        value.to_string()
-    };
-
+    let formatted_value = format_env_value(value);
     let new_line = format!("{key}={formatted_value}");
     let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
     let mut found = false;
@@ -194,7 +185,8 @@ pub fn append_missing_vars(path: &Path, vars: &[(String, String)]) -> Result<App
         writeln!(file)?;
         writeln!(file, "# Added by foodshare-migrate")?;
         for (key, value) in &to_append {
-            writeln!(file, "{key}={value}")?;
+            let formatted = format_env_value(value);
+            writeln!(file, "{key}={formatted}")?;
         }
     }
 
@@ -202,6 +194,22 @@ pub fn append_missing_vars(path: &Path, vars: &[(String, String)]) -> Result<App
         appended: to_append.len(),
         skipped,
     })
+}
+
+/// Format a value for use in an env file.
+///
+/// Wraps in double quotes if it contains newlines, spaces, or equals signs,
+/// and escapes backslashes and double quotes.
+fn format_env_value(value: &str) -> String {
+    let needs_quotes = value.contains('\n') || value.contains(' ') || value.contains('=') || value.starts_with('"');
+    if needs_quotes {
+        format!(
+            "\"{}\"",
+            value.replace('\\', "\\\\").replace('"', "\\\"")
+        )
+    } else {
+        value.to_string()
+    }
 }
 
 /// A group of related environment variables.
