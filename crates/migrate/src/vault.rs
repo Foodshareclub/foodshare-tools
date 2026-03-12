@@ -99,6 +99,19 @@ impl VaultClient {
         Ok(output.lines().map(|l| l.trim().to_string()).collect())
     }
 
+    /// Get all decrypted secrets from the vault.
+    pub fn get_decrypted_secrets(&self) -> Result<std::collections::HashMap<String, String>> {
+        let output = self.run_sql("SELECT name, decrypted_secret FROM vault.decrypted_secrets;")?;
+        let mut map = std::collections::HashMap::new();
+        for line in output.lines() {
+            let parts: Vec<&str> = line.split('|').collect();
+            if parts.len() == 2 {
+                map.insert(parts[0].trim().to_string(), parts[1].trim().to_string());
+            }
+        }
+        Ok(map)
+    }
+
     /// Check if a secret exists in the vault.
     pub fn secret_exists(&self, name: &str) -> Result<bool> {
         let escaped = escape_sql_string(name);

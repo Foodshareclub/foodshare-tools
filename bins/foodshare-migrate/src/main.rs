@@ -94,7 +94,11 @@ enum VaultAction {
 #[derive(Subcommand)]
 enum EnvAction {
     /// Append missing variables to .env.functions
-    Sync,
+    Sync {
+        /// Populates the environment file from the Supabase Vault instead of known defaults
+        #[arg(long)]
+        from_vault: bool,
+    },
     /// Show what would be added (dry run)
     Diff,
     /// Update or append a variable in the env file
@@ -104,6 +108,8 @@ enum EnvAction {
         /// Variable value
         value: String,
     },
+    /// Dump all vault secrets into .env format to stdout
+    Dump,
 }
 
 fn main() -> ExitCode {
@@ -123,9 +129,10 @@ fn main() -> ExitCode {
             VaultAction::Verify => cmd_vault_verify(&cli),
         },
         Commands::Env { action } => match action {
-            EnvAction::Sync => cmd_env_sync(&cli),
+            EnvAction::Sync { from_vault } => cmd_env_sync(&cli, *from_vault),
             EnvAction::Diff => cmd_env_diff(&cli),
             EnvAction::Set { key, value } => cmd_env_set(&cli, key, value),
+            EnvAction::Dump => cmd_env_dump(&cli),
         },
         Commands::Status => cmd_status(&cli),
         Commands::Run => cmd_run(&cli),
@@ -381,24 +388,40 @@ fn cmd_vault_verify(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Er
 // env sync
 // ---------------------------------------------------------------------------
 
-fn cmd_env_sync(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Error>> {
+fn cmd_env_sync(cli: &Cli, from_vault: bool) -> std::result::Result<(), Box<dyn std::error::Error>> {
     Status::header("Env File Sync");
-
     let existing = env_file::parse_env_file(&cli.env_file)?;
-    let missing = env_file::compute_missing_vars(&existing);
+
+    let missing = if from_vault {
+        Status::info("Source: Supabase Vault");
+        let client = make_vault_client(cli)?;
+        let vault_secrets = client.get_decrypted_secrets()?;
+        
+        // Compute which vault secrets are missing from the env file
+        let mut to_add = std::collections::HashMap::new();
+        for (name, value) in vault_secrets {
+            if !existing.contains_key(&name) {
+                to_add.insert(name, value);
+            }
+        }
+        to_add
+    } else {
+        Status::info("Source: Known defaults");
+        env_file::compute_missing_vars(&existing)
+    };
 
     if missing.is_empty() {
-        Status::success("All known env vars are present");
+        Status::success("All source variables are already present in the env file");
         return Ok(());
     }
 
     if cli.dry_run {
         Status::info(&format!(
-            "Would append {} missing variables (use without --dry-run to apply)",
+            "Would append {} variables (use without --dry-run to apply)",
             missing.len()
         ));
-        for (key, default) in &missing {
-            println!("  {} {key}={default}", "+".green());
+        for (key, _) in &missing {
+            println!("  {} {key}", "+".green());
         }
         return Ok(());
     }
@@ -558,15 +581,21 @@ fn cmd_status(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Error>> 
 // ---------------------------------------------------------------------------
 
 fn cmd_run(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Error>> {
-    Status::header("Full Migration");
+    Status::header("Full Migration (Vault-First)");
 
-    Status::step(1, 3, "Syncing vault secrets...");
-    cmd_vault_sync(cli, false)?;
+    Status::step(1, 4, "Syncing source to Vault...");
+    // By default, sync all from the specified env file to vault
+    cmd_vault_sync(cli, false, true, None)?;
 
-    Status::step(2, 3, "Syncing env file...");
-    cmd_env_sync(cli)?;
+    Status::step(2, 4, "Syncing Vault to environment file...");
+    // Populate the env file with everything currently in the Vault
+    cmd_env_sync(cli, true)?;
 
-    Status::step(3, 3, "Verifying vault functions...");
+    Status::step(3, 4, "Ensuring mandatory env variables...");
+    // Fallback to defaults for missing infra variables (POSTGRES_PASSWORD etc)
+    cmd_env_sync(cli, false)?;
+
+    Status::step(4, 4, "Verifying Vault integration...");
     cmd_vault_verify(cli)?;
 
     println!();
@@ -600,6 +629,22 @@ fn cmd_env_set(
             key,
             cli.env_file.display()
         ));
+    }
+
+    Ok(())
+}
+
+fn cmd_env_dump(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let client = make_vault_client(cli)?;
+    let secrets = client.get_decrypted_secrets()?;
+
+    let mut keys: Vec<_> = secrets.keys().collect();
+    keys.sort();
+
+    for key in keys {
+        if let Some(value) = secrets.get(key) {
+            println!("{key}={value}");
+        }
     }
 
     Ok(())
