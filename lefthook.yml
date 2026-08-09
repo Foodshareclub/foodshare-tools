@@ -37,8 +37,24 @@ pre-commit:
         fi
 
     # -------------------------------------------------------------------------
-    # 2. TYPECHECKERS (Priority 2 - Domain Type Safety across Web, Backend, Mobile, Tools)
+    # 2. TYPECHECKERS & STAGED TESTS (Priority 2)
     # -------------------------------------------------------------------------
+    web-staged-tests:
+      priority: 2
+      glob: "src/__tests__/**/*.test.{ts,tsx}"
+      run: |
+        if [ -f package.json ]; then
+          bun test {staged_files}
+        fi
+
+    backend-staged-tests:
+      priority: 2
+      glob: "supabase/functions/**/*_test.ts"
+      run: |
+        if command -v deno >/dev/null 2>&1; then
+          deno test --allow-env --allow-net {staged_files}
+        fi
+
     web-type-check:
       priority: 2
       run: |
