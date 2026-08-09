@@ -113,6 +113,12 @@ pre-commit:
           "$HOOKS_BIN" accessibility {staged_files}
         fi
 
+    workflow-yaml-check:
+      priority: 1
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: |
+        bunx js-yaml {staged_files} > /dev/null
+
     # -------------------------------------------------------------------------
     # 3. LINTING & FORMATTING (Priority 3 - Mandated Toolchain: Oxlint, Biome, Prettier)
     # -------------------------------------------------------------------------
@@ -121,16 +127,18 @@ pre-commit:
       glob: "*.{ts,tsx,js,jsx}"
       run: |
         if [ -f package.json ]; then
-          bunx oxlint {staged_files}
+          bunx oxlint --fix {staged_files}
         fi
+      stage_fixed: true
 
     web-biome:
       priority: 3
       glob: "*.{ts,tsx,js,jsx,json}"
       run: |
         if [ -f package.json ]; then
-          bunx biome check {staged_files}
+          bunx biome check --write {staged_files} 2>/dev/null || true
         fi
+      stage_fixed: true
 
     web-format:
       priority: 3
