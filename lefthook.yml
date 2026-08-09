@@ -208,6 +208,23 @@ pre-push:
           bunx biome check src/
         fi
 
+    i18n-sync-check:
+      priority: 1
+      run: |
+        if [ -f package.json ] && grep -q "translations:sync" package.json; then
+          echo "🌐 Verifying i18n translation keys synchronization..."
+          bun run translations:sync || true
+        fi
+
+    supabase-secret-check:
+      priority: 1
+      glob: "*.{ts,tsx,js,jsx,json,yml,yaml,env}"
+      run: |
+        if grep -qE "service_role_key|SUPABASE_SERVICE_ROLE_KEY=ey" {staged_files} 2>/dev/null; then
+          echo "🚨 CRITICAL: Potential Supabase Service Role Key leak detected in staged files!"
+          exit 1
+        fi
+
     backend-type-check-full:
       priority: 1
       run: |
