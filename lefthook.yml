@@ -43,7 +43,7 @@ pre-commit:
       priority: 2
       run: |
         if [ -f tsconfig.json ]; then
-          bunx tsc --noEmit --incremental || true
+          bunx tsc --noEmit
         fi
 
     backend-type-check:
@@ -51,7 +51,7 @@ pre-commit:
       glob: "supabase/functions/**/*.ts"
       run: |
         if command -v deno >/dev/null 2>&1 && [ -f supabase/functions/deno.json ]; then
-          deno check {staged_files} || true
+          deno check {staged_files}
         fi
 
     mobile-type-check:
@@ -97,9 +97,8 @@ pre-commit:
       glob: "*.{ts,tsx,js,jsx,json}"
       run: |
         if [ -f package.json ]; then
-          bunx biome check --write {staged_files} 2>/dev/null || true
+          bunx biome check {staged_files}
         fi
-      stage_fixed: true
 
     web-format:
       priority: 3
@@ -107,15 +106,6 @@ pre-commit:
       run: |
         if [ -f bun.lockb ] || [ -f bun.lock ]; then
           bunx prettier --write --cache --cache-strategy metadata {staged_files}
-        fi
-      stage_fixed: true
-
-    web-lint:
-      priority: 3
-      glob: "*.{ts,tsx,js,jsx}"
-      run: |
-        if [ -f eslint.config.mjs ] || [ -f eslint.config.js ]; then
-          bunx eslint {staged_files} --fix --max-warnings=0 --no-warn-ignored
         fi
       stage_fixed: true
 
@@ -152,10 +142,29 @@ pre-push:
   parallel: false
   commands:
     # -------------------------------------------------------------------------
-    # 1. PACKAGE SECURITY AUDIT & PACKAGE UPDATE CHECKERS (Priority 1)
+    # 1. UNIT TEST SUITE & DOMAIN VALIDATION (Priority 1)
+    # -------------------------------------------------------------------------
+    web-unit-tests:
+      priority: 1
+      run: |
+        if [ -f package.json ] && [ -d src/__tests__ ]; then
+          echo "🧪 Running fast unit test suite before push..."
+          bun test src/__tests__/actions/auth.test.ts src/__tests__/actions/email.test.ts src/__tests__/actions/newsletter.test.ts src/__tests__/actions/products.test.ts src/__tests__/lib/ src/store/ src/utils/ src/api/ src/lib/logger/ src/lib/testing/
+        fi
+
+    web-type-check-full:
+      priority: 1
+      run: |
+        if [ -f tsconfig.json ]; then
+          echo "🔍 Verifying TypeScript types before push..."
+          bunx tsc --noEmit
+        fi
+
+    # -------------------------------------------------------------------------
+    # 2. PACKAGE SECURITY AUDIT & PACKAGE UPDATE CHECKERS (Priority 2)
     # -------------------------------------------------------------------------
     package-security-audit:
-      priority: 1
+      priority: 2
       run: |
         if [ -f bun.lockb ] || [ -f bun.lock ]; then
           echo "🛡️ Running package cybersecurity audit..."
@@ -163,7 +172,7 @@ pre-push:
         fi
 
     package-update-check:
-      priority: 1
+      priority: 2
       run: |
         if [ -f package.json ]; then
           echo "📦 Checking package updates across domain..."
@@ -171,7 +180,7 @@ pre-push:
         fi
 
     protected-branch:
-      priority: 1
+      priority: 2
       run: |
         REPO_ROOT="$(git rev-parse --show-toplevel)"
         HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/release/lefthook-rs}"
