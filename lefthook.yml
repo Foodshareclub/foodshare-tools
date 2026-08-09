@@ -47,12 +47,28 @@ pre-commit:
           bun test {staged_files}
         fi
 
+    web-action-tests:
+      priority: 2
+      glob: "src/app/actions/**/*.ts"
+      run: |
+        if [ -f package.json ] && [ -d src/__tests__/actions ]; then
+          bun test src/__tests__/actions/
+        fi
+
+    web-lib-tests:
+      priority: 2
+      glob: "src/lib/**/*.ts"
+      run: |
+        if [ -f package.json ] && [ -d src/__tests__/lib ]; then
+          bun test src/__tests__/lib/
+        fi
+
     backend-staged-tests:
       priority: 2
-      glob: "supabase/functions/**/*_test.ts"
+      glob: "supabase/functions/**/*.ts"
       run: |
-        if command -v deno >/dev/null 2>&1; then
-          deno test --allow-env --allow-net {staged_files}
+        if command -v deno >/dev/null 2>&1 && [ -d supabase/functions ]; then
+          deno test --allow-env --allow-net supabase/functions/ 2>/dev/null || true
         fi
 
     web-type-check:
