@@ -241,6 +241,14 @@ pre-push:
           exit 1
         fi
 
+    backend-deno-lint-full:
+      priority: 1
+      run: |
+        if command -v deno >/dev/null 2>&1 && [ -d supabase/functions ]; then
+          echo "🦕 Verifying Deno Edge Function linting before push..."
+          deno lint supabase/functions/
+        fi
+
     backend-type-check-full:
       priority: 1
       run: |
