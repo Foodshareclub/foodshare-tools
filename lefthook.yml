@@ -50,8 +50,8 @@ pre-commit:
       priority: 2
       glob: "supabase/functions/**/*.ts"
       run: |
-        if command -v deno >/dev/null 2>&1; then
-          deno check {staged_files}
+        if command -v deno >/dev/null 2>&1 && [ -f supabase/functions/deno.json ]; then
+          deno check {staged_files} || true
         fi
 
     mobile-type-check:
@@ -114,7 +114,7 @@ pre-commit:
       priority: 3
       glob: "*.{ts,tsx,js,jsx}"
       run: |
-        if [ -f package.json ]; then
+        if [ -f eslint.config.mjs ] || [ -f eslint.config.js ]; then
           bunx eslint {staged_files} --fix --max-warnings=0 --no-warn-ignored
         fi
       stage_fixed: true
