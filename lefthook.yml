@@ -1,15 +1,13 @@
-# Centralized Lefthook Configuration for FoodShare Ecosystem
-# This file lives in foodshare-tools and is shared by all repositories.
-#
-# Usage (in each individual repo's lefthook.yml):
-#   extends: ../foodshare-tools/lefthook.yml
+# Centralized Enterprise Lefthook Configuration for FoodShare Ecosystem
+# Shared across foodshare-web, foodshare-backend, foodshare-app, and foodshare-tools via symlinks.
 
 pre-commit:
   parallel: false
   commands:
-    # 1. Global Security Check (Every Repo)
     # -------------------------------------------------------------------------
-    security:
+    # 1. CYBERSECURITY CHECKERS (Priority 1 - OWASP Secrets, API Keys, Web Vulnerabilities)
+    # -------------------------------------------------------------------------
+    security-secrets:
       priority: 1
       run: |
         REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -19,62 +17,125 @@ pre-commit:
           "$HOOKS_BIN" security {staged_files}
         fi
 
-    # 2. Web Repositories (Next.js / Bun)
+    web-cybersecurity:
+      priority: 1
+      glob: "*.{ts,tsx,js,jsx}"
+      run: |
+        REPO_ROOT="$(git rev-parse --show-toplevel)"
+        HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/release/lefthook-rs}"
+        [ ! -f "$HOOKS_BIN" ] && HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/debug/lefthook-rs}"
+        if [ -f "$HOOKS_BIN" ]; then
+          "$HOOKS_BIN" nextjs-security {staged_files}
+        fi
+
+    backend-cybersecurity:
+      priority: 1
+      glob: "supabase/functions/**/*.ts"
+      run: |
+        if command -v deno >/dev/null 2>&1; then
+          deno lint {staged_files}
+        fi
+
     # -------------------------------------------------------------------------
+    # 2. TYPECHECKERS (Priority 2 - Domain Type Safety across Web, Backend, Mobile, Tools)
+    # -------------------------------------------------------------------------
+    web-type-check:
+      priority: 2
+      run: |
+        if [ -f tsconfig.json ]; then
+          bunx tsc --noEmit --incremental
+        fi
+
+    backend-type-check:
+      priority: 2
+      glob: "supabase/functions/**/*.ts"
+      run: |
+        if command -v deno >/dev/null 2>&1; then
+          deno check {staged_files}
+        fi
+
+    mobile-type-check:
+      priority: 2
+      glob: "**/*.swift"
+      run: |
+        if command -v swiftformat >/dev/null 2>&1; then
+          swiftformat --lint {staged_files}
+        fi
+
+    tools-type-check:
+      priority: 2
+      glob: "**/*.rs"
+      run: |
+        if [ -f Cargo.toml ] && command -v cargo >/dev/null 2>&1; then
+          cargo check --workspace
+        fi
+
+    web-accessibility:
+      priority: 2
+      glob: "*.{tsx,jsx}"
+      run: |
+        REPO_ROOT="$(git rev-parse --show-toplevel)"
+        HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/release/lefthook-rs}"
+        [ ! -f "$HOOKS_BIN" ] && HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/debug/lefthook-rs}"
+        if [ -f "$HOOKS_BIN" ]; then
+          "$HOOKS_BIN" accessibility {staged_files}
+        fi
+
+    # -------------------------------------------------------------------------
+    # 3. LINTING & FORMATTING (Priority 3 - Mandated Toolchain: Oxlint, Biome, Prettier)
+    # -------------------------------------------------------------------------
+    web-oxlint:
+      priority: 3
+      glob: "*.{ts,tsx,js,jsx}"
+      run: |
+        if [ -f package.json ]; then
+          bunx oxlint {staged_files}
+        fi
+
+    web-biome:
+      priority: 3
+      glob: "*.{ts,tsx,js,jsx,json}"
+      run: |
+        if [ -f package.json ]; then
+          bunx biome check --write {staged_files} 2>/dev/null || true
+        fi
+      stage_fixed: true
+
     web-format:
+      priority: 3
       glob: "*.{ts,tsx,js,jsx,json,css,scss,md,yaml,yml}"
       run: |
         if [ -f bun.lockb ] || [ -f bun.lock ]; then
           bunx prettier --write --cache --cache-strategy metadata {staged_files}
         fi
       stage_fixed: true
-      priority: 2
 
     web-lint:
+      priority: 3
       glob: "*.{ts,tsx,js,jsx}"
       run: |
         if [ -f package.json ]; then
           bunx eslint {staged_files} --fix --max-warnings=0 --no-warn-ignored
         fi
       stage_fixed: true
-      priority: 2
-
-    web-type-check:
-      run: |
-        if [ -f tsconfig.json ]; then
-          bunx tsc --noEmit --incremental
-        fi
-      priority: 3
-
-    # 3. Backend Repositories (Deno)
-    # -------------------------------------------------------------------------
-    backend-lint:
-      glob: "supabase/functions/**/*.ts"
-      run: |
-        if command -v deno >/dev/null 2>&1; then
-          deno lint {staged_files}
-        fi
-      priority: 2
 
     backend-format:
+      priority: 3
       glob: "supabase/functions/**/*.ts"
       run: |
         if command -v deno >/dev/null 2>&1; then
           deno fmt {staged_files}
         fi
       stage_fixed: true
-      priority: 2
 
-    # 4. Mobile Repositories (Swift / Skip)
-    # -------------------------------------------------------------------------
     mobile-format:
+      priority: 3
       glob: "**/*.swift"
       run: |
         if command -v swiftformat >/dev/null 2>&1; then
           swiftformat {staged_files}
         fi
       stage_fixed: true
-      priority: 2
 
 commit-msg:
   commands:
@@ -90,6 +151,25 @@ commit-msg:
 pre-push:
   parallel: false
   commands:
+    # -------------------------------------------------------------------------
+    # 1. PACKAGE SECURITY AUDIT & PACKAGE UPDATE CHECKERS (Priority 1)
+    # -------------------------------------------------------------------------
+    package-security-audit:
+      priority: 1
+      run: |
+        if [ -f bun.lockb ] || [ -f bun.lock ]; then
+          echo "🛡️ Running package cybersecurity audit..."
+          bun audit || echo "⚠️ Package security warnings found."
+        fi
+
+    package-update-check:
+      priority: 1
+      run: |
+        if [ -f package.json ]; then
+          echo "📦 Checking package updates across domain..."
+          bun outdated || true
+        fi
+
     protected-branch:
       priority: 1
       run: |
@@ -110,7 +190,7 @@ pre-push:
           "$HOOKS_BIN" large-files --max-size 1024
         fi
 
-# Maintenance Awareness
+# Maintenance & Package Update Awareness
 post-checkout:
   commands:
     env-awareness:
@@ -118,10 +198,10 @@ post-checkout:
         if git diff --name-only {1} {2} 2>/dev/null | grep -qE "^\.env"; then
           echo "⚠️  Environment files may have changed. Review .env or .env.functions"
         fi
-    dependency-awareness:
+    package-update-awareness:
       run: |
-        if git diff --name-only {1} {2} 2>/dev/null | grep -qE "^(package.json|bun.lockb|bun.lock|Package.swift)$"; then
-          echo "📦 Dependencies may have changed. Consider running your package manager's install command."
+        if git diff --name-only {1} {2} 2>/dev/null | grep -qE "^(package.json|bun.lockb|bun.lock|deno.json|Package.swift|Cargo.lock)$"; then
+          echo "📦 Dependencies changed! Consider running package manager update/install (e.g. bun install, deno cache)."
         fi
 
 post-merge:
@@ -131,8 +211,8 @@ post-merge:
         if git diff-tree -r --name-only --no-commit-id HEAD@{1} HEAD | grep -qE "^\.env"; then
           echo "⚠️  Environment files changed. Review .env or .env.functions"
         fi
-    dependency-awareness:
+    package-update-awareness:
       run: |
-        if git diff-tree -r --name-only --no-commit-id HEAD@{1} HEAD | grep -qE "^(package.json|bun.lockb|bun.lock|Package.swift)$"; then
-          echo "📦 Dependencies changed. Consider running your package manager's install command."
+        if git diff-tree -r --name-only --no-commit-id HEAD@{1} HEAD | grep -qE "^(package.json|bun.lockb|bun.lock|deno.json|Package.swift|Cargo.lock)$"; then
+          echo "📦 Dependencies changed! Consider running package manager update/install."
         fi
