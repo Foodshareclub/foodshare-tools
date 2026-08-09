@@ -176,6 +176,14 @@ pre-push:
     # -------------------------------------------------------------------------
     # 1. UNIT TEST SUITE & DOMAIN VALIDATION (Priority 1)
     # -------------------------------------------------------------------------
+    web-build-check:
+      priority: 1
+      run: |
+        if [ -f package.json ] && [ -f next.config.ts -o -f next.config.js -o -f next.config.mjs ]; then
+          echo "🏗️ Verifying Next.js Turbopack build compilation before push..."
+          bun run build
+        fi
+
     web-unit-tests:
       priority: 1
       run: |
