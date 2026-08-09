@@ -156,8 +156,42 @@ pre-push:
       priority: 1
       run: |
         if [ -f tsconfig.json ]; then
-          echo "🔍 Verifying TypeScript types before push..."
+          echo "🔍 Verifying Web TypeScript types before push..."
           bunx tsc --noEmit
+        fi
+
+    web-oxlint-full:
+      priority: 1
+      run: |
+        if [ -f package.json ] && [ -d src ]; then
+          echo "⚡ Verifying Oxlint zero-warning baseline before push..."
+          bunx oxlint src/
+        fi
+
+    web-biome-full:
+      priority: 1
+      run: |
+        if [ -f package.json ] && [ -d src ]; then
+          echo "🎨 Verifying Biome linting and formatting before push..."
+          bunx biome check src/
+        fi
+
+    backend-type-check-full:
+      priority: 1
+      run: |
+        if command -v deno >/dev/null 2>&1 && [ -d supabase/functions ]; then
+          echo "⚡ Verifying Deno Edge Function types before push..."
+          for f in supabase/functions/*/index.ts; do
+            [ -f "$f" ] && deno check "$f"
+          done
+        fi
+
+    backend-unit-tests:
+      priority: 1
+      run: |
+        if command -v deno >/dev/null 2>&1 && [ -d supabase/functions ]; then
+          echo "🧪 Running Deno Edge Function unit tests before push..."
+          deno test --allow-env --allow-net supabase/functions/
         fi
 
     # -------------------------------------------------------------------------
