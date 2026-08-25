@@ -19,7 +19,7 @@ cd foodshare-tools
 cargo build --release
 
 # Binaries are in target/release/
-ls target/release/foodshare-*
+ls target/release/{fs-app,lefthook-rs,fs-image} foodshare-*
 ```
 
 ### Install Globally
@@ -49,6 +49,7 @@ curl -sSL https://raw.githubusercontent.com/Foodshareclub/foodshare-tools/main/i
 ### iOS Development
 
 Required tools:
+
 - Xcode 15.2+
 - SwiftFormat
 - SwiftLint
@@ -68,6 +69,7 @@ fs-app doctor
 ### Android Development
 
 Required tools:
+
 - Android Studio / SDK
 - Kotlin compiler
 - Gradle
@@ -80,12 +82,20 @@ fs-app doctor
 ### Web Development
 
 Required tools:
+
 - Node.js 18+
 - bun
 
 ```bash
-# Verify environment
-lefthook-rs doctor
+# Available subcommands
+lefthook-rs security              # Secret scanning on staged files
+lefthook-rs conventional-commit   # Commit message validation
+lefthook-rs protected-branch      # Protected branch checks
+lefthook-rs large-files           # Large file detection
+lefthook-rs nextjs-security       # Next.js-specific security checks
+lefthook-rs accessibility         # Accessibility checks
+lefthook-rs bundle-size           # Bundle size analysis
+lefthook-rs pre-commit            # Full pre-commit gate
 ```
 
 ## Project Integration
@@ -97,36 +107,29 @@ Create `.foodshare-hooks.toml` in your project root:
 ```toml
 [commit_msg]
 types = ["feat", "fix", "docs", "style", "refactor", "test", "chore", "ci", "perf"]
-max_subject_length = 72
+max_length = 72
 
 [secrets]
 exclude_files = ["*.test.ts", "*.mock.ts"]
-
-[migrations]
-directory = "supabase/migrations"
 ```
 
-### 2. Configure Lefthook
+### 2. Wire Up Lefthook (Centralized)
 
-Add to `lefthook.yml`:
+Repos use the centralized `lefthook.yml` from foodshare-tools via symlink, with gates calling the built `lefthook-rs` binary through `FOODSHARE_HOOKS_BIN` (default: `../foodshare-tools/target/{release,debug}/lefthook-rs`):
 
-```yaml
-pre-commit:
-  parallel: true
-  commands:
-    secrets:
-      run: fs-app secrets  # or fs-app, lefthook-rs
+```bash
+# Symlink the centralized hook config into your repo
+ln -s ../foodshare-tools/lefthook.yml lefthook.yml
 
-commit-msg:
-  commands:
-    validate:
-      run: fs-app commit-msg {1}
-
-pre-push:
-  commands:
-    checks:
-      run: fs-app pre-push
+# Point lefthook at your locally built lefthook-rs binary
+export FOODSHARE_HOOKS_BIN=../foodshare-tools/target/release/lefthook-rs
 ```
+
+The priority-tiered gates run:
+
+- **pre-commit** — staged-file secret scan (`lefthook-rs security {staged_files}`), `nextjs-security`, oxlint/biome/prettier, and bun tests on staged files
+- **pre-push** — typecheck (`tsc`/`deno check`), Next.js build, full test suite, i18n-sync-check, supabase-secret-check, package audit, protected-branch, large-files
+- **commit-msg** — conventional-commit validation via `lefthook-rs conventional-commit`
 
 ### 3. Install Git Hooks
 

@@ -10,8 +10,7 @@ foodshare-tools/
 │   ├── core/         # Shared infrastructure
 │   ├── hooks/        # Git hook implementations
 │   ├── cli/          # CLI utilities
-│   ├── ios/          # iOS-specific functionality
-│   ├── android/      # Android-specific functionality
+│   ├── app/          # Cross-platform app support (iOS + Android)
 │   ├── web/          # Web-specific functionality
 │   ├── telemetry/    # Observability
 │   └── [libs]/       # Published libraries (geo, crypto, search, etc.)
@@ -33,7 +32,7 @@ foodshare-tools/
          ┌─────────────────┼─────────────────┐
          │                 │                 │
     ┌────▼────┐      ┌─────▼─────┐     ┌─────▼─────┐
-    │   ios   │      │  android  │     │    web    │  Platform crates
+    │   app   │      │    web    │     │  libs/*   │  Platform + domain crates
     └────┬────┘      └─────┬─────┘     └─────┬─────┘
          │                 │                 │
          └─────────────────┼─────────────────┘
@@ -82,18 +81,21 @@ Terminal output utilities:
 ### Platform Crates
 
 #### iOS (`fs-app`)
+
 - Xcode project parsing (xcodeproj)
 - Swift formatting/linting
 - Simulator management
 - Build system integration
 
 #### Android (`fs-app`)
+
 - Gradle integration
 - Kotlin formatting/linting
 - Emulator management
 - Swift-Android bridge
 
 #### Web (`foodshare-web`)
+
 - Next.js security scanning
 - Bundle size analysis
 - OWASP checks
@@ -110,28 +112,28 @@ Observability infrastructure:
 
 Standalone libraries with WASM support:
 
-| Crate | Purpose |
-|-------|---------|
-| `foodshare-geo` | Geospatial calculations |
-| `foodshare-crypto` | HMAC, webhook verification |
-| `foodshare-search` | Fuzzy text search |
-| `foodshare-compression` | Brotli/Gzip |
-| `foodshare-image` | Image format detection |
+| Crate                   | Purpose                    |
+| ----------------------- | -------------------------- |
+| `foodshare-geo`         | Geospatial calculations    |
+| `foodshare-crypto`      | HMAC, webhook verification |
+| `foodshare-search`      | Fuzzy text search          |
+| `foodshare-compression` | Brotli/Gzip                |
+| `foodshare-image`       | Image format detection     |
 
 ## Error Handling
 
 All errors use structured codes for programmatic handling:
 
-| Range | Category | Example |
-|-------|----------|---------|
-| E1xxx | General | E1001 Internal error |
-| E2xxx | IO | E2001 File not found |
-| E3xxx | Configuration | E3002 Parse error |
-| E4xxx | Git | E4001 Not a git repo |
-| E5xxx | Process | E5001 Command not found |
-| E6xxx | Validation | E6001 Invalid input |
-| E7xxx | Security | E7001 Secret detected |
-| E8xxx | Platform | E8001 Xcode error |
+| Range | Category      | Example                 |
+| ----- | ------------- | ----------------------- |
+| E1xxx | General       | E1001 Internal error    |
+| E2xxx | IO            | E2001 File not found    |
+| E3xxx | Configuration | E3002 Parse error       |
+| E4xxx | Git           | E4001 Not a git repo    |
+| E5xxx | Process       | E5001 Command not found |
+| E6xxx | Validation    | E6001 Invalid input     |
+| E7xxx | Security      | E7001 Secret detected   |
+| E8xxx | Platform      | E8001 Xcode error       |
 
 ## Configuration
 
@@ -141,14 +143,11 @@ TOML-based configuration with validation:
 # .foodshare-hooks.toml
 [commit_msg]
 types = ["feat", "fix", "docs", ...]
-max_subject_length = 72
+max_length = 72
 
 [secrets]
 exclude_files = ["*.test.ts"]
 exclude_patterns = ["EXAMPLE_"]
-
-[migrations]
-directory = "supabase/migrations"
 ```
 
 ## Performance Considerations

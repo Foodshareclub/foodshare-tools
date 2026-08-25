@@ -2,29 +2,28 @@
 
 Rust CLI workspace for git hooks, code quality, and development tooling across iOS, Android, and Web.
 
-**Version:** 1.4.0 | **Edition:** 2024 | **MSRV:** 1.85 | **License:** MIT
+**Version:** 1.4.0 | **Edition:** 2024 | **MSRV:** 1.85 (via `Cargo.toml`; no `rust-toolchain.toml`) | **License:** MIT
 
 ## Commands
 
-| Command | Purpose |
-|---------|---------|
-| `cargo build --release --workspace` | Build all binaries |
-| `cargo test --workspace` | Run all tests |
-| `cargo fmt --all -- --check` | Check formatting |
-| `cargo clippy --workspace --all-targets -- -D warnings` | Lint |
-| `cargo llvm-cov --workspace` | Coverage report |
-| `cargo bench --workspace` | Run benchmarks |
+| Command                                                 | Purpose            |
+| ------------------------------------------------------- | ------------------ |
+| `cargo build --release --workspace`                     | Build all binaries |
+| `cargo test --workspace`                                | Run all tests      |
+| `cargo fmt --all -- --check`                            | Check formatting   |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Lint               |
+| `cargo llvm-cov --workspace`                            | Coverage report    |
+| `cargo bench --workspace`                               | Run benchmarks     |
 
 ## Project Structure
 
 ```
 foodshare-tools/
-├── crates/                    # Library crates (16)
+├── crates/                    # Library crates (15)
 │   ├── core/                  # Shared: git, file scanning, process, health
 │   ├── hooks/                 # Git hooks: commit-msg, secrets, migrations
 │   ├── cli/                   # CLI utilities: terminal output, progress
-│   ├── ios/                   # iOS: Xcode, simulators, Swift tools
-│   ├── android/               # Android: Gradle, emulators, Kotlin
+│   ├── app/                   # Cross-platform app support (iOS + Android)
 │   ├── web/                   # Web: Next.js security, bundle analysis
 │   ├── telemetry/             # Observability: logging, metrics, tracing
 │   ├── geo/                   # Geospatial utilities
@@ -35,8 +34,8 @@ foodshare-tools/
 │   ├── swift-toolchain/       # Swift version management
 │   ├── api-client/            # API client utilities
 │   ├── migrate/               # Migration tooling
-│   └── motherduck-sync/       # MotherDuck data sync
-├── bins/                      # Binary crates (7)
+│   └── motherduck-sync/       # MotherDuck data sync (placeholder submodule)
+├── bins/                      # Binary crates (6)
 │   ├── fs-app/         # Cross-platform CLI
 │   ├── lefthook-rs/           # Web CLI (git hooks)
 │   ├── fs-image/              # Image processing CLI
@@ -48,32 +47,32 @@ foodshare-tools/
 ├── docs/                      # Documentation
 ├── packages/                  # Additional packages
 ├── .github/workflows/
-│   ├── ci.yml                 # CI: lint, test, build, coverage, docs
+│   ├── ci.yml                 # CI: lint, security audit (cargo-audit), test (3 OS), coverage, build (4 targets), docs
 │   ├── publish.yml            # Publish crates to crates.io
 │   └── release.yml            # Build release binaries + GitHub Release
-├── Cargo.toml                 # Workspace manifest
-└── Cargo.lock
+└── Cargo.toml                 # Workspace manifest
 ```
 
 ## CI/CD
 
 Three workflows:
-- **`ci.yml`** — Runs on push/PR: lint → test (3 OS) → coverage → build (3 targets) → docs → MSRV check
+
+- **`ci.yml`** — Runs on push/PR: lint → security audit (cargo-audit) → test (3 OS) → coverage → build (4 targets) → docs
 - **`publish.yml`** — Triggered by `v*` tags or manual dispatch: publishes crates to crates.io
 - **`release.yml`** — Triggered by `v*` tags: builds binaries, packages tarballs, creates GitHub Release
 
 ## Key Crates
 
-| Crate | Purpose |
-|-------|---------|
-| `foodshare-core` | Git operations, file scanning, process management |
-| `foodshare-hooks` | Commit message validation, secret scanning (15+ patterns) |
-| `foodshare-cli` | Terminal output, progress bars, colored output |
-| `fs-app` | Cross-platform (iOS, Android) CLI and project management |
-| `foodshare-web` | Next.js security checks, bundle analysis |
-| `foodshare-telemetry` | Structured logging, Prometheus metrics |
-| `foodshare-geo` | Geospatial utilities |
-| `foodshare-crypto` | HMAC signing, constant-time comparison |
+| Crate                 | Purpose                                                   |
+| --------------------- | --------------------------------------------------------- |
+| `foodshare-core`      | Git operations, file scanning, process management         |
+| `foodshare-hooks`     | Commit message validation, secret scanning (15+ patterns) |
+| `foodshare-cli`       | Terminal output, progress bars, colored output            |
+| `fs-app`              | Cross-platform (iOS, Android) CLI and project management  |
+| `foodshare-web`       | Next.js security checks, bundle analysis                  |
+| `foodshare-telemetry` | Structured logging, Prometheus metrics                    |
+| `foodshare-geo`       | Geospatial utilities                                      |
+| `foodshare-crypto`    | HMAC signing, constant-time comparison                    |
 
 ## Important Rules
 

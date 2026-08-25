@@ -30,3 +30,4 @@ coverage/
 .env
 .env.local
 *.local.toml
+node_modules

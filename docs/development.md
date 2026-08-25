@@ -21,8 +21,7 @@ foodshare-tools/
 ├── crates/           # Library crates
 ├── bins/             # Binary entry points
 ├── tests/            # Integration tests
-├── docs/             # Documentation
-└── .snapshots/       # Snapshot test data
+└── docs/             # Documentation
 ```
 
 ## Development Commands
@@ -53,11 +52,13 @@ cargo doc --open                     # Open in browser
 ## Adding a New Crate
 
 1. Create crate directory:
+
 ```bash
 mkdir -p crates/my-crate/src
 ```
 
 2. Add `Cargo.toml`:
+
 ```toml
 [package]
 name = "foodshare-my-crate"
@@ -70,6 +71,7 @@ foodshare-core.workspace = true
 ```
 
 3. Add to workspace in root `Cargo.toml`:
+
 ```toml
 [workspace]
 members = [
@@ -79,6 +81,7 @@ members = [
 ```
 
 4. Create `src/lib.rs`:
+
 ```rust
 //! My crate description.
 
@@ -141,9 +144,12 @@ fn test_output() {
 ```
 
 Update snapshots:
+
 ```bash
 cargo insta review
 ```
+
+Snapshot files live per-crate (next to the tests that create them), not in a repo-root `.snapshots/` directory.
 
 ### Property Tests
 
@@ -180,6 +186,7 @@ criterion_main!(benches);
 ```
 
 Run benchmarks:
+
 ```bash
 cargo bench --workspace
 ```
@@ -203,7 +210,7 @@ use thiserror::Error;
 pub enum MyError {
     #[error("[E2001] File not found: {0}")]
     FileNotFound(String),
-    
+
     #[error("[E3001] Invalid configuration: {0}")]
     InvalidConfig(String),
 }
@@ -220,7 +227,7 @@ pub enum MyError {
 
 ## Release Process
 
-See [PUBLISHING.md](../PUBLISHING.md) for release instructions.
+Releases are triggered by pushing a `v*` tag — see `.github/workflows/release.yml` (builds release binaries and creates a GitHub Release).
 
 ## Debugging
 

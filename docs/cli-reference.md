@@ -2,7 +2,7 @@
 
 ## Common Commands
 
-These commands are available across all platform binaries (`fs-app`, `fs-app`, `lefthook-rs`).
+These commands are available across all platform binaries (`fs-app`, `lefthook-rs`).
 
 ### commit-msg
 
@@ -14,6 +14,7 @@ Validate commit message format (conventional commits).
 ```
 
 Options:
+
 - `--types <list>` - Allowed commit types (default: feat,fix,docs,style,refactor,test,chore,ci,perf)
 - `--max-length <n>` - Maximum subject length (default: 72)
 - `--require-scope` - Require scope in commit message
@@ -28,11 +29,13 @@ Scan for secrets and credentials in staged files.
 ```
 
 Options:
+
 - `--exclude <pattern>` - Exclude files matching pattern
 - `--json` - Output results as JSON
 - `--fail-on-warning` - Exit non-zero on warnings
 
 Detected patterns:
+
 - AWS keys, secrets, session tokens
 - Supabase keys (anon, service role)
 - GitHub tokens
@@ -49,6 +52,7 @@ Validate Supabase migrations.
 ```
 
 Options:
+
 - `--dir <path>` - Migrations directory (default: supabase/migrations)
 - `--require-down` - Require down migrations
 - `--check-naming` - Validate naming convention
@@ -63,16 +67,17 @@ Run all pre-push checks.
 ```
 
 Options:
+
 - `--fail-fast` - Stop on first failure
 - `--skip <check>` - Skip specific checks
 
 ### doctor
 
-Check environment health.
+Check environment health (`fs-app` only).
 
 ```bash
-<binary> doctor
-<binary> doctor --json
+fs-app doctor
+fs-app doctor --json
 ```
 
 ---
@@ -90,6 +95,7 @@ fs-app format --check     # Check without modifying
 ```
 
 Options:
+
 - `--staged` - Only format staged files
 - `--check` - Dry run, exit non-zero if changes needed
 - `--config <path>` - SwiftFormat config file
@@ -105,6 +111,7 @@ fs-app lint --fix
 ```
 
 Options:
+
 - `--strict` - Treat warnings as errors
 - `--fix` - Auto-fix violations
 - `--config <path>` - SwiftLint config file
@@ -120,6 +127,7 @@ fs-app build --scheme MyScheme
 ```
 
 Options:
+
 - `--configuration <config>` - Build configuration (debug/release)
 - `--scheme <name>` - Xcode scheme
 - `--destination <dest>` - Build destination
@@ -135,6 +143,7 @@ fs-app simulator shutdown
 ```
 
 Subcommands:
+
 - `list` - List available simulators
 - `boot` - Boot a simulator
 - `shutdown` - Shutdown running simulators
@@ -165,6 +174,7 @@ fs-app format --staged
 ```
 
 Options:
+
 - `--lang <language>` - Language (kotlin/java)
 - `--staged` - Only staged files
 
@@ -187,6 +197,7 @@ fs-app swift-core copy --output app/libs
 ```
 
 Subcommands:
+
 - `build` - Build Swift core
 - `copy` - Copy built libraries
 
@@ -223,6 +234,7 @@ lefthook-rs nextjs-security src/**/*.tsx
 ```
 
 Checks:
+
 - A01: Broken Access Control
 - A02: Cryptographic Failures
 - A03: Injection
@@ -235,11 +247,12 @@ Analyze bundle size.
 
 ```bash
 lefthook-rs bundle-size
-lefthook-rs bundle-size --threshold 500kb
+lefthook-rs bundle-size --threshold 500    # Threshold in KB
 ```
 
 Options:
-- `--threshold <size>` - Fail if bundle exceeds size
+
+- `--threshold <kb>` - Fail if bundle exceeds size in KB
 - `--json` - Output as JSON
 
 ### conventional-commit
@@ -249,6 +262,73 @@ Validate conventional commit format.
 ```bash
 lefthook-rs conventional-commit .git/COMMIT_MSG
 ```
+
+### protected-branch
+
+Check for pushes to protected branches.
+
+```bash
+lefthook-rs protected-branch
+```
+
+### large-files
+
+Detect files exceeding size limits.
+
+```bash
+lefthook-rs large-files
+lefthook-rs large-files --max-size 500    # Max size in KB
+```
+
+Options:
+
+- `--max-size <kb>` - Maximum file size in KB (default: 500)
+
+### accessibility
+
+Check accessibility issues in JSX/TSX files.
+
+```bash
+lefthook-rs accessibility
+lefthook-rs accessibility src/components/Button.tsx
+```
+
+### pre-commit
+
+Run all pre-commit checks.
+
+```bash
+lefthook-rs pre-commit
+lefthook-rs pre-commit src/app/page.tsx    # Check specific files
+```
+
+---
+
+## Other Binaries
+
+### foodshare-swift
+
+Swift toolchain version management for the monorepo (detect, migrate, verify Swift versions).
+
+```bash
+foodshare-swift --help
+foodshare-swift --project-root . --format text <subcommand>
+```
+
+### foodshare-migrate
+
+Secret migration for self-hosted Supabase — syncs secrets between `.env.functions` and the Supabase Vault, and verifies required variables are present.
+
+```bash
+foodshare-migrate --help
+foodshare-migrate --env-file .env.functions <subcommand>
+```
+
+### foodshare-i18n
+
+Translation management CLI (health checks, audits, AI auto-translation, locale sync).
+
+See [bins/foodshare-i18n/README.md](../bins/foodshare-i18n/README.md) for full documentation.
 
 ---
 

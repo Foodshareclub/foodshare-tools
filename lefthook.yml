@@ -117,7 +117,7 @@ pre-commit:
       priority: 1
       glob: ".github/workflows/*.{yml,yaml}"
       run: |
-        bunx js-yaml {staged_files} > /dev/null
+        for f in {staged_files}; do bunx js-yaml "$f" > /dev/null || exit 1; done
 
     # -------------------------------------------------------------------------
     # 3. LINTING & FORMATTING (Priority 3 - Mandated Toolchain: Oxlint, Biome, Prettier)
@@ -196,8 +196,8 @@ pre-push:
       priority: 1
       run: |
         if [ -f package.json ] && [ -d src/__tests__ ]; then
-          echo "🧪 Running fast unit test suite before push..."
-          bun test src/__tests__/actions/auth.test.ts src/__tests__/actions/email.test.ts src/__tests__/actions/newsletter.test.ts src/__tests__/actions/products.test.ts src/__tests__/lib/ src/store/ src/utils/ src/api/ src/lib/logger/ src/lib/testing/
+          echo "🧪 Running full unit test suite before push..."
+          bun run test
         fi
 
     web-type-check-full:

@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "packages/*",
-    "foodshare-web"
+    "packages/*"
   ],
   "scripts": {
     "build": "turbo run build",
@@ -21,5 +20,6 @@
   "engines": {
     "node": ">=24.0.0",
     "bun": ">=1.1.0"
-  }
+  },
+  "packageManager": "bun@1.4.0"
 }

@@ -39,8 +39,7 @@ validate("feat: add login")?;
 // Custom configuration
 let config = Config {
     types: vec!["feat", "fix", "docs"],
-    max_subject_length: 72,
-    require_scope: false,
+    max_length: 72,
     ..Default::default()
 };
 validate_with_config("feat(auth): add login", &config)?;
@@ -51,6 +50,7 @@ validate_with_config("feat(auth): add login", &config)?;
 Secret and credential scanning.
 
 Detected patterns:
+
 - AWS Access Keys
 - Supabase Keys
 - GitHub Tokens
@@ -63,6 +63,7 @@ Detected patterns:
 Supabase migration validation.
 
 Checks:
+
 - Naming convention
 - Down migration presence
 - SQL syntax validation

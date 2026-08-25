@@ -9,7 +9,7 @@ Enterprise-grade Rust CLI workspace for git hooks, code quality, and development
 
 ## Features
 
-- 🚀 **Fast**: Written in Rust for maximum performance (~10x faster than shell scripts)
+- 🚀 **Fast**: Fast single-binary Rust tooling
 - 🔒 **Secure**: Built-in secret scanning with 15+ patterns for API keys, tokens, and credentials
 - 📊 **Observable**: Structured logging, metrics, and health checks
 - 🔧 **Configurable**: TOML-based configuration with validation
@@ -32,14 +32,15 @@ cargo install --path bins/lefthook-rs
 
 ## Architecture
 
+> **Note:** `motherduck-sync` is a placeholder submodule — a library stub only; its CLI is planned (see the [submodule repo](https://github.com/Foodshareclub/motherduck-sync)).
+
 ```
 foodshare-tools/
-├── crates/                    # Library crates (16)
+├── crates/                    # Library crates (15)
 │   ├── core/                  # Shared: git, file scanning, process, health
 │   ├── hooks/                 # Git hooks: commit-msg, secrets, migrations
 │   ├── cli/                   # CLI utilities: terminal output, progress
-│   ├── ios/                   # iOS: Xcode, simulators, Swift tools
-│   ├── android/               # Android: Gradle, emulators, Kotlin
+│   ├── app/                   # Cross-platform app support (iOS + Android)
 │   ├── web/                   # Web: Next.js security, bundle analysis
 │   ├── telemetry/             # Observability: logging, metrics, tracing
 │   ├── geo/                   # Geospatial utilities
@@ -50,8 +51,8 @@ foodshare-tools/
 │   ├── swift-toolchain/       # Swift version management
 │   ├── api-client/            # API client utilities
 │   ├── migrate/               # Migration tooling
-│   └── motherduck-sync/       # MotherDuck data sync
-├── bins/                      # Binary crates (7)
+│   └── motherduck-sync/       # MotherDuck data sync (placeholder submodule)
+├── bins/                      # Binary crates (6)
 │   ├── fs-app/         # Cross-platform CLI
 │   ├── lefthook-rs/           # Web CLI (git hooks)
 │   ├── fs-image/              # Image processing CLI
@@ -61,8 +62,9 @@ foodshare-tools/
 ├── scripts/                   # Utility scripts
 ├── tests/                     # Integration tests
 ├── docs/                      # Documentation
+├── packages/                  # Additional packages (WASM bindings, shared types)
 └── .github/workflows/
-    ├── ci.yml                 # CI: lint, test (3 OS), coverage, build, docs
+    ├── ci.yml                 # CI: lint, security audit, test (3 OS), coverage, build, docs
     ├── publish.yml            # Publish crates to crates.io
     └── release.yml            # Build release binaries + GitHub Release
 ```
@@ -116,12 +118,12 @@ lefthook-rs conventional-commit .git/COMMIT_MSG
 
 ## Related Repositories
 
-| Repository | Purpose |
-|------------|---------|
-| [`foodshare-app`](https://github.com/Foodshareclub/foodshare-app) | Unified cross-platform app (Skip Fuse: iOS + Android) |
-| [`foodshare-web`](https://github.com/Foodshareclub/foodshare-web) | Next.js 16 web app |
-| [`foodshare-backend`](https://github.com/Foodshareclub/foodshare-backend) | Self-hosted Supabase backend |
-| [`foodshare-runner`](https://github.com/Foodshareclub/foodshare-runner) | GitHub Actions self-hosted runner |
+| Repository                                                                | Purpose                                               |
+| ------------------------------------------------------------------------- | ----------------------------------------------------- |
+| [`foodshare-app`](https://github.com/Foodshareclub/foodshare-app)         | Unified cross-platform app (Skip Fuse: iOS + Android) |
+| [`foodshare-web`](https://github.com/Foodshareclub/foodshare-web)         | Next.js 16 web app                                    |
+| [`foodshare-backend`](https://github.com/Foodshareclub/foodshare-backend) | Self-hosted Supabase backend                          |
+| [`foodshare-runner`](https://github.com/Foodshareclub/foodshare-runner)   | GitHub Actions self-hosted runner                     |
 
 ## Development
 
@@ -135,16 +137,16 @@ cargo clippy --workspace --all-targets -- -D warnings  # Lint
 
 ## Error Codes
 
-| Code Range | Category | Example |
-|------------|----------|---------|
-| E1xxx | General | E1001 Internal error |
-| E2xxx | IO | E2001 File not found |
-| E3xxx | Configuration | E3002 Parse error |
-| E4xxx | Git | E4001 Not a git repo |
-| E5xxx | Process | E5001 Command not found |
-| E6xxx | Validation | E6001 Invalid input |
-| E7xxx | Security | E7001 Secret detected |
-| E8xxx | Platform | E8001 Xcode error |
+| Code Range | Category      | Example                 |
+| ---------- | ------------- | ----------------------- |
+| E1xxx      | General       | E1001 Internal error    |
+| E2xxx      | IO            | E2001 File not found    |
+| E3xxx      | Configuration | E3002 Parse error       |
+| E4xxx      | Git           | E4001 Not a git repo    |
+| E5xxx      | Process       | E5001 Command not found |
+| E6xxx      | Validation    | E6001 Invalid input     |
+| E7xxx      | Security      | E7001 Secret detected   |
+| E8xxx      | Platform      | E8001 Xcode error       |
 
 ## License
 

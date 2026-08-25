@@ -1,0 +1,51 @@
+name: "AI Review"
+description: >-
+  AI-powered code review / test-gap analysis using Groq (primary) with Z.AI
+  fallback. Zero runtime deps beyond curl+jq. Writes findings to the job step
+  summary and optionally comments on PRs.
+inputs:
+  mode:
+    description: "review | test-gap"
+    required: false
+    default: "review"
+  since:
+    description: "Git history window for scheduled runs (e.g. '24 hours')"
+    required: false
+    default: "24 hours"
+  max-diff-bytes:
+    description: "Truncate collected diff/context to this many bytes"
+    required: false
+    default: "60000"
+  groq-model:
+    description: "Groq model id"
+    required: false
+    default: "openai/gpt-oss-120b"
+  zai-model:
+    description: "Z.AI model id"
+    required: false
+    default: "glm-4.6"
+  pr-number:
+    description: "PR number to comment on (empty = skip commenting)"
+    required: false
+    default: ""
+  fail-on-error:
+    description: "Fail the step when no provider succeeds"
+    required: false
+    default: "false"
+runs:
+  using: "composite"
+  steps:
+    - name: Run AI review
+      env:
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_SINCE: ${{ inputs.since }}
+        INPUT_MAX_DIFF_BYTES: ${{ inputs['max-diff-bytes'] }}
+        GROQ_MODEL: ${{ inputs.groq-model }}
+        ZAI_MODEL: ${{ inputs.zai-model }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/review.sh"

@@ -4,8 +4,7 @@ This directory contains documentation for each crate in the workspace.
 
 ## Platform CLIs
 
-- [ios.md](./ios.md) - iOS development tools
-- [android.md](./android.md) - Android development tools
+- [app.md](./app.md) - Cross-platform app development tools (iOS + Android)
 - [web.md](./web.md) - Web development tools
 
 ## Core Libraries
@@ -25,4 +24,4 @@ This directory contains documentation for each crate in the workspace.
 
 ## Utilities
 
-- [motherduck-sync.md](./motherduck-sync.md) - Database synchronization
+- [motherduck-sync.md](./motherduck-sync.md) - Database synchronization (placeholder submodule)

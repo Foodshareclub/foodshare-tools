@@ -4,34 +4,38 @@ Foodshare Tools uses TOML configuration files for customization.
 
 ## Configuration File
 
-Create `.foodshare-hooks.toml` in your project root:
+Configuration is discovered relative to the current working directory. The first file found wins:
+
+1. `.foodshare-hooks.toml`
+2. `foodshare-hooks.toml`
+3. `.config/foodshare-hooks.toml`
+
+There is no user-level (`~/.config`) configuration file and no environment-variable overrides for configuration values.
+
+Example:
 
 ```toml
 # .foodshare-hooks.toml
 
 [commit_msg]
 # Allowed commit types
-types = ["feat", "fix", "docs", "style", "refactor", "test", "chore", "ci", "perf"]
+types = ["feat", "fix", "docs", "style", "refactor", "test", "chore", "perf", "ci", "build", "revert"]
 
 # Maximum subject line length
-max_subject_length = 72
+max_length = 72
 
-# Require scope in commit message (e.g., feat(auth): ...)
-require_scope = false
+# Minimum subject line length
+min_length = 10
 
-# Allowed scopes (empty = any scope allowed)
-scopes = []
+# Skip validation for merge commits
+skip_merge = true
+
+# Skip validation for revert commits
+skip_revert = true
 
 [secrets]
-# Files to exclude from secret scanning
-exclude_files = [
-    "*.test.ts",
-    "*.spec.ts",
-    "*.mock.ts",
-    "*.fixture.ts",
-    "__mocks__/**",
-    "**/__tests__/**"
-]
+# Additional patterns to detect (regex)
+additional_patterns = []
 
 # Patterns to exclude (e.g., placeholder values)
 exclude_patterns = [
@@ -42,70 +46,36 @@ exclude_patterns = [
     "test_"
 ]
 
-# Additional patterns to detect (regex)
-custom_patterns = []
-
-# Severity level (error/warning)
-severity = "error"
-
-[migrations]
-# Migrations directory
-directory = "supabase/migrations"
-
-# Require down migrations
-require_down = true
-
-# Check naming convention (YYYYMMDDHHMMSS_name.sql)
-check_naming = true
-
-# Allowed SQL statements in migrations
-allowed_statements = ["CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE"]
-
-[format]
-# SwiftFormat configuration (iOS)
-swift_config = ".swiftformat"
-
-# Kotlin format configuration (Android)
-kotlin_config = ".editorconfig"
-
-[lint]
-# SwiftLint configuration (iOS)
-swift_config = ".swiftlint.yml"
-
-# Treat warnings as errors
-strict = false
-
-[build]
-# Default build configuration
-configuration = "debug"
-
-# Default scheme (iOS)
-scheme = ""
-
-# Parallel jobs
-jobs = 0  # 0 = auto-detect
-
-[telemetry]
-# Enable telemetry
-enabled = false
-
-# Log level (trace/debug/info/warn/error)
-log_level = "info"
-
-# Metrics endpoint
-metrics_endpoint = ""
+# Files to exclude from secret scanning
+exclude_files = [
+    "*.test.ts",
+    "*.spec.ts",
+    "*.mock.ts",
+    "*.fixture.ts",
+    "__mocks__/**",
+    "**/__tests__/**"
+]
 ```
 
 ## Environment Variables
 
-Configuration can be overridden with environment variables:
+Binaries recognize the following environment variables at runtime (these are not configuration-file overrides):
 
-| Variable | Description |
-|----------|-------------|
-| `FOODSHARE_CONFIG` | Path to config file |
-| `FOODSHARE_LOG_LEVEL` | Log level (trace/debug/info/warn/error) |
-| `FOODSHARE_NO_COLOR` | Disable colored output |
-| `FOODSHARE_JSON` | Enable JSON output |
+| Variable                 | Description                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `FOODSHARE_API_URL`      | API endpoint URL                                                             |
+| `FOODSHARE_BACKEND_DIR`  | Backend directory                                                            |
+| `FOODSHARE_BFF_URL`      | BFF endpoint URL                                                             |
+| `FOODSHARE_CACHE`        | Cache directory                                                              |
+| `FOODSHARE_COLOR`        | Color output (auto/always/never)                                             |
+| `FOODSHARE_DEBUG`        | Enable debug output                                                          |
+| `FOODSHARE_ENV`          | Environment name                                                             |
+| `FOODSHARE_HOOKS_BIN`    | Path to the `lefthook-rs` binary invoked by centralized `lefthook.yml` gates |
+| `FOODSHARE_PARALLEL`     | Run checks in parallel                                                       |
+| `FOODSHARE_QUICK_MODE`   | Enable quick mode (skip slow checks)                                         |
+| `FOODSHARE_STRICT`       | Treat warnings as errors                                                     |
+| `FOODSHARE_TELEMETRY`    | Enable/disable telemetry                                                     |
+| `FOODSHARE_TIMEOUT_SECS` | Operation timeout in seconds                                                 |
 
 ## Per-Command Configuration
 
@@ -121,51 +91,43 @@ types = [
     "refactor", # Code restructuring
     "test",     # Adding tests
     "chore",    # Maintenance
-    "ci",       # CI/CD changes
     "perf",     # Performance improvement
-    "revert",   # Revert previous commit
+    "ci",       # CI/CD changes
     "build",    # Build system changes
+    "revert",   # Revert previous commit
 ]
+
+# Subject length bounds and merge/revert skipping
+max_length = 72
+min_length = 10
+skip_merge = true
+skip_revert = true
 ```
 
 ### Secret Patterns
 
 Built-in patterns detect:
 
-| Pattern | Example |
-|---------|---------|
-| AWS Access Key | `AKIA...` |
-| AWS Secret Key | `aws_secret_access_key = "..."` |
-| Supabase Anon Key | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
-| Supabase Service Role | `service_role` key pattern |
-| GitHub Token | `ghp_...`, `gho_...`, `ghu_...` |
-| Stripe Key | `sk_live_...`, `pk_live_...` |
-| Generic API Key | `api_key`, `apikey`, `api-key` patterns |
-| Private Key | `-----BEGIN RSA PRIVATE KEY-----` |
-| Password in URL | `://user:password@` |
+| Pattern               | Example                                   |
+| --------------------- | ----------------------------------------- |
+| AWS Access Key        | `AKIA...`                                 |
+| AWS Secret Key        | `aws_secret_access_key = "..."`           |
+| Supabase Anon Key     | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
+| Supabase Service Role | `service_role` key pattern                |
+| GitHub Token          | `ghp_...`, `gho_...`, `ghu_...`           |
+| Stripe Key            | `sk_live_...`, `pk_live_...`              |
+| Generic API Key       | `api_key`, `apikey`, `api-key` patterns   |
+| Private Key           | PEM headers containing `PRIVATE KEY`      |
+| Password in URL       | `://user:password@`                       |
 
-Add custom patterns:
+Add your own patterns:
 
 ```toml
 [secrets]
-custom_patterns = [
+additional_patterns = [
     "my_company_[a-zA-Z0-9]{32}",
     "internal_token_[0-9a-f]{64}"
 ]
-```
-
-### Migration Validation
-
-```toml
-[migrations]
-# Strict naming: YYYYMMDDHHMMSS_description.sql
-check_naming = true
-
-# Require corresponding down migration
-require_down = true
-
-# Directory structure
-directory = "supabase/migrations"
 ```
 
 ## Platform-Specific Configuration
@@ -203,8 +165,8 @@ max_line_length = 120
 
 ## Configuration Precedence
 
-1. Command-line arguments (highest)
-2. Environment variables
-3. Project config (`.foodshare-hooks.toml`)
-4. User config (`~/.config/foodshare/config.toml`)
-5. Default values (lowest)
+1. Command-line flags (highest)
+2. Config file discovered relative to the current working directory (`.foodshare-hooks.toml`, then `foodshare-hooks.toml`, then `.config/foodshare-hooks.toml`)
+3. Built-in default values (lowest)
+
+There is no user-level config path and no environment-variable overrides for configuration values.

@@ -1,0 +1,73 @@
+name: Daily Compatibility & E2E
+
+# Nightly cross-repo compatibility orchestrator (tools hosts the shared
+# compat-check script + ai-review action). Cargo lint/test/build coverage
+# already runs daily via ci.yml (06:00 UTC) including the MSRV 1.85 gate.
+#
+# This workflow:
+# 1. Runs clippy (advisory lint layer beyond ci.yml's check/test)
+# 2. Cross-repo compatibility matrix: vendored supabase drift between web and
+#    backend, production health endpoints, latest CI conclusions for all repos
+# 3. AI review of last 24h of tooling commits
+
+on:
+  schedule:
+    - cron: "20 5 * * *" # 05:20 UTC daily (after per-repo daily-compat runs)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-compat-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  clippy:
+    name: Clippy (workspace)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  compat-matrix:
+    name: Compatibility matrix (all repos)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Foodshareclub/foodshare-backend
+          path: backend
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: Foodshareclub/foodshare-web
+          path: web
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - name: Run compat checks
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WEB_DIR: ${{ github.workspace }}/web
+          BACKEND_DIR: ${{ github.workspace }}/backend
+        run: bash scripts/compat-check.sh
+
+  ai-review:
+    name: AI review (24h commits)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/ai-review
+        with:
+          mode: review
+          since: "24 hours"
