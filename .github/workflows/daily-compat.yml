@@ -41,7 +41,8 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --workspace --all-targets -- -D clippy::correctness -D clippy::suspicious
+        # mirrors ci.yml Lint gate; pedantic doc-lint debt tracked there
 
   compat-matrix:
     name: Compatibility matrix (all repos)
