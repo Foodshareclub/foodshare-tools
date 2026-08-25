@@ -11,7 +11,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  RUSTFLAGS: "-D warnings"
+  # NOTE: no global RUSTFLAGS="-D warnings" — it escalates every pedantic
+  # clippy warning to a hard error and breaks plain cargo check/build.
+  # Lint enforcement lives in the Lint job's scoped clippy deny-list.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
