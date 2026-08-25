@@ -2,7 +2,7 @@
 
 Rust CLI workspace for git hooks, code quality, and development tooling across iOS, Android, and Web.
 
-**Version:** 1.4.0 | **Edition:** 2024 | **MSRV:** 1.85 (via `Cargo.toml`; no `rust-toolchain.toml`) | **License:** MIT
+**Version:** 1.4.0 | **Edition:** 2024 | **MSRV:** 1.88 (via `Cargo.toml`; no `rust-toolchain.toml`) | **License:** MIT
 
 ## Commands
 

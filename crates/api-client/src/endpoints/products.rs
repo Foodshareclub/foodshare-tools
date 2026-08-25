@@ -148,6 +148,7 @@ pub struct ListProductsParams {
 
 impl ListProductsParams {
     /// Create new params with defaults
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -159,6 +160,7 @@ impl ListProductsParams {
     }
 
     /// Filter by location
+    #[must_use]
     pub fn with_location(mut self, lat: f64, lng: f64, radius: f64) -> Self {
         self.lat = Some(lat);
         self.lng = Some(lng);
@@ -173,6 +175,7 @@ impl ListProductsParams {
     }
 
     /// Set page size
+    #[must_use]
     pub fn with_limit(mut self, limit: u32) -> Self {
         self.limit = Some(limit);
         self

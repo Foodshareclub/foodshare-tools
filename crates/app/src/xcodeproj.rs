@@ -444,7 +444,7 @@ impl XcodeProject {
                 if !name.contains("Tests") {
                     Self::find_swift_files_recursive(&path, files)?;
                 }
-            } else if path.extension().map_or(false, |e| e == "swift") {
+            } else if path.extension().is_some_and(|e| e == "swift") {
                 files.push(path);
             }
         }
@@ -867,7 +867,7 @@ impl XcodeProject {
             phase_id
         );
         let phase_re = Regex::new(&phase_pattern)
-            .map_err(|e| Error::validation(&format!("Invalid regex pattern: {}", e)))?;
+            .map_err(|e| Error::validation(format!("Invalid regex pattern: {}", e)))?;
 
         if let Some(cap) = phase_re.find(&self.content) {
             let insert_pos = cap.end();
@@ -894,7 +894,7 @@ impl XcodeProject {
             group_id
         );
         let group_re = Regex::new(&group_pattern)
-            .map_err(|e| Error::validation(&format!("Invalid regex pattern: {}", e)))?;
+            .map_err(|e| Error::validation(format!("Invalid regex pattern: {}", e)))?;
 
         if let Some(cap) = group_re.find(&self.content) {
             let insert_pos = cap.end();

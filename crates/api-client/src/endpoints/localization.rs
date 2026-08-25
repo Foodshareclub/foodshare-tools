@@ -236,7 +236,7 @@ pub struct UiStringsResponse {
     pub messages: serde_json::Value,
     /// Bundle version
     pub version: Option<String>,
-    /// ETag for caching
+    /// `ETag` for caching
     pub etag: Option<String>,
 }
 
@@ -342,7 +342,7 @@ pub struct TranslateContentRequest {
     /// Target locale code
     #[serde(rename = "targetLocale")]
     pub target_locale: String,
-    /// Type of content for context (e.g. "product_description")
+    /// Type of content for context (e.g. "`product_description`")
     #[serde(rename = "contentType")]
     pub content_type: Option<String>,
 }

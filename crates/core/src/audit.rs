@@ -417,8 +417,9 @@ fn whoami() -> String {
 
 fn session_id() -> String {
     // Use a static session ID for the process lifetime
-    use once_cell::sync::Lazy;
-    static SESSION: Lazy<String> = Lazy::new(|| uuid::Uuid::new_v4().to_string());
+
+    static SESSION: std::sync::LazyLock<String> =
+        std::sync::LazyLock::new(|| uuid::Uuid::new_v4().to_string());
     SESSION.clone()
 }
 
@@ -441,9 +442,8 @@ fn machine_id() -> String {
 /// Global audit log instance
 #[must_use]
 pub fn global_audit() -> &'static AuditLog {
-    use once_cell::sync::Lazy;
-    static AUDIT: Lazy<AuditLog> =
-        Lazy::new(|| AuditLog::new().unwrap_or_else(|_| AuditLog::noop()));
+    static AUDIT: std::sync::LazyLock<AuditLog> =
+        std::sync::LazyLock::new(|| AuditLog::new().unwrap_or_else(|_| AuditLog::noop()));
     &AUDIT
 }
 

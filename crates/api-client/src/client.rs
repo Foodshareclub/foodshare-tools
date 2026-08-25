@@ -390,7 +390,7 @@ fn extract_rate_limit_key(url: &str) -> String {
     url.split('?')
         .next()
         .and_then(|s| s.split("://").nth(1))
-        .and_then(|s| s.split('/').skip(1).next())
+        .and_then(|s| s.split('/').nth(1))
         .unwrap_or("default")
         .to_string()
 }

@@ -48,9 +48,7 @@ pub fn check_migrations(
     let migration_files: Vec<_> = WalkDir::new(migrations_dir)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.file_type().is_file() && e.path().extension().map_or(false, |ext| ext == "sql")
-        })
+        .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|ext| ext == "sql"))
         .collect();
 
     result.total = migration_files.len();

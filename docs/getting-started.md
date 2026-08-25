@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Rust 1.85 or later
+- Rust 1.88 or later
 - Git 2.30+
 - Platform-specific tools (see below)
 

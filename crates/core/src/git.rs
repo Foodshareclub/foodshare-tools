@@ -64,7 +64,7 @@ impl GitRepo {
             .filter(|f| {
                 f.extension()
                     .and_then(|e| e.to_str())
-                    .map_or(false, |ext| extensions.contains(&ext))
+                    .is_some_and(|ext| extensions.contains(&ext))
             })
             .collect())
     }
@@ -223,7 +223,7 @@ impl GitRepo {
             &self.workdir,
         );
 
-        result.map(|r| r.success).unwrap_or(false)
+        result.is_ok_and(|r| r.success)
     }
 
     /// Get uncommitted files (both staged and unstaged)
@@ -260,9 +260,7 @@ pub struct DiffStats {
 /// Check if we're in a git repository
 #[must_use]
 pub fn is_git_repo(path: &Path) -> bool {
-    run_command_in_dir("git", &["rev-parse", "--git-dir"], path)
-        .map(|r| r.success)
-        .unwrap_or(false)
+    run_command_in_dir("git", &["rev-parse", "--git-dir"], path).is_ok_and(|r| r.success)
 }
 
 /// Get the git root directory

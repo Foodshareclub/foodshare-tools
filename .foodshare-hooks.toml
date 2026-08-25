@@ -1,0 +1,10 @@
+# foodshare-tools hook configuration (see docs/configuration.md).
+#
+# Self-scan paradox: crates/hooks/src/secrets.rs IS the secret-pattern
+# library — its doc-tests/unit tests contain canonical example secrets
+# (AWS docs example key, fake tokens). Exclude it from local scanning;
+# reviewers watch this file by definition.
+[secrets]
+exclude_files = [
+  "crates/hooks/src/secrets.rs",
+]

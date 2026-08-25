@@ -155,7 +155,7 @@ pub fn find_files(root: &Path, pattern: &str) -> Vec<PathBuf> {
         .filter(|e| {
             glob_pattern
                 .as_ref()
-                .map_or(true, |p| p.matches_path(e.path()))
+                .is_none_or(|p| p.matches_path(e.path()))
         })
         .map(|e| e.path().to_path_buf())
         .collect()
@@ -169,7 +169,7 @@ mod tests {
     fn test_file_scanner_new() {
         let scanner = FileScanner::new("/tmp");
         assert_eq!(scanner.root, PathBuf::from("/tmp"));
-        assert!(scanner.extensions.is_empty());
+        assert_eq!(scanner.extensions, [] as [std::string::String; 0]);
     }
 
     #[test]

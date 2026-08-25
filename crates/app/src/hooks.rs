@@ -119,7 +119,7 @@ impl SafeFormat {
         // Filter to only Swift files
         let swift_files: Vec<_> = files
             .iter()
-            .filter(|f| f.extension().map_or(false, |e| e == "swift"))
+            .filter(|f| f.extension().is_some_and(|e| e == "swift"))
             .cloned()
             .collect();
 
@@ -368,8 +368,8 @@ impl SafeFormat {
         // Simple line-by-line diff
         let max_lines = original_lines.len().max(formatted_lines.len());
         for i in 0..max_lines {
-            let orig = original_lines.get(i).map(|s| *s);
-            let fmt = formatted_lines.get(i).map(|s| *s);
+            let orig = original_lines.get(i).copied();
+            let fmt = formatted_lines.get(i).copied();
 
             match (orig, fmt) {
                 (Some(o), Some(f)) if o != f => {

@@ -396,7 +396,7 @@ pub fn copy_to_android_project(output_dir: &Path, android_project_dir: &Path) ->
             for lib_entry in std::fs::read_dir(&path)? {
                 let lib_entry = lib_entry?;
                 let lib_path = lib_entry.path();
-                if lib_path.extension().map_or(false, |e| e == "so") {
+                if lib_path.extension().is_some_and(|e| e == "so") {
                     let dest_path = dest_dir.join(lib_path.file_name().unwrap());
                     std::fs::copy(&lib_path, &dest_path)?;
                     println!("  {} Copied to: {}", "✓".green(), dest_path.display());

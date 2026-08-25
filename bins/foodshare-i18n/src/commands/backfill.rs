@@ -279,7 +279,7 @@ async fn process_posts(
     let mut succeeded = 0;
     let mut failed = 0;
 
-    let total_batches = (posts.len() + batch_size - 1) / batch_size;
+    let total_batches = posts.len().div_ceil(batch_size);
 
     for (batch_idx, batch) in posts.chunks(batch_size).enumerate() {
         println!(
@@ -346,7 +346,7 @@ async fn process_posts_counted(
     let mut succeeded = 0;
     let mut failed = 0;
 
-    let total_batches = (posts.len() + batch_size - 1) / batch_size;
+    let total_batches = posts.len().div_ceil(batch_size);
 
     for (batch_idx, batch) in posts.chunks(batch_size).enumerate() {
         for post in batch {

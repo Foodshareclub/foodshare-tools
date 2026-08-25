@@ -15,23 +15,20 @@ const DEFAULT_SUPABASE_URL: &str = "https://api.foodshare.club/functions/v1";
 /// Environment types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum Environment {
     /// Local development (typically localhost Supabase)
     Development,
     /// Staging environment
     Staging,
     /// Production environment
+    #[default]
     Production,
-}
-
-impl Default for Environment {
-    fn default() -> Self {
-        Self::Production
-    }
 }
 
 impl Environment {
     /// Parse from environment variable
+    #[must_use]
     pub fn from_env() -> Self {
         match env::var("FOODSHARE_ENV")
             .unwrap_or_default()
@@ -50,7 +47,7 @@ impl Environment {
 pub struct ClientConfig {
     /// Base URL for Supabase Edge Functions
     pub base_url: String,
-    /// BFF endpoint URL (derived from base_url if not set)
+    /// BFF endpoint URL (derived from `base_url` if not set)
     pub bff_url: String,
     /// Supabase anonymous key (for public endpoints)
     pub anon_key: Option<String>,
@@ -123,8 +120,7 @@ impl ClientConfig {
         let timeout = env::var("FOODSHARE_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
-            .map(Duration::from_secs)
-            .unwrap_or(Duration::from_secs(30));
+            .map_or(Duration::from_secs(30), Duration::from_secs);
 
         // Adjust retry config based on environment
         let retry = match environment {
@@ -171,9 +167,10 @@ impl ClientConfig {
     #[must_use]
     pub fn staging() -> Self {
         Self {
-            base_url: env::var("STAGING_SUPABASE_URL")
-                .map(|url| format!("{url}/functions/v1"))
-                .unwrap_or_else(|_| DEFAULT_SUPABASE_URL.to_string()),
+            base_url: env::var("STAGING_SUPABASE_URL").map_or_else(
+                |_| DEFAULT_SUPABASE_URL.to_string(),
+                |url| format!("{url}/functions/v1"),
+            ),
             bff_url: env::var("STAGING_BFF_URL")
                 .unwrap_or_else(|_| format!("{DEFAULT_SUPABASE_URL}/bff")),
             anon_key: env::var("STAGING_SUPABASE_ANON_KEY")

@@ -20,7 +20,7 @@ impl SwiftVersion {
         // Handle "Apple Swift version 6.3-dev" format
         let version_part = version_str
             .split_whitespace()
-            .find(|s| s.chars().next().map_or(false, |c| c.is_numeric()))
+            .find(|s| s.chars().next().is_some_and(|c| c.is_numeric()))
             .ok_or_else(|| SwiftError::ParseError(version_str.to_string()))?;
 
         let is_dev = version_part.contains("-dev") || version_part.contains("DEVELOPMENT");

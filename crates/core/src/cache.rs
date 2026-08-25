@@ -243,7 +243,7 @@ impl Cache {
                 let entry = entry?;
                 let path = entry.path();
 
-                if path.extension().map_or(false, |e| e == "meta") {
+                if path.extension().is_some_and(|e| e == "meta") {
                     entry_count += 1;
 
                     if let Ok(content) = fs::read_to_string(&path) {
@@ -299,7 +299,7 @@ impl Cache {
                 let entry = entry?;
                 let path = entry.path();
 
-                if path.extension().map_or(false, |e| e == "meta") {
+                if path.extension().is_some_and(|e| e == "meta") {
                     if let Ok(content) = fs::read_to_string(&path) {
                         if let Ok(cache_entry) = serde_json::from_str::<CacheEntry>(&content) {
                             if self.is_expired(&cache_entry) {

@@ -44,7 +44,7 @@ pub fn analyze_nextjs_build(build_dir: &Path) -> Result<BundleAnalysis> {
             let entry = entry?;
             let path = entry.path();
 
-            if path.extension().map_or(false, |e| e == "js") {
+            if path.extension().is_some_and(|e| e == "js") {
                 let size = std::fs::metadata(&path)?.len();
                 total_size += size;
 

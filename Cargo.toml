@@ -29,7 +29,7 @@ version = "1.4.0"
 edition = "2024"
 authors = ["Foodshare Team <engineering@foodshare.club>"]
 license = "MIT"
-rust-version = "1.85"
+rust-version = "1.88"
 repository = "https://github.com/Foodshareclub/foodshare-tools"
 homepage = "https://github.com/Foodshareclub/foodshare-tools"
 documentation = "https://docs.rs/foodshare-tools"
@@ -105,7 +105,7 @@ flate2 = "1.0"
 tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "sync", "time"] }
 
 # HTTP client (for telemetry)
-reqwest = { version = "0.11", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 
 # Metrics
 metrics = "0.22"

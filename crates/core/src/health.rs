@@ -409,23 +409,22 @@ impl HealthCheck for DiskSpaceCheck {
                                         (available_bytes / 1024 / 1024).to_string(),
                                     )
                                     .with_detail("path", &self.path);
-                            } else {
-                                return CheckResult::degraded(
-                                    "disk_space",
-                                    format!(
-                                        "Low disk space: {} MB available",
-                                        available_bytes / 1024 / 1024
-                                    ),
-                                )
-                                .with_detail(
-                                    "available_mb",
-                                    (available_bytes / 1024 / 1024).to_string(),
-                                )
-                                .with_detail(
-                                    "required_mb",
-                                    (self.min_bytes / 1024 / 1024).to_string(),
-                                );
                             }
+                            return CheckResult::degraded(
+                                "disk_space",
+                                format!(
+                                    "Low disk space: {} MB available",
+                                    available_bytes / 1024 / 1024
+                                ),
+                            )
+                            .with_detail(
+                                "available_mb",
+                                (available_bytes / 1024 / 1024).to_string(),
+                            )
+                            .with_detail(
+                                "required_mb",
+                                (self.min_bytes / 1024 / 1024).to_string(),
+                            );
                         }
                     }
                 }

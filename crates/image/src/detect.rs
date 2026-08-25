@@ -112,16 +112,14 @@ pub fn detect_format(data: &[u8]) -> Result<ImageFormat> {
     }
 
     // AVIF: ....ftypavif or ....ftypavis
-    if data.len() >= 12 {
-        if &data[4..8] == b"ftyp" {
-            let brand = &data[8..12];
-            if brand == b"avif" || brand == b"avis" || brand == b"mif1" {
-                return Ok(ImageFormat::Avif);
-            }
-            // HEIC: ....ftypheic or ....ftypheix
-            if brand == b"heic" || brand == b"heix" || brand == b"mif1" {
-                return Ok(ImageFormat::Heic);
-            }
+    if data.len() >= 12 && &data[4..8] == b"ftyp" {
+        let brand = &data[8..12];
+        if brand == b"avif" || brand == b"avis" || brand == b"mif1" {
+            return Ok(ImageFormat::Avif);
+        }
+        // HEIC: ....ftypheic or ....ftypheix
+        if brand == b"heic" || brand == b"heix" || brand == b"mif1" {
+            return Ok(ImageFormat::Heic);
         }
     }
 

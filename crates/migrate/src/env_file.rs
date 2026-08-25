@@ -63,9 +63,8 @@ pub fn parse_env_file(path: &Path) -> Result<HashMap<String, String>> {
             }
 
             let value = value.trim_start();
-            if value.starts_with('"') {
+            if let Some(value_trimmed) = value.strip_prefix('"') {
                 in_quotes = true;
-                let value_trimmed = &value[1..];
                 let mut i = 0;
                 let chars: Vec<char> = value_trimmed.chars().collect();
                 while i < chars.len() {
@@ -328,7 +327,7 @@ mod tests {
         {
             let mut f = std::fs::File::create(&path).unwrap();
             writeln!(f, "# comment").unwrap();
-            writeln!(f, "").unwrap();
+            writeln!(f).unwrap();
             writeln!(f, "FOO=bar").unwrap();
             writeln!(f, "BAZ=qux=extra").unwrap();
             writeln!(f, "EMPTY=").unwrap();

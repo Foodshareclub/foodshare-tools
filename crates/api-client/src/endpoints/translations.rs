@@ -36,9 +36,9 @@ impl TranslationsApi {
         self.client.timed_get(&path).await
     }
 
-    /// Get translations with ETag for caching
+    /// Get translations with `ETag` for caching
     ///
-    /// Returns `Ok(None)` if the ETag matches (304 Not Modified).
+    /// Returns `Ok(None)` if the `ETag` matches (304 Not Modified).
     pub async fn get_with_etag(
         &self,
         locale: &str,
@@ -66,7 +66,7 @@ impl TranslationsApi {
         }
     }
 
-    /// Check if ETag caching is working
+    /// Check if `ETag` caching is working
     pub async fn test_etag_caching(&self, locale: &str, etag: &str) -> ApiResult<u16> {
         let path = format!("get-translations?locale={locale}&platform=ios");
 

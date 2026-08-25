@@ -145,21 +145,17 @@ pub type ScanResult<T> = Result<T, ScanError>;
 /// Severity is ordered from most to least severe: `Critical > High > Medium > Low`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum Severity {
     /// Critical: Immediate action required (production credentials, signing keys).
     Critical,
     /// High: Serious security risk (API keys, database credentials).
     High,
     /// Medium: Moderate risk (webhooks, internal tokens).
+    #[default]
     Medium,
     /// Low: Informational (debug statements, test credentials).
     Low,
-}
-
-impl Default for Severity {
-    fn default() -> Self {
-        Self::Medium
-    }
 }
 
 impl std::fmt::Display for Severity {
@@ -190,6 +186,7 @@ impl std::str::FromStr for Severity {
 /// Category of secret pattern.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum PatternCategory {
     /// Cloud provider credentials (AWS, GCP, Azure).
     CloudProvider,
@@ -212,13 +209,8 @@ pub enum PatternCategory {
     /// Debugging and logging.
     Debug,
     /// Custom user-defined patterns.
+    #[default]
     Custom,
-}
-
-impl Default for PatternCategory {
-    fn default() -> Self {
-        Self::Custom
-    }
 }
 
 // =============================================================================
@@ -307,7 +299,7 @@ impl Finding {
 
     /// Generate a unique ID for this finding.
     fn generate_id(fingerprint: &str) -> String {
-        format!("SEC-{}", &fingerprint[..8].to_uppercase())
+        format!("SEC-{}", fingerprint[..8].to_uppercase())
     }
 }
 

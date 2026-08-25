@@ -303,7 +303,7 @@ impl SnapshotManager {
         }
 
         // Sort by timestamp (oldest first)
-        index.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        index.sort_by_key(|a| a.timestamp);
 
         // Remove oldest snapshots
         let to_remove = index.len() - self.config.max_snapshots;

@@ -179,7 +179,7 @@ fn cmd_vault_sync(
 
     let mut created = 0u32;
     let mut updated = 0u32;
-    let mut skipped = 0u32;
+    let _skipped = 0u32;
     let mut missing = 0u32;
 
     // 1. Hardcoded secrets

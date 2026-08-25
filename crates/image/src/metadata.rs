@@ -77,12 +77,12 @@ fn extract_jpeg_dimensions(data: &[u8]) -> Option<(u32, u32)> {
         let marker = data[i + 1];
 
         // SOF markers contain dimensions
-        if matches!(marker, 0xC0..=0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF) {
-            if i + 9 < data.len() {
-                let height = u16::from_be_bytes([data[i + 5], data[i + 6]]) as u32;
-                let width = u16::from_be_bytes([data[i + 7], data[i + 8]]) as u32;
-                return Some((width, height));
-            }
+        if matches!(marker, 0xC0..=0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF)
+            && i + 9 < data.len()
+        {
+            let height = u16::from_be_bytes([data[i + 5], data[i + 6]]) as u32;
+            let width = u16::from_be_bytes([data[i + 7], data[i + 8]]) as u32;
+            return Some((width, height));
         }
 
         // Skip to next marker
