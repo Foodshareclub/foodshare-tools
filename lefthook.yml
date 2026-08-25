@@ -127,16 +127,30 @@ pre-commit:
       glob: "*.{ts,tsx,js,jsx}"
       run: |
         if [ -f package.json ]; then
-          bunx oxlint --fix {staged_files}
+          FILES=""
+          for f in {staged_files}; do
+            case "$f" in supabase/*) continue ;; esac
+            FILES="$FILES $f"
+          done
+          if [ -n "$FILES" ]; then bunx oxlint --fix $FILES; fi
         fi
       stage_fixed: true
 
     web-biome:
       priority: 3
       glob: "*.{ts,tsx,js,jsx,json}"
+      # vendored backend code must stay byte-identical to foodshare-backend:
+      # biome/prettier ignore configs don't apply to explicitly-passed paths,
+      # so filter supabase/* here.
       run: |
         if [ -f package.json ]; then
-          bunx biome check --write {staged_files} 2>/dev/null || true
+          FILES=""
+          for f in {staged_files}; do
+            case "$f" in supabase/*) continue ;; esac
+            FILES="$FILES $f"
+          done
+          [ -n "$FILES" ] && bunx biome check --write $FILES 2>/dev/null || true
+          true
         fi
       stage_fixed: true
 
