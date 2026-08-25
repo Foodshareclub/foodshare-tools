@@ -529,7 +529,12 @@ fn main() -> Result<()> {
             audit,
             snapshot && !no_snapshot,
         ),
-        Commands::Lint { files, strict, fix, lang } => run_lint(&files, strict, fix, &lang),
+        Commands::Lint {
+            files,
+            strict,
+            fix,
+            lang,
+        } => run_lint(&files, strict, fix, &lang),
         Commands::CommitMsg { file } => run_commit_msg(&file, &config),
         Commands::Secrets { all } => run_secrets(all, &config),
         Commands::Migrations { dir } => run_migrations(&dir),
@@ -571,7 +576,10 @@ fn main() -> Result<()> {
         Commands::Protect { action } => run_protect(action),
 
         Commands::Emulator { action, name } => run_emulator(&action, name.as_deref()),
-        Commands::SwiftBuild { target, configuration } => run_swift_build(&target, &configuration),
+        Commands::SwiftBuild {
+            target,
+            configuration,
+        } => run_swift_build(&target, &configuration),
         Commands::SwiftJava { action } => run_swift_java(&action),
         Commands::SwiftCore { action } => run_swift_core(action),
         Commands::Supabase { action } => run_supabase(action),
@@ -630,7 +638,8 @@ fn run_format(
 
         // Determine target files
         let target_files = if staged {
-            match foodshare_core::git::GitRepo::open_current().and_then(|r| r.staged_swift_files()) {
+            match foodshare_core::git::GitRepo::open_current().and_then(|r| r.staged_swift_files())
+            {
                 Ok(f) => f,
                 Err(e) => {
                     Status::error(&format!("Failed to get staged files: {}", e));
@@ -2270,7 +2279,6 @@ fn has_supabase_cli() -> bool {
         .map(|s| s.success())
         .unwrap_or(false)
 }
-
 
 fn run_emulator(action: &str, name: Option<&str>) -> i32 {
     use fs_app::emulator;

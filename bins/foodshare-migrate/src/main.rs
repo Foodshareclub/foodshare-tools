@@ -123,8 +123,16 @@ fn main() -> ExitCode {
 
     let result = match &cli.command {
         Commands::Vault { action } => match action {
-            VaultAction::Sync { from_env, all, prefix } => cmd_vault_sync(&cli, *from_env, *all, prefix.as_deref()),
-            VaultAction::Set { key, value, description } => cmd_vault_set(&cli, key, value, description),
+            VaultAction::Sync {
+                from_env,
+                all,
+                prefix,
+            } => cmd_vault_sync(&cli, *from_env, *all, prefix.as_deref()),
+            VaultAction::Set {
+                key,
+                value,
+                description,
+            } => cmd_vault_set(&cli, key, value, description),
             VaultAction::List => cmd_vault_list(&cli),
             VaultAction::Verify => cmd_vault_verify(&cli),
         },
@@ -218,7 +226,8 @@ fn cmd_vault_sync(
     // 2. Dynamic sync (if --all or --prefix)
     if all || prefix.is_some() {
         Status::subheader("Dynamic Sync");
-        let pb_dynamic = progress::progress_bar(env_vars.len() as u64, "Scanning source for dynamic secrets");
+        let pb_dynamic =
+            progress::progress_bar(env_vars.len() as u64, "Scanning source for dynamic secrets");
 
         for (key, value) in &env_vars {
             pb_dynamic.inc(1);
@@ -240,11 +249,29 @@ fn cmd_vault_sync(
             // Exclude common system/shell vars if using --all from env
             if all && from_env {
                 let excluded = [
-                    "PATH", "HOME", "USER", "PWD", "SHELL", "LS_COLORS", "_",
-                    "SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "SSH_AUTH_SOCK",
-                    "LANG", "LC_ALL", "LANGUAGE", "DEBIAN_FRONTEND", "TERM",
-                    "MAIL", "OLDPWD", "SHLVL", "MOTD_SHOWN", "XDG_SESSION_ID",
-                    "XDG_RUNTIME_DIR", "S_COLORS",
+                    "PATH",
+                    "HOME",
+                    "USER",
+                    "PWD",
+                    "SHELL",
+                    "LS_COLORS",
+                    "_",
+                    "SSH_CLIENT",
+                    "SSH_CONNECTION",
+                    "SSH_TTY",
+                    "SSH_AUTH_SOCK",
+                    "LANG",
+                    "LC_ALL",
+                    "LANGUAGE",
+                    "DEBIAN_FRONTEND",
+                    "TERM",
+                    "MAIL",
+                    "OLDPWD",
+                    "SHLVL",
+                    "MOTD_SHOWN",
+                    "XDG_SESSION_ID",
+                    "XDG_RUNTIME_DIR",
+                    "S_COLORS",
                 ];
                 if excluded.contains(&key.as_str()) {
                     continue;
@@ -394,7 +421,10 @@ fn cmd_vault_verify(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Er
 // env sync
 // ---------------------------------------------------------------------------
 
-fn cmd_env_sync(cli: &Cli, from_vault: bool) -> std::result::Result<(), Box<dyn std::error::Error>> {
+fn cmd_env_sync(
+    cli: &Cli,
+    from_vault: bool,
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
     Status::header("Env File Sync");
     let existing = env_file::parse_env_file(&cli.env_file)?;
 
@@ -402,7 +432,7 @@ fn cmd_env_sync(cli: &Cli, from_vault: bool) -> std::result::Result<(), Box<dyn 
         Status::info("Source: Supabase Vault");
         let client = make_vault_client(cli)?;
         let vault_secrets = client.get_decrypted_secrets()?;
-        
+
         // Compute which vault secrets are missing from the env file
         let mut to_add = Vec::new();
         for (name, value) in vault_secrets {
@@ -630,11 +660,7 @@ fn cmd_env_set(
         ));
     } else {
         env_file::upsert_var(&cli.env_file, key, value)?;
-        Status::success(&format!(
-            "Updated {} in {}",
-            key,
-            cli.env_file.display()
-        ));
+        Status::success(&format!("Updated {} in {}", key, cli.env_file.display()));
     }
 
     Ok(())

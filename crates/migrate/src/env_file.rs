@@ -2,7 +2,6 @@
 ///
 /// Provides utilities for reading KEY=VALUE env files and appending
 /// missing variables with proper quoting and escaping.
-
 use crate::error::{MigrateError, Result};
 use std::collections::HashMap;
 use std::path::Path;
@@ -100,7 +99,6 @@ pub fn parse_env_file(path: &Path) -> Result<HashMap<String, String>> {
 
     Ok(vars)
 }
-
 
 /// Upsert a variable in an env file.
 ///
@@ -201,12 +199,12 @@ pub fn append_missing_vars(path: &Path, vars: &[(String, String)]) -> Result<App
 /// Wraps in double quotes if it contains newlines, spaces, or equals signs,
 /// and escapes backslashes and double quotes.
 fn format_env_value(value: &str) -> String {
-    let needs_quotes = value.contains('\n') || value.contains(' ') || value.contains('=') || value.starts_with('"');
+    let needs_quotes = value.contains('\n')
+        || value.contains(' ')
+        || value.contains('=')
+        || value.starts_with('"');
     if needs_quotes {
-        format!(
-            "\"{}\"",
-            value.replace('\\', "\\\\").replace('"', "\\\"")
-        )
+        format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
     } else {
         value.to_string()
     }
@@ -354,7 +352,10 @@ mod tests {
             writeln!(f, "OTHER=value").unwrap();
         }
         let vars = parse_env_file(&path).unwrap();
-        assert_eq!(vars.get("MULTILINE").unwrap(), "first line\nsecond line\nthird line");
+        assert_eq!(
+            vars.get("MULTILINE").unwrap(),
+            "first line\nsecond line\nthird line"
+        );
         assert_eq!(vars.get("OTHER").unwrap(), "value");
     }
 

@@ -264,7 +264,7 @@ pre-push:
       run: |
         if command -v deno >/dev/null 2>&1 && [ -d supabase/functions ]; then
           echo "🧪 Running Deno Edge Function unit tests before push..."
-          deno test --allow-env --allow-net supabase/functions/
+          (cd supabase/functions && deno task test)
         fi
 
     # -------------------------------------------------------------------------

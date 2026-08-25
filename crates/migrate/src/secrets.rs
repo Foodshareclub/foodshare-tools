@@ -286,7 +286,7 @@ pub const VAULT_SECRETS: &[VaultSecretDef] = &[
         vault_name: "DEEPL_API_KEY",
         description: "DeepL API key for translations",
     },
-     VaultSecretDef {
+    VaultSecretDef {
         env_key: "GOOGLE_TRANSLATE_API_KEY",
         vault_name: "GOOGLE_TRANSLATE_API_KEY",
         description: "Google Translate API key",
