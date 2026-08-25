@@ -79,7 +79,9 @@ enum Commands {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let config = Config::default();
+    // Discover .foodshare-hooks.toml / foodshare-hooks.toml / .config/
+    // foodshare-hooks.toml; fall back to defaults when absent.
+    let config = Config::load(None)?;
 
     let result = match cli.command {
         Commands::Security { files } => run_security(&files, &config),
