@@ -143,6 +143,9 @@ pre-commit:
     web-format:
       priority: 3
       glob: "*.{ts,tsx,js,jsx,json,css,scss,md,yaml,yml}"
+      exclude:
+        # vendored backend code must stay byte-identical to foodshare-backend
+        - "^supabase/"
       run: |
         if [ -f bun.lockb ] || [ -f bun.lock ]; then
           bunx prettier --write --cache --cache-strategy metadata {staged_files}

@@ -39,6 +39,7 @@ runs:
     # steps. Callers MUST export GROQ_API_KEY / ZAI_API_KEY as job-level
     # env (job env propagates into this script's process environment).
     - name: Run AI review
+      env:
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_SINCE: ${{ inputs.since }}
         INPUT_MAX_DIFF_BYTES: ${{ inputs['max-diff-bytes'] }}
