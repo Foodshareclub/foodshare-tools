@@ -35,10 +35,10 @@ inputs:
 runs:
   using: "composite"
   steps:
+    # NOTE: the `secrets` context is unavailable inside composite action
+    # steps. Callers MUST export GROQ_API_KEY / ZAI_API_KEY as job-level
+    # env (job env propagates into this script's process environment).
     - name: Run AI review
-      env:
-        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_SINCE: ${{ inputs.since }}
         INPUT_MAX_DIFF_BYTES: ${{ inputs['max-diff-bytes'] }}
