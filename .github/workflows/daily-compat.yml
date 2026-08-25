@@ -25,10 +25,17 @@ concurrency:
 jobs:
   clippy:
     name: Clippy (workspace)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Bootstrap tools (idempotent)
+        run: |
+          # Self-hosted runners must survive GitHub billing outages, so
+          # nightly jobs provision their own toolchain if missing.
+          command -v jq >/dev/null 2>&1 || { sudo apt-get update -qq && sudo apt-get install -y -qq jq curl; }
+          command -v deno >/dev/null 2>&1 || { curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/opt/deno sh -s -- -y; echo "/opt/deno/bin" >> "$GITHUB_PATH"; }
+          command -v bun >/dev/null 2>&1 || { curl -fsSL https://bun.sh/install | BUN_INSTALL=/opt/bun bash -s -- -y > /dev/null; echo "/opt/bun/bin" >> "$GITHUB_PATH"; }
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -37,7 +44,7 @@ jobs:
 
   compat-matrix:
     name: Compatibility matrix (all repos)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +68,7 @@ jobs:
 
   ai-review:
     name: AI review (24h commits)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
