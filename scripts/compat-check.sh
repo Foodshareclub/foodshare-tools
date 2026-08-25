@@ -11,6 +11,8 @@
 #   API_HEALTH   default https://api.foodshare.club/functions/v1/api-v1-health
 #   STUDIO_URL   default https://studio.foodshare.club
 #   CHECK_REPOS  space-separated repos for CI status (default: all four)
+#   IGNORE_CI_FAIL  space-separated repos whose CI failure is a known
+#                   external issue -> demoted to WARN instead of FAIL
 set -uo pipefail
 
 WEB_DIR="${WEB_DIR:-}"
@@ -66,6 +68,8 @@ for repo in $CHECK_REPOS; do
       row "CI: \`$repo\`" "PASS" "latest main run: $conclusion"
     elif [ "$conclusion" = "none" ]; then
       row "CI: \`$repo\`" "WARN" "no runs found on main"
+    elif echo "$IGNORE_CI_FAIL" | tr ' ' '\n' | grep -qx "$repo"; then
+      row "CI: \`$repo\`" "WARN" "known external failure (ignored): ${conclusion:-unknown}"
     else
       row "CI: \`$repo\`" "FAIL" "latest main run: ${conclusion:-unknown}"
       [ "$conclusion" != "none" ] && FAIL=1
@@ -83,11 +87,7 @@ report() {
   printf '%s\n' "${ROWS[@]}"
 }
 
-if [ -n "$summary_file" ]; then
-  report >> "$summary_file"
-else
-  report
-fi
+report | tee "${summary_file:-/dev/null}"
 
 if [ "$FAIL" -eq 1 ] && [ "${SOFT_FAIL:-0}" != "1" ]; then
   echo "::error::Compatibility check failed — see matrix above"
