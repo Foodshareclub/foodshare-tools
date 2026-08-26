@@ -76,7 +76,9 @@ gh_api() {
 }
 
 for repo in $CHECK_REPOS; do
-  if conclusion="$(gh_api "repos/$repo/actions/runs?branch=main&per_page=1" '.workflow_runs[0].conclusion // "none"')"; then
+  # event=push: judge repos by their deploy pipelines, not by sibling
+  # nightly runs (otherwise one red nightly marks every other repo red).
+  if conclusion="$(gh_api "repos/$repo/actions/runs?branch=main&event=push&per_page=1" '.workflow_runs[0].conclusion // "none"')"; then
     if [ "$conclusion" = "success" ] || [ "$conclusion" = "skipped" ]; then
       row "CI: \`$repo\`" "PASS" "latest main run: $conclusion"
     elif [ "$conclusion" = "none" ]; then
