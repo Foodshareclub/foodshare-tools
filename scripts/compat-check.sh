@@ -61,9 +61,22 @@ else
 fi
 
 # 3. Latest CI conclusion on main per repo ---------------------------------
+# Prefer gh when available; fall back to curl + GH_TOKEN (self-hosted
+# runners may not ship the gh CLI).
+gh_api() {
+  local path="$1" jq_expr="$2"
+  if command -v gh >/dev/null 2>&1; then
+    gh api "$path" --jq "$jq_expr" 2>/dev/null
+  elif [ -n "${GH_TOKEN:-}" ]; then
+    curl -sS --max-time 20 -H "Authorization: Bearer $GH_TOKEN" \
+      -H "Accept: application/vnd.github+json" \
+      "https://api.github.com$path" |
+      jq -r "$jq_expr" 2>/dev/null
+  fi
+}
+
 for repo in $CHECK_REPOS; do
-  if conclusion="$(gh api "repos/$repo/actions/runs?branch=main&per_page=1" \
-      --jq '.workflow_runs[0].conclusion // "none"' 2>/dev/null)"; then
+  if conclusion="$(gh_api "repos/$repo/actions/runs?branch=main&per_page=1" '.workflow_runs[0].conclusion // "none"')"; then
     if [ "$conclusion" = "success" ] || [ "$conclusion" = "skipped" ]; then
       row "CI: \`$repo\`" "PASS" "latest main run: $conclusion"
     elif [ "$conclusion" = "none" ]; then
