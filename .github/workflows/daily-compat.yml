@@ -63,7 +63,7 @@ jobs:
 
       - name: Run compat checks
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
           # TODO: remove once org GitHub Actions billing is fixed
           IGNORE_CI_FAIL: Foodshareclub/foodshare-app Foodshareclub/foodshare-tools
           WEB_DIR: ${{ github.workspace }}/web
