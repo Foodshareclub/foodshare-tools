@@ -53,12 +53,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Foodshareclub/foodshare-backend
-          path: ${{ runner.temp }}/compat/backend
+          path: .compat/backend
           token: ${{ secrets.CROSS_REPO_TOKEN }}
       - uses: actions/checkout@v4
         with:
           repository: Foodshareclub/foodshare-web
-          path: ${{ runner.temp }}/compat/web
+          path: .compat/web
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
       - name: Run compat checks
@@ -66,8 +66,8 @@ jobs:
           GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
           # TODO: remove once org GitHub Actions billing is fixed
           IGNORE_CI_FAIL: Foodshareclub/foodshare-app Foodshareclub/foodshare-tools
-          WEB_DIR: ${{ runner.temp }}/compat/web
-          BACKEND_DIR: ${{ runner.temp }}/compat/backend
+          WEB_DIR: .compat/web
+          BACKEND_DIR: .compat/backend
         run: bash scripts/compat-check.sh
 
   ai-review:
