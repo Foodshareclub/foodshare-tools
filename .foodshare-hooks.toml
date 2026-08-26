@@ -7,4 +7,7 @@
 [secrets]
 exclude_files = [
   "crates/hooks/src/secrets.rs",
+  # docker-compose.yml contains only ${VAR} env interpolations, never
+  # literal credentials; real secrets live in Vault/GitHub Secrets.
+  "docker-compose.yml",
 ]
