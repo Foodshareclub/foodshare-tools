@@ -83,6 +83,9 @@ for repo in $CHECK_REPOS; do
       row "CI: \`$repo\`" "PASS" "latest main run: $conclusion"
     elif [ "$conclusion" = "none" ]; then
       row "CI: \`$repo\`" "WARN" "no runs found on main"
+    elif [ "$conclusion" = "cancelled" ]; then
+      # superseded by a newer run — not evidence of breakage
+      row "CI: \`$repo\`" "WARN" "latest main run cancelled (superseded)"
     elif echo "$IGNORE_CI_FAIL" | tr ' ' '\n' | grep -qx "$repo"; then
       row "CI: \`$repo\`" "WARN" "known external failure (ignored): ${conclusion:-unknown}"
     else
