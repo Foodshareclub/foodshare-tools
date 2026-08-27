@@ -76,7 +76,7 @@ pub fn parse_postgis_point(value: &serde_json::Value) -> Option<Coordinate> {
         return None;
     }
 
-    // Try parsing as GeoJSON object
+    // Try parsing as object (GeoJSON or lat/lng object)
     if value.is_object() {
         if let Some(coords) = value.get("coordinates").and_then(|c| c.as_array()) {
             if coords.len() >= 2 {
@@ -84,6 +84,20 @@ pub fn parse_postgis_point(value: &serde_json::Value) -> Option<Coordinate> {
                 let lat = coords[1].as_f64()?;
                 return Some(Coordinate::new(lat, lng));
             }
+        }
+
+        // Check for {"latitude": ..., "longitude": ...} or {"lat": ..., "lng": ...}
+        let lat = value
+            .get("latitude")
+            .or_else(|| value.get("lat"))
+            .and_then(|v| v.as_f64());
+        let lng = value
+            .get("longitude")
+            .or_else(|| value.get("lng"))
+            .and_then(|v| v.as_f64());
+
+        if let (Some(lat_val), Some(lng_val)) = (lat, lng) {
+            return Some(Coordinate::new(lat_val, lng_val));
         }
     }
 

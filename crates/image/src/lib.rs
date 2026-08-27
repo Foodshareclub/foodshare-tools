@@ -30,3 +30,10 @@ pub use resize::{ResizeOptions, resize_image};
 
 #[cfg(feature = "processing")]
 pub use alpha::{AlphaRemovalOptions, has_alpha_channel, process_image_file, remove_alpha_channel};
+
+#[cfg(feature = "wasm")]
+mod wasm;
+
+#[cfg(feature = "wasm")]
+pub use wasm::*;
+

@@ -63,8 +63,10 @@ pub fn calculate_product_distances(
 /// JSON string with lat/lng, or null if parsing fails
 #[wasm_bindgen]
 pub fn parse_location(location_json: &str) -> Result<String, JsValue> {
-    let value: serde_json::Value = serde_json::from_str(location_json)
-        .map_err(|e| JsValue::from_str(&format!("JSON parse error: {}", e)))?;
+    let value: serde_json::Value = match serde_json::from_str(location_json) {
+        Ok(v) => v,
+        Err(_) => serde_json::Value::String(location_json.to_string()),
+    };
 
     match parse_postgis_point(&value) {
         Some(coord) => {

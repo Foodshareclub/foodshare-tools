@@ -23,10 +23,22 @@ hex = { workspace = true }
 
 # WASM dependencies (feature-gated)
 wasm-bindgen = { workspace = true, optional = true }
+js-sys = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+criterion = { workspace = true }
 
 [features]
 default = []
-wasm = ["wasm-bindgen"]
+wasm = ["wasm-bindgen", "js-sys"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[[bench]]
+name = "crypto_benchmark"
+harness = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -17,6 +17,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 image = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -25,10 +26,15 @@ criterion = { workspace = true }
 default = ["processing"]
 processing = ["image"]
 parallel = ["rayon"]
+wasm = ["wasm-bindgen"]
 
 [[bench]]
 name = "resize"
 harness = false
 
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [lib]
-crate-type = ["rlib"]
+crate-type = ["cdylib", "rlib"]
+

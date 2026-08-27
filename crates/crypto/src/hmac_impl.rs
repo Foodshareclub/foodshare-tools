@@ -9,6 +9,26 @@ use crate::{CryptoError, Result};
 type HmacSha256 = Hmac<Sha256>;
 type HmacSha1 = Hmac<Sha1>;
 
+/// Generate HMAC-SHA256 signature as raw 32 bytes.
+pub fn hmac_sha256_raw(key: &[u8], message: &[u8]) -> [u8; 32] {
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC can take key of any size");
+    mac.update(message);
+    let result = mac.finalize();
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&result.into_bytes());
+    out
+}
+
+/// Generate HMAC-SHA1 signature as raw 20 bytes.
+pub fn hmac_sha1_raw(key: &[u8], message: &[u8]) -> [u8; 20] {
+    let mut mac = HmacSha1::new_from_slice(key).expect("HMAC can take key of any size");
+    mac.update(message);
+    let result = mac.finalize();
+    let mut out = [0u8; 20];
+    out.copy_from_slice(&result.into_bytes());
+    out
+}
+
 /// Generate HMAC-SHA256 signature.
 ///
 /// # Arguments
@@ -18,10 +38,8 @@ type HmacSha1 = Hmac<Sha1>;
 /// # Returns
 /// Signature as hex string
 pub fn hmac_sha256(key: &[u8], message: &[u8]) -> String {
-    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC can take key of any size");
-    mac.update(message);
-    let result = mac.finalize();
-    hex::encode(result.into_bytes())
+    let raw = hmac_sha256_raw(key, message);
+    hex::encode(raw)
 }
 
 /// Generate HMAC-SHA1 signature.
@@ -33,10 +51,8 @@ pub fn hmac_sha256(key: &[u8], message: &[u8]) -> String {
 /// # Returns
 /// Signature as hex string
 pub fn hmac_sha1(key: &[u8], message: &[u8]) -> String {
-    let mut mac = HmacSha1::new_from_slice(key).expect("HMAC can take key of any size");
-    mac.update(message);
-    let result = mac.finalize();
-    hex::encode(result.into_bytes())
+    let raw = hmac_sha1_raw(key, message);
+    hex::encode(raw)
 }
 
 /// Verify a signature against an expected value.

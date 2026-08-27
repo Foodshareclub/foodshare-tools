@@ -76,3 +76,89 @@ pub fn search_items(query: &str, items_json: &str, max_results: usize) -> String
 
     serde_json::to_string(&results).unwrap_or_else(|_| "[]".to_string())
 }
+
+/// Calculate cosine similarity between two float arrays in WebAssembly.
+#[wasm_bindgen]
+pub fn vector_cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    crate::cosine_similarity(a, b)
+}
+
+/// Calculate Euclidean (L2) distance between two float arrays in WebAssembly.
+#[wasm_bindgen]
+pub fn vector_l2_distance(a: &[f32], b: &[f32]) -> f32 {
+    crate::l2_distance(a, b)
+}
+
+/// Pad or truncate vector to exact target dimensions (e.g. 384 for gte-small).
+#[wasm_bindgen]
+pub fn vector_normalize_dimensions(v: &[f32], target_dim: usize) -> Vec<f32> {
+    crate::normalize_dimensions(v, target_dim)
+}
+
+/// Merge ranked result lists using Reciprocal Rank Fusion in WebAssembly.
+///
+/// # Arguments
+/// * `lists_json` - JSON 2D array of item IDs: `[["item1", "item2"], ["item2", "item3"]]`
+/// * `k` - RRF smoothing parameter (default 60.0)
+#[wasm_bindgen]
+pub fn rrf_merge(lists_json: &str, k: Option<f32>) -> String {
+    let lists: Vec<Vec<String>> = match serde_json::from_str(lists_json) {
+        Ok(l) => l,
+        Err(_) => return "[]".to_string(),
+    };
+
+    let k_val = k.unwrap_or(crate::DEFAULT_RRF_K);
+    let ranked = crate::apply_rrf(&lists, k_val);
+
+    #[derive(serde::Serialize)]
+    struct RrfOutput {
+        id: String,
+        score: f32,
+    }
+
+    let output: Vec<RrfOutput> = ranked
+        .into_iter()
+        .map(|r| RrfOutput {
+            id: r.item,
+            score: r.score,
+        })
+        .collect();
+
+    serde_json::to_string(&output).unwrap_or_else(|_| "[]".to_string())
+}
+
+/// Calculate multi-modal hybrid score in WebAssembly.
+#[wasm_bindgen]
+pub fn hybrid_score(
+    text_query: &str,
+    target_text: &str,
+    query_vector: Option<Vec<f32>>,
+    item_vector: Option<Vec<f32>>,
+    distance_km: Option<f32>,
+    vector_weight: Option<f32>,
+    text_weight: Option<f32>,
+    geo_weight: Option<f32>,
+    half_life_km: Option<f32>,
+) -> f32 {
+    let weights = crate::HybridWeights {
+        vector_weight: vector_weight.unwrap_or(0.45),
+        text_weight: text_weight.unwrap_or(0.35),
+        geo_weight: geo_weight.unwrap_or(0.20),
+        distance_decay_half_life_km: half_life_km.unwrap_or(10.0),
+    };
+
+    crate::calculate_hybrid_score(
+        text_query,
+        target_text,
+        query_vector.as_deref(),
+        item_vector.as_deref(),
+        distance_km,
+        &weights,
+    )
+}
+
+/// Calculate exponential geospatial proximity decay in WebAssembly.
+#[wasm_bindgen]
+pub fn distance_decay(distance_km: f32, half_life_km: Option<f32>) -> f32 {
+    crate::calculate_distance_decay(distance_km, half_life_km.unwrap_or(10.0))
+}

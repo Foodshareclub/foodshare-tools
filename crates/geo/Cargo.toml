@@ -32,6 +32,9 @@ default = ["parallel"]
 parallel = ["rayon"]
 wasm = ["wasm-bindgen", "js-sys", "getrandom"]
 
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [[bench]]
 name = "distance"
 harness = false

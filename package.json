@@ -2,16 +2,25 @@
   "name": "foodshare-monorepo",
   "version": "1.0.0",
   "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
+  "workspaces": ["packages/*"],
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "sim:run": "bun sim-runner.ts",
+    "sim:smoke": "bun sim-runner.ts --smoke",
+    "sim:clean": "bun sim-runner.ts --clean",
+    "maestro:smoke": "bun maestro-runner.ts smoke",
+    "maestro:test": "bun maestro-runner.ts test",
+    "maestro:matrix": "bun maestro-matrix.ts",
+    "disk:heal": "bun clean-disk.ts",
+    "test:rust": "cargo test --workspace",
+    "build:wasm": "bun tools/build-wasm.ts",
+    "bench": "cargo bench --workspace",
+    "cli": "bun cli.ts"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

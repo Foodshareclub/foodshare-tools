@@ -431,6 +431,63 @@ pub fn validate_config(config: &HashMap<String, serde_json::Value>) -> Validatio
     result
 }
 
+/// Food listing input data for domain validation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FoodListingInput {
+    /// Listing title
+    pub title: String,
+    /// Listing description
+    pub description: Option<String>,
+    /// Category (Food, Things, Borrow)
+    pub category: String,
+    /// Price in currency units (0 if free)
+    pub price: f64,
+    /// Whether item is offered for free
+    pub is_free: bool,
+    /// Expiry unix timestamp (optional)
+    pub expires_at: Option<u64>,
+    /// Latitude
+    pub latitude: f64,
+    /// Longitude
+    pub longitude: f64,
+}
+
+/// Validate a FoodShare food/item listing against domain business rules
+#[must_use]
+pub fn validate_food_listing(listing: &FoodListingInput, current_time_seconds: u64) -> ValidationResult {
+    let mut validator = Validator::new()
+        .required("title", &listing.title)
+        .min_length("title", &listing.title, 3)
+        .max_length("title", &listing.title, 100)
+        .one_of("category", &listing.category, &["Food", "Things", "Borrow"])
+        .range("latitude", listing.latitude, -90.0, 90.0)
+        .range("longitude", listing.longitude, -180.0, 180.0);
+
+    // Free price rule
+    if listing.is_free && listing.price > 0.0 {
+        validator = validator.custom("price", || {
+            Some("Price must be 0.0 when is_free is true".to_string())
+        });
+    }
+
+    if listing.price < 0.0 {
+        validator = validator.custom("price", || {
+            Some("Price cannot be negative".to_string())
+        });
+    }
+
+    // Expiration timestamp rule
+    if let Some(exp) = listing.expires_at {
+        if exp <= current_time_seconds {
+            validator = validator.custom("expires_at", || {
+                Some("Expiry timestamp cannot be in the past".to_string())
+            });
+        }
+    }
+
+    validator.validate()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -517,5 +574,55 @@ mod tests {
             .max_length("name", "test", 10)
             .validate();
         assert!(result.is_valid());
+    }
+
+    #[test]
+    fn test_food_listing_valid() {
+        let listing = FoodListingInput {
+            title: "Fresh Baked Croissants".to_string(),
+            description: Some("Delicious butter croissants".to_string()),
+            category: "Food".to_string(),
+            price: 0.0,
+            is_free: true,
+            expires_at: Some(2000),
+            latitude: 37.7749,
+            longitude: -122.4194,
+        };
+        let res = validate_food_listing(&listing, 1000);
+        assert!(res.is_valid());
+    }
+
+    #[test]
+    fn test_food_listing_expired() {
+        let listing = FoodListingInput {
+            title: "Fresh Milk".to_string(),
+            description: None,
+            category: "Food".to_string(),
+            price: 0.0,
+            is_free: true,
+            expires_at: Some(500),
+            latitude: 37.7749,
+            longitude: -122.4194,
+        };
+        let res = validate_food_listing(&listing, 1000);
+        assert!(!res.is_valid());
+        assert!(res.errors().iter().any(|e| e.field == "expires_at"));
+    }
+
+    #[test]
+    fn test_food_listing_invalid_free_price() {
+        let listing = FoodListingInput {
+            title: "Apples".to_string(),
+            description: None,
+            category: "Food".to_string(),
+            price: 5.0,
+            is_free: true,
+            expires_at: None,
+            latitude: 37.7749,
+            longitude: -122.4194,
+        };
+        let res = validate_food_listing(&listing, 1000);
+        assert!(!res.is_valid());
+        assert!(res.errors().iter().any(|e| e.field == "price"));
     }
 }

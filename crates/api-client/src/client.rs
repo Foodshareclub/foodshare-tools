@@ -145,6 +145,12 @@ impl FoodshareClient {
         ProductsApi::new(self.clone())
     }
 
+    /// Access semantic & vector search endpoints
+    #[must_use]
+    pub fn search(&self) -> crate::endpoints::SearchApi<'_> {
+        crate::endpoints::SearchApi { client: self }
+    }
+
     // -------------------------------------------------------------------------
     // Low-level HTTP methods with resilience
     // -------------------------------------------------------------------------

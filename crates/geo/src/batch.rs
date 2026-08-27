@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 /// Result of a distance calculation for a single item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DistanceResult {
-    /// The item ID
-    pub id: i64,
+    /// The item ID (string or number)
+    pub id: serde_json::Value,
     /// Calculated distance in kilometers (Infinity if location is invalid)
     pub distance: f64,
 }
@@ -18,8 +18,8 @@ pub struct DistanceResult {
 /// Input item for batch distance calculation.
 #[derive(Debug, Clone, Deserialize)]
 pub struct LocationItem {
-    /// Item ID
-    pub id: i64,
+    /// Item ID (string or number)
+    pub id: serde_json::Value,
     /// Location in PostGIS format (GeoJSON or WKT)
     pub location: serde_json::Value,
 }
@@ -42,8 +42,8 @@ pub struct LocationItem {
 /// use serde_json::json;
 ///
 /// let items = vec![
-///     LocationItem { id: 1, location: json!({"coordinates": [13.4050, 52.5200]}) },
-///     LocationItem { id: 2, location: json!("POINT(2.3522 48.8566)") },
+///     LocationItem { id: json!(1), location: json!({"coordinates": [13.4050, 52.5200]}) },
+///     LocationItem { id: json!(2), location: json!("POINT(2.3522 48.8566)") },
 /// ];
 ///
 /// let results = calculate_distances(50.0, 10.0, &items);
@@ -145,7 +145,7 @@ fn calculate_single_distance(user_coord: &Coordinate, item: &LocationItem) -> Di
         .unwrap_or(f64::INFINITY);
 
     DistanceResult {
-        id: item.id,
+        id: item.id.clone(),
         distance,
     }
 }
@@ -159,22 +159,22 @@ mod tests {
         vec![
             // Berlin
             LocationItem {
-                id: 1,
+                id: json!(1),
                 location: json!({"type": "Point", "coordinates": [13.4050, 52.5200]}),
             },
             // Paris
             LocationItem {
-                id: 2,
+                id: json!(2),
                 location: json!("POINT(2.3522 48.8566)"),
             },
             // London
             LocationItem {
-                id: 3,
+                id: json!(3),
                 location: json!({"coordinates": [-0.1276, 51.5074]}),
             },
             // Invalid location
             LocationItem {
-                id: 4,
+                id: json!(4),
                 location: json!(null),
             },
         ]
@@ -189,11 +189,11 @@ mod tests {
         assert_eq!(results.len(), 4);
 
         // Check Berlin result
-        let berlin = results.iter().find(|r| r.id == 1).unwrap();
+        let berlin = results.iter().find(|r| r.id == json!(1)).unwrap();
         assert!(berlin.distance > 0.0 && berlin.distance < 500.0);
 
         // Check invalid location has Infinity
-        let invalid = results.iter().find(|r| r.id == 4).unwrap();
+        let invalid = results.iter().find(|r| r.id == json!(4)).unwrap();
         assert!(invalid.distance.is_infinite());
     }
 

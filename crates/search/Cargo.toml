@@ -32,5 +32,12 @@ default = ["parallel"]
 parallel = ["rayon"]
 wasm = ["wasm-bindgen"]
 
+[[bench]]
+name = "vector_benchmark"
+harness = false
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [lib]
 crate-type = ["cdylib", "rlib"]

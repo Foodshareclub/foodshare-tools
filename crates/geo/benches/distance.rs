@@ -11,7 +11,7 @@ fn create_test_items(count: usize) -> Vec<LocationItem> {
             let lat = 52.0 + (i as f64 * 0.01) % 2.0;
             let lng = 13.0 + (i as f64 * 0.01) % 2.0;
             LocationItem {
-                id: i as i64,
+                id: json!(i),
                 location: json!({"type": "Point", "coordinates": [lng, lat]}),
             }
         })
