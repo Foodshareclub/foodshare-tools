@@ -230,7 +230,7 @@ export async function getRecentBuildRuns(limit: number = 5) {
       `\n🔍 Fetching recent build runs for: ${product.attributes?.name}...`,
     );
     const buildRunsRes = await fetch(
-      `https://api.appstoreconnect.apple.com/v1/ciProducts/${product.id}/buildRuns?limit=${limit}&include=workflow`,
+      `https://api.appstoreconnect.apple.com/v1/ciProducts/${product.id}/buildRuns?limit=${limit}&include=workflow&sort=-number`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -390,7 +390,7 @@ export async function fetchBuildLogs(requestedBuildId?: string) {
 
     if (foodshareProduct) {
       const runsRes = await fetch(
-        `https://api.appstoreconnect.apple.com/v1/ciProducts/${foodshareProduct.id}/buildRuns?limit=1`,
+        `https://api.appstoreconnect.apple.com/v1/ciProducts/${foodshareProduct.id}/buildRuns?limit=1&sort=-number`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const runsData = await runsRes.json();
@@ -485,6 +485,88 @@ export async function fetchBuildLogs(requestedBuildId?: string) {
   }
 }
 
+/**
+ * Monitors and watches an in-progress Xcode Cloud build run until completion
+ */
+export async function watchBuild(requestedBuildId?: string) {
+  const auth = resolveCredentials();
+  if (!auth) {
+    console.warn("⚠️ App Store Connect credentials not detected.");
+    return;
+  }
+
+  const token = await createJwt(auth);
+  let buildId = requestedBuildId;
+
+  if (!buildId) {
+    const productsRes = await fetch(
+      "https://api.appstoreconnect.apple.com/v1/ciProducts",
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    const productsData = await productsRes.json();
+    const product = (productsData.data || []).find((p: any) =>
+      p.attributes?.name?.toLowerCase().includes("foodshare"),
+    );
+    if (product) {
+      const runsRes = await fetch(
+        `https://api.appstoreconnect.apple.com/v1/ciProducts/${product.id}/buildRuns?limit=1&sort=-number`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const runsData = await runsRes.json();
+      buildId = runsData.data?.[0]?.id;
+    }
+  }
+
+  if (!buildId) {
+    console.error("❌ No build run found to watch.");
+    return;
+  }
+
+  console.log(`📡 Watching Xcode Cloud Build ID: ${buildId}...`);
+  let isDone = false;
+  let lastProgress = "";
+
+  while (!isDone) {
+    const res = await fetch(
+      `https://api.appstoreconnect.apple.com/v1/ciBuildRuns/${buildId}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const attrs = data.data?.attributes;
+      const progress = attrs?.executionProgress || "UNKNOWN";
+      const status = attrs?.completionStatus || "IN PROGRESS";
+
+      if (progress !== lastProgress || status !== "IN PROGRESS") {
+        console.log(
+          `[${new Date().toLocaleTimeString()}] 🔄 Build #${attrs?.number} - Progress: ${progress} | Status: ${status}`,
+        );
+        lastProgress = progress;
+      }
+
+      if (
+        status !== "IN PROGRESS" &&
+        (progress === "COMPLETE" || attrs?.finishedDate)
+      ) {
+        isDone = true;
+        console.log(`\n🏁 Build finished with status: ${status}`);
+        if (status === "SUCCEEDED") {
+          console.log("🎉 Xcode Cloud build succeeded!");
+        } else {
+          console.log("❌ Build failed. Fetching action issues...");
+          await fetchBuildLogs(buildId);
+        }
+        break;
+      }
+    }
+    await Bun.sleep(8000);
+  }
+}
+
 // =============================================================================
 // CLI Entrypoint
 // =============================================================================
@@ -500,6 +582,9 @@ async function main() {
     case "list":
       await getRecentBuildRuns();
       break;
+    case "watch":
+      await watchBuild(args[1]);
+      break;
     case "logs":
     case "log":
       await fetchBuildLogs(args[1]);
@@ -510,7 +595,9 @@ async function main() {
       break;
     default:
       console.log(`Unknown command: ${command}`);
-      console.log("Available commands: status, logs [buildId], local");
+      console.log(
+        "Available commands: status, watch [buildId], logs [buildId], local",
+      );
   }
 }
 
