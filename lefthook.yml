@@ -83,7 +83,7 @@ pre-commit:
       glob: "supabase/functions/**/*.ts"
       run: |
         if command -v deno >/dev/null 2>&1 && [ -f supabase/functions/deno.json ]; then
-          deno check {staged_files}
+          deno check --config supabase/functions/deno.json {staged_files}
         fi
 
     mobile-type-check:
@@ -272,7 +272,7 @@ pre-push:
         if command -v deno >/dev/null 2>&1 && [ -d supabase/functions ]; then
           echo "⚡ Verifying Deno Edge Function types before push..."
           for f in supabase/functions/*/index.ts; do
-            [ -f "$f" ] && deno check "$f"
+            [ -f "$f" ] && deno check --config supabase/functions/deno.json "$f"
           done
         fi
 

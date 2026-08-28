@@ -21,7 +21,7 @@
  * @module tools/cli
  */
 
-import { existsSync, rmSync, readdirSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { autoHealDiskSpace } from "./clean-disk.ts";
 import { runSimFlow } from "./sim-runner.ts";
