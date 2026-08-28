@@ -186,8 +186,9 @@ export async function getRecentBuildRuns(limit: number = 5) {
   const token = await createJwt(auth);
   console.log("☁️ Connecting to App Store Connect Xcode Cloud API...");
 
-  const res = await fetch(
-    `https://api.appstoreconnect.apple.com/v1/ciBuildRuns?limit=${limit}&include=workflow,product,buildActions`,
+  // 1. Fetch Xcode Cloud Products
+  const productsRes = await fetch(
+    "https://api.appstoreconnect.apple.com/v1/ciProducts?include=app,bundleId",
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -196,39 +197,136 @@ export async function getRecentBuildRuns(limit: number = 5) {
     },
   );
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`App Store Connect API error (${res.status}): ${text}`);
+  if (!productsRes.ok) {
+    const text = await productsRes.text();
+    throw new Error(
+      `App Store Connect API error (${productsRes.status}): ${text}`,
+    );
   }
 
-  const data = await res.json();
+  const productsData = await productsRes.json();
+  const products = productsData.data || [];
+
+  if (products.length === 0) {
+    console.log(
+      "ℹ️ No Xcode Cloud products found for this App Store Connect team.",
+    );
+    return;
+  }
+
   console.log(
-    `\n📋 Recent Xcode Cloud Build Runs (Found: ${data.data?.length || 0}):`,
-  );
-  console.log(
-    "--------------------------------------------------------------------------------",
+    `📦 Found ${products.length} Xcode Cloud Product(s): ${products.map((p: any) => p.attributes?.name).join(", ")}`,
   );
 
-  for (const build of data.data || []) {
-    const attrs = build.attributes;
-    const statusEmoji =
-      attrs.completionStatus === "SUCCEEDED"
-        ? "✅"
-        : attrs.completionStatus === "FAILED"
-          ? "❌"
-          : attrs.executionProgress === "RUNNING"
-            ? "🔄"
-            : "⏳";
+  for (const product of products) {
+    if (
+      product.attributes?.name &&
+      !product.attributes.name.toLowerCase().includes("foodshare")
+    ) {
+      continue; // Focus on FoodShare by default
+    }
 
     console.log(
-      `${statusEmoji} Build #${attrs.number} [${attrs.executionProgress || "UNKNOWN"}] - ${attrs.completionStatus || "IN PROGRESS"}`,
+      `\n🔍 Fetching recent build runs for: ${product.attributes?.name}...`,
     );
-    console.log(`   ID: ${build.id}`);
-    console.log(`   Started: ${attrs.createdDate || "N/A"}`);
-    if (attrs.finishedDate) console.log(`   Finished: ${attrs.finishedDate}`);
+    const buildRunsRes = await fetch(
+      `https://api.appstoreconnect.apple.com/v1/ciProducts/${product.id}/buildRuns?limit=${limit}&include=workflow`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!buildRunsRes.ok) {
+      const text = await buildRunsRes.text();
+      console.warn(
+        `  ⚠️ Failed to fetch build runs for ${product.attributes?.name}: ${text}`,
+      );
+      continue;
+    }
+
+    const buildData = await buildRunsRes.json();
+    const builds = buildData.data || [];
+    const included = buildData.included || [];
+
     console.log(
-      "--------------------------------------------------------------------------------",
+      `\n📋 Recent Xcode Cloud Build Runs (Found: ${builds.length}):`,
     );
+    console.log(
+      "================================================================================",
+    );
+
+    for (const build of builds) {
+      const attrs = build.attributes;
+      const workflowId = build.relationships?.workflow?.data?.id;
+      const workflow = included.find(
+        (i: any) => i.type === "ciWorkflows" && i.id === workflowId,
+      );
+      const workflowName = workflow?.attributes?.name || "Workflow";
+
+      const statusEmoji =
+        attrs.completionStatus === "SUCCEEDED"
+          ? "✅"
+          : attrs.completionStatus === "FAILED" ||
+              attrs.completionStatus === "ERRORED"
+            ? "❌"
+            : attrs.completionStatus === "CANCELED"
+              ? "⏹️"
+              : attrs.executionProgress === "RUNNING"
+                ? "🔄"
+                : "⏳";
+
+      console.log(`${statusEmoji} Build #${attrs.number} [${workflowName}]`);
+      console.log(
+        `   Status: ${attrs.completionStatus || attrs.executionProgress || "IN PROGRESS"}`,
+      );
+      console.log(`   ID: ${build.id}`);
+      if (attrs.sourceCommit?.commitSha)
+        console.log(
+          `   Commit: ${attrs.sourceCommit.commitSha.slice(0, 7)} ("${attrs.sourceCommit.message?.trim() || ""}")`,
+        );
+      console.log(`   Started: ${attrs.createdDate || "N/A"}`);
+      if (attrs.finishedDate) console.log(`   Finished: ${attrs.finishedDate}`);
+
+      // Fetch build issues/errors if failed
+      if (
+        attrs.completionStatus === "FAILED" ||
+        attrs.completionStatus === "ERRORED"
+      ) {
+        try {
+          const issuesRes = await fetch(
+            `https://api.appstoreconnect.apple.com/v1/ciBuildRuns/${build.id}/issues`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
+          if (issuesRes.ok) {
+            const issuesData = await issuesRes.json();
+            const issues = issuesData.data || [];
+            if (issues.length > 0) {
+              console.log(`   ⚠️ Issues (${issues.length}):`);
+              for (const issue of issues.slice(0, 5)) {
+                console.log(
+                  `      • [${issue.attributes?.issueType || "Error"}] ${issue.attributes?.message || ""}`,
+                );
+                if (issue.attributes?.fileSource?.path) {
+                  console.log(
+                    `        File: ${issue.attributes.fileSource.path}:${issue.attributes.fileSource.lineNumber || ""}`,
+                  );
+                }
+              }
+            }
+          }
+        } catch {
+          // Ignore issue fetch error
+        }
+      }
+      console.log(
+        "--------------------------------------------------------------------------------",
+      );
+    }
   }
 }
 
@@ -261,6 +359,132 @@ export function displayLocalDiagnostics() {
   }
 }
 
+/**
+ * Fetches and displays logs and artifacts for a specific Xcode Cloud build run
+ */
+export async function fetchBuildLogs(requestedBuildId?: string) {
+  const auth = resolveCredentials();
+  if (!auth) {
+    console.warn(
+      "⚠️ App Store Connect credentials not detected in environment.",
+    );
+    return;
+  }
+
+  const token = await createJwt(auth);
+
+  let buildId = requestedBuildId;
+
+  // If no buildId passed, get the latest build
+  if (!buildId) {
+    const productsRes = await fetch(
+      "https://api.appstoreconnect.apple.com/v1/ciProducts?include=app",
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    const productsData = await productsRes.json();
+    const foodshareProduct = (productsData.data || []).find((p: any) =>
+      p.attributes?.name?.toLowerCase().includes("foodshare"),
+    );
+
+    if (foodshareProduct) {
+      const runsRes = await fetch(
+        `https://api.appstoreconnect.apple.com/v1/ciProducts/${foodshareProduct.id}/buildRuns?limit=1`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const runsData = await runsRes.json();
+      buildId = runsData.data?.[0]?.id;
+    }
+  }
+
+  if (!buildId) {
+    console.error("❌ No build run found.");
+    return;
+  }
+
+  console.log(`📥 Fetching build actions & logs for Build ID: ${buildId}...`);
+
+  // 1. Fetch Build Actions
+  const actionsRes = await fetch(
+    `https://api.appstoreconnect.apple.com/v1/ciBuildRuns/${buildId}/actions`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+
+  if (!actionsRes.ok) {
+    const text = await actionsRes.text();
+    throw new Error(
+      `Failed to fetch build actions (${actionsRes.status}): ${text}`,
+    );
+  }
+
+  const actionsData = await actionsRes.json();
+  const actions = actionsData.data || [];
+
+  console.log(`📋 Found ${actions.length} Action(s):`);
+
+  for (const action of actions) {
+    const attrs = action.attributes;
+    console.log(
+      `\n🔹 Action: ${attrs.name || attrs.actionType} [${attrs.actionType}]`,
+    );
+    console.log(
+      `   Status: ${attrs.completionStatus || attrs.executionProgress}`,
+    );
+    if (attrs.startedDate) console.log(`   Started: ${attrs.startedDate}`);
+    if (attrs.finishedDate) console.log(`   Finished: ${attrs.finishedDate}`);
+
+    // Fetch action issues
+    const issuesRes = await fetch(
+      `https://api.appstoreconnect.apple.com/v1/ciBuildActions/${action.id}/issues`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (issuesRes.ok) {
+      const issuesData = await issuesRes.json();
+      const issues = issuesData.data || [];
+      if (issues.length > 0) {
+        console.log(`\n   ⚠️ Action Issues (${issues.length}):`);
+        for (const issue of issues) {
+          console.log(
+            `      • [${issue.attributes?.issueType || "Error"}] ${issue.attributes?.message || ""}`,
+          );
+          if (issue.attributes?.fileSource?.path) {
+            console.log(
+              `        File: ${issue.attributes.fileSource.path}:${issue.attributes.fileSource.lineNumber || ""}`,
+            );
+          }
+        }
+      }
+    }
+
+    // Fetch artifacts
+    const artifactsRes = await fetch(
+      `https://api.appstoreconnect.apple.com/v1/ciBuildActions/${action.id}/artifacts`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    if (artifactsRes.ok) {
+      const artifactsData = await artifactsRes.json();
+      const artifacts = artifactsData.data || [];
+      if (artifacts.length > 0) {
+        console.log(`\n   📦 Artifacts (${artifacts.length}):`);
+        for (const artifact of artifacts) {
+          console.log(
+            `      • ${artifact.attributes?.fileName} (${artifact.attributes?.fileType})`,
+          );
+          if (artifact.attributes?.downloadUrl) {
+            console.log(
+              `        Download URL: ${artifact.attributes.downloadUrl}`,
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
 // =============================================================================
 // CLI Entrypoint
 // =============================================================================
@@ -276,13 +500,17 @@ async function main() {
     case "list":
       await getRecentBuildRuns();
       break;
+    case "logs":
+    case "log":
+      await fetchBuildLogs(args[1]);
+      break;
     case "diagnostics":
     case "local":
       displayLocalDiagnostics();
       break;
     default:
       console.log(`Unknown command: ${command}`);
-      console.log("Available commands: status, local");
+      console.log("Available commands: status, logs [buildId], local");
   }
 }
 
