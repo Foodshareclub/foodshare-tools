@@ -22,6 +22,7 @@ members = [
     "bins/foodshare-swift",
     "crates/migrate",
     "bins/foodshare-migrate",
+    "bins/fs-tui",
 ]
 
 [workspace.package]
@@ -101,8 +102,8 @@ handlebars = "5.1"
 # Compression (xcactivitylog parsing)
 flate2 = "1.0"
 
-# Async runtime (for telemetry)
-tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "sync", "time"] }
+# Async runtime (for telemetry + TUI)
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util"] }
 
 # HTTP client (for telemetry)
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
@@ -135,6 +136,10 @@ image = { version = "0.24", default-features = false, features = ["jpeg", "png",
 
 # Compression
 brotli = "6.0"
+
+# TUI
+ratatui = "0.28"
+crossterm = { version = "0.28", features = ["event-stream"] }
 
 # Text processing
 unicode-segmentation = "1.10"

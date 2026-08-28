@@ -129,6 +129,25 @@ async function handleBackend(args: string[]) {
 	}
 }
 
+async function handleTui(args: string[]) {
+	const tuiBin = join(ROOT_DIR, "foodshare-tools", "target", "debug", "fs-tui");
+	const hasBin = existsSync(tuiBin);
+	if (!hasBin) {
+		console.log("🔧 Building fs-tui (Rust TUI)...");
+		await runCommand(["cargo", "build", "--bin", "fs-tui"], join(ROOT_DIR, "foodshare-tools"));
+	}
+	// Pass through args: verify/rust/wasm/web/backend/mobile or interactive if no args
+	const tuiArgs = args.length > 0 ? args : [];
+	console.log(`🖥️  Launching TUI: ${tuiBin} ${tuiArgs.join(" ")}`);
+	const proc = Bun.spawn([tuiBin, ...tuiArgs], {
+		cwd: ROOT_DIR,
+		stdin: "inherit",
+		stdout: "inherit",
+		stderr: "inherit",
+	});
+	await proc.exited;
+}
+
 async function runFullVerification() {
 	console.log("🌟 =========================================================");
 	console.log("🌟 FoodShare 10x Full Domain Verification");
@@ -200,6 +219,9 @@ async function main() {
 		case "backend":
 			await handleBackend(subArgs);
 			break;
+		case "tui":
+			await handleTui(subArgs);
+			break;
 		case "rust":
 			await runCommand(["cargo", "test", "--workspace", ...subArgs], join(ROOT_DIR, "foodshare-tools"));
 			break;
@@ -248,6 +270,7 @@ Usage:
   bun cli.ts mobile [run|smoke|matrix|build|test|clean|syntax|hierarchy]
   bun cli.ts web [build|dev|lint|typecheck|translations]
   bun cli.ts backend [sync-types|test]
+  bun cli.ts tui [verify|rust|wasm|web|backend|mobile]  (interactive TUI if no args)
   bun cli.ts translations [--dry-run|--locale=xx|--force]
   bun cli.ts verify
   bun cli.ts disk:heal [--force]

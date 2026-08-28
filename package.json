@@ -20,7 +20,9 @@
     "test:rust": "cargo test --workspace",
     "build:wasm": "bun tools/build-wasm.ts",
     "bench": "cargo bench --workspace",
-    "cli": "bun cli.ts"
+    "cli": "bun cli.ts",
+    "tui": "cargo run --bin fs-tui",
+    "tui:verify": "cargo run --bin fs-tui -- verify"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

@@ -1,0 +1,24 @@
+[package]
+name = "fs-tui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "FoodShare TUI — live mono-ecosystem build/test monitor (Rust 2024, Bun, Next.js, Supabase, Skip)"
+
+[[bin]]
+name = "fs-tui"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+owo-colors.workspace = true
