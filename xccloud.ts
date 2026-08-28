@@ -41,30 +41,66 @@ function resolveAppDir(): string {
   return join(import.meta.dir, "..");
 }
 
+const DEFAULT_ISSUER_ID = "69a6de8f-c4a2-47e3-e053-5b8c7c11a4d1";
+const KNOWN_KEY_CANDIDATES = ["3B28BL42D3", "4N7PTU3PVD"];
+
 /**
- * Resolves App Store Connect credentials from environment variables or standard key directories
+ * Resolves App Store Connect credentials from environment variables, keys/ directory, or standard key stores
  */
 function resolveCredentials(): AppStoreConnectAuth | null {
-  const keyId = process.env.APP_STORE_CONNECT_KEY_ID || process.env.ASC_KEY_ID;
+  let keyId = process.env.APP_STORE_CONNECT_KEY_ID || process.env.ASC_KEY_ID;
   const issuerId =
-    process.env.APP_STORE_CONNECT_ISSUER_ID || process.env.ASC_ISSUER_ID;
+    process.env.APP_STORE_CONNECT_ISSUER_ID ||
+    process.env.ASC_ISSUER_ID ||
+    DEFAULT_ISSUER_ID;
   let privateKey =
     process.env.APP_STORE_CONNECT_PRIVATE_KEY || process.env.ASC_PRIVATE_KEY;
 
-  // Check for private key file in standard paths if not directly in env
-  if (keyId && issuerId && !privateKey) {
-    const keyPathCandidate = join(
-      process.env.HOME || "",
-      ".appstoreconnect",
-      "private_keys",
-      `AuthKey_${keyId}.p8`,
-    );
-    const localKeyCandidate = join(APP_DIR, `AuthKey_${keyId}.p8`);
+  // Search locations for .p8 private key files
+  const searchDirs = [
+    join(APP_DIR, "keys"),
+    join(process.env.HOME || "", ".appstoreconnect", "private_keys"),
+    APP_DIR,
+  ];
 
-    if (existsSync(keyPathCandidate)) {
-      privateKey = readFileSync(keyPathCandidate, "utf-8");
-    } else if (existsSync(localKeyCandidate)) {
-      privateKey = readFileSync(localKeyCandidate, "utf-8");
+  // If keyId is known, check for specific key file
+  const keyCandidates = keyId ? [keyId] : KNOWN_KEY_CANDIDATES;
+
+  if (!privateKey) {
+    for (const candidate of keyCandidates) {
+      for (const dir of searchDirs) {
+        const paths = [
+          join(dir, `AuthKey_${candidate}.p8`),
+          join(dir, `${candidate}.p8`),
+        ];
+        for (const p of paths) {
+          if (existsSync(p)) {
+            privateKey = readFileSync(p, "utf-8");
+            keyId = candidate;
+            break;
+          }
+        }
+        if (privateKey) break;
+      }
+      if (privateKey) break;
+    }
+
+    // Auto-discover any .p8 file in keys/ directory if not found yet
+    if (!privateKey && existsSync(join(APP_DIR, "keys"))) {
+      const p8Files = new Bun.Glob("*.p8").scanSync({
+        cwd: join(APP_DIR, "keys"),
+      });
+      for (const file of p8Files) {
+        const fullPath = join(APP_DIR, "keys", file);
+        privateKey = readFileSync(fullPath, "utf-8");
+        const match =
+          file.match(/AuthKey_([A-Z0-9]+)\.p8/) ||
+          file.match(/([A-Z0-9]+)\.p8/);
+        if (match) {
+          keyId = match[1];
+        }
+        break;
+      }
     }
   }
 
