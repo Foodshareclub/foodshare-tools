@@ -2,7 +2,9 @@
   "name": "foodshare-monorepo",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -22,7 +24,11 @@
     "bench": "cargo bench --workspace",
     "cli": "bun cli.ts",
     "tui": "cargo run --bin fs-tui",
-    "tui:verify": "cargo run --bin fs-tui -- verify"
+    "tui:verify": "cargo run --bin fs-tui -- verify",
+    "auto": "bun cli.ts auto",
+    "auto:quick": "bun cli.ts auto --quick",
+    "auto:keep": "bun cli.ts auto --keep",
+    "auto:headless": "cargo run --bin fs-auto -- --quick"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

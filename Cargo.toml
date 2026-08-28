@@ -23,6 +23,7 @@ members = [
     "crates/migrate",
     "bins/foodshare-migrate",
     "bins/fs-tui",
+    "bins/fs-auto",
 ]
 
 [workspace.package]

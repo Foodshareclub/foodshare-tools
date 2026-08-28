@@ -1,0 +1,24 @@
+[package]
+name = "fs-auto"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "FoodShare Auto — run-until-green, build, auto-close & clean (headless, robust)"
+
+[[bin]]
+name = "fs-auto"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+indicatif.workspace = true
+owo-colors.workspace = true
+console.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
