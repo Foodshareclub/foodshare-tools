@@ -23,20 +23,15 @@ const APP_DIR = resolveAppDir();
 const LOGS_DIR = join(APP_DIR, "logs", "xcodecloud");
 
 function resolveAppDir(): string {
-  if (existsSync(join(process.cwd(), "Darwin", "FoodShare.xcodeproj")))
+  if (existsSync(join(process.cwd(), "Darwin", "FoodShare.xcodeproj"))) {
     return process.cwd();
+  }
   if (
     existsSync(
-      join(
-        process.cwd(),
-        "..",
-        "foodshare-app",
-        "Darwin",
-        "FoodShare.xcodeproj",
-      ),
+      join(process.cwd(), "foodshare-app", "Darwin", "FoodShare.xcodeproj"),
     )
   ) {
-    return join(process.cwd(), "..", "foodshare-app");
+    return join(process.cwd(), "foodshare-app");
   }
   return join(import.meta.dir, "..");
 }
@@ -47,7 +42,7 @@ const KNOWN_KEY_CANDIDATES = ["3B28BL42D3", "4N7PTU3PVD"];
 /**
  * Resolves App Store Connect credentials from environment variables, keys/ directory, or standard key stores
  */
-function resolveCredentials(): AppStoreConnectAuth | null {
+export function resolveCredentials(): AppStoreConnectAuth | null {
   let keyId = process.env.APP_STORE_CONNECT_KEY_ID || process.env.ASC_KEY_ID;
   const issuerId =
     process.env.APP_STORE_CONNECT_ISSUER_ID ||
@@ -114,7 +109,7 @@ function resolveCredentials(): AppStoreConnectAuth | null {
 /**
  * Creates an ES256 JWT for App Store Connect API
  */
-async function createJwt(auth: AppStoreConnectAuth): Promise<string> {
+export async function createJwt(auth: AppStoreConnectAuth): Promise<string> {
   const header = {
     alg: "ES256",
     kid: auth.keyId,
@@ -567,6 +562,98 @@ export async function watchBuild(requestedBuildId?: string) {
   }
 }
 
+/**
+ * Triggers a new Xcode Cloud build run for the primary workflow
+ */
+export async function triggerBuild(workflowId?: string): Promise<void> {
+  const auth = resolveCredentials();
+  if (!auth) {
+    console.error("❌ Could not resolve App Store Connect credentials.");
+    process.exit(1);
+  }
+
+  const token = await createJwt(auth);
+  let targetWorkflowId = workflowId;
+
+  if (!targetWorkflowId) {
+    const productsRes = await fetch(
+      "https://api.appstoreconnect.apple.com/v1/ciProducts",
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (productsRes.ok) {
+      const pData = await productsRes.json();
+      const product =
+        pData.data?.find((p: any) => p.attributes.name === "FoodShare App") ||
+        pData.data?.[0];
+      if (product) {
+        const wfRes = await fetch(
+          `https://api.appstoreconnect.apple.com/v1/ciProducts/${product.id}/workflows`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        if (wfRes.ok) {
+          const wfData = await wfRes.json();
+          targetWorkflowId = wfData.data?.[0]?.id;
+        }
+      }
+    }
+  }
+
+  if (!targetWorkflowId) {
+    console.error(
+      "❌ Could not find an active Xcode Cloud workflow to trigger.",
+    );
+    process.exit(1);
+  }
+
+  console.log(
+    `🚀 Triggering new Xcode Cloud build for workflow: ${targetWorkflowId}...`,
+  );
+  const res = await fetch(
+    "https://api.appstoreconnect.apple.com/v1/ciBuildRuns",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        data: {
+          type: "ciBuildRuns",
+          relationships: {
+            workflow: {
+              data: {
+                type: "ciWorkflows",
+                id: targetWorkflowId,
+              },
+            },
+          },
+        },
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(
+      `❌ Failed to trigger build run (HTTP ${res.status}):`,
+      errorText,
+    );
+    process.exit(1);
+  }
+
+  const data = await res.json();
+  const build = data.data;
+  console.log(
+    `✅ Build #${build.attributes.number} successfully queued! (ID: ${build.id})`,
+  );
+  console.log(`👀 Starting live watch...\n`);
+  await watchBuild(build.id);
+}
+
 // =============================================================================
 // CLI Entrypoint
 // =============================================================================
@@ -578,9 +665,25 @@ async function main() {
   mkdirSync(LOGS_DIR, { recursive: true });
 
   switch (command) {
+    case "jwt":
+    case "token": {
+      const auth = resolveCredentials();
+      if (!auth) {
+        console.error("❌ Could not resolve App Store Connect credentials.");
+        process.exit(1);
+      }
+      const token = await createJwt(auth);
+      console.log(token);
+      break;
+    }
     case "status":
     case "list":
       await getRecentBuildRuns();
+      break;
+    case "start":
+    case "trigger":
+    case "build":
+      await triggerBuild(args[1]);
       break;
     case "watch":
       await watchBuild(args[1]);
@@ -596,7 +699,7 @@ async function main() {
     default:
       console.log(`Unknown command: ${command}`);
       console.log(
-        "Available commands: status, watch [buildId], logs [buildId], local",
+        "Available commands: status, start, watch [buildId], logs [buildId], jwt, local",
       );
   }
 }

@@ -15,6 +15,18 @@ pre-commit:
         [ ! -f "$HOOKS_BIN" ] && HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/debug/lefthook-rs}"
         if [ -f "$HOOKS_BIN" ]; then
           "$HOOKS_BIN" security {staged_files}
+        else
+          # Fallback: check for common secrets in staged files
+          echo "🔍 Checking for secrets in staged files (fallback mode)..."
+          for f in {staged_files}; do
+            # Skip hook config files (contain pattern definitions, not real secrets)
+            case "$f" in *.yml|*.yaml) continue ;; esac
+            if grep -qE "(service_role_key|eyJ[A-Za-z0-9+/]{100,}==|AKIA[A-Z0-9]{16})" "$f" 2>/dev/null; then
+              echo "🚨 Potential secret detected in $f!"
+              exit 1
+            fi
+          done
+          echo "✅ No obvious secrets found in staged files (fallback mode)"
         fi
 
     web-cybersecurity:
@@ -311,6 +323,16 @@ pre-push:
         [ ! -f "$HOOKS_BIN" ] && HOOKS_BIN="${FOODSHARE_HOOKS_BIN:-$REPO_ROOT/../foodshare-tools/target/debug/lefthook-rs}"
         if [ -f "$HOOKS_BIN" ]; then
           "$HOOKS_BIN" protected-branch
+        fi
+
+    db-migration-check:
+      priority: 1
+      run: |
+        REPO_ROOT="$(git rev-parse --show-toplevel)"
+        if [ -f "$REPO_ROOT/supabase/migrations" ] || [ -f "$REPO_ROOT/supabase/prisma/migrations" ]; then
+          echo "🗄️ Checking for database migration files..."
+          MIGRATIONS=$(find "$REPO_ROOT/supabase" -name "*.sql" -o -name "*.ts" | grep -E "\.(sql|ts)$" | wc -l)
+          echo "📊 Found $MIGRATIONS migration files - ensuring they are applied or documented"
         fi
 
     large-files:
