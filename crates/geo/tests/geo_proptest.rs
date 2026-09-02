@@ -1,6 +1,6 @@
 //! Property-based geospatial tests for Haversine distances and PostGIS coordinates.
 
-use foodshare_geo::{haversine_distance, Coordinate, parse_postgis_point};
+use foodshare_geo::{Coordinate, haversine_distance, parse_postgis_point};
 use proptest::prelude::*;
 
 proptest! {

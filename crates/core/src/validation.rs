@@ -454,7 +454,10 @@ pub struct FoodListingInput {
 
 /// Validate a FoodShare food/item listing against domain business rules
 #[must_use]
-pub fn validate_food_listing(listing: &FoodListingInput, current_time_seconds: u64) -> ValidationResult {
+pub fn validate_food_listing(
+    listing: &FoodListingInput,
+    current_time_seconds: u64,
+) -> ValidationResult {
     let mut validator = Validator::new()
         .required("title", &listing.title)
         .min_length("title", &listing.title, 3)
@@ -471,9 +474,7 @@ pub fn validate_food_listing(listing: &FoodListingInput, current_time_seconds: u
     }
 
     if listing.price < 0.0 {
-        validator = validator.custom("price", || {
-            Some("Price cannot be negative".to_string())
-        });
+        validator = validator.custom("price", || Some("Price cannot be negative".to_string()));
     }
 
     // Expiration timestamp rule

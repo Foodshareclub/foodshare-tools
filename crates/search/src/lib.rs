@@ -22,9 +22,9 @@ mod wasm;
 
 pub use error::{Result, SearchError};
 pub use fuzzy::{fuzzy_match, levenshtein_distance};
-pub use hybrid::{calculate_distance_decay, calculate_hybrid_score, HybridWeights};
-pub use relevance::{calculate_relevance, RelevanceScore};
-pub use rrf::{apply_rrf, RankedResult, DEFAULT_RRF_K};
+pub use hybrid::{HybridWeights, calculate_distance_decay, calculate_hybrid_score};
+pub use relevance::{RelevanceScore, calculate_relevance};
+pub use rrf::{DEFAULT_RRF_K, RankedResult, apply_rrf};
 pub use vector::{cosine_similarity, l2_distance, l2_normalize, normalize_dimensions};
 
 /// Search result with relevance score.

@@ -1,7 +1,7 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use foodshare_crypto::{
-    constant_time_compare, generate_totp, hmac_sha256, verify_totp,
-    DEFAULT_DIGITS, DEFAULT_TIME_STEP,
+    DEFAULT_DIGITS, DEFAULT_TIME_STEP, constant_time_compare, generate_totp, hmac_sha256,
+    verify_totp,
 };
 
 fn bench_totp_generation(c: &mut Criterion) {
@@ -43,9 +43,7 @@ fn bench_hmac_sha256(c: &mut Criterion) {
     let payload = br#"{"event":"listing.created","id":"uuid-1234","user_id":"uuid-5678","timestamp":1724790000}"#;
 
     c.bench_function("hmac_sha256_hex", |bencher| {
-        bencher.iter(|| {
-            hmac_sha256(black_box(key), black_box(payload))
-        });
+        bencher.iter(|| hmac_sha256(black_box(key), black_box(payload)));
     });
 }
 
@@ -54,9 +52,7 @@ fn bench_constant_time_compare(c: &mut Criterion) {
     let b = b"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     c.bench_function("constant_time_compare_64bytes", |bencher| {
-        bencher.iter(|| {
-            constant_time_compare(black_box(a), black_box(b))
-        });
+        bencher.iter(|| constant_time_compare(black_box(a), black_box(b)));
     });
 }
 

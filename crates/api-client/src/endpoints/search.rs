@@ -65,7 +65,10 @@ pub struct VectorSearchResponse {
 
 impl<'a> SearchApi<'a> {
     /// Execute a semantic vector search query against the backend.
-    pub async fn vector_search(&self, request: &VectorSearchRequest) -> ApiResult<VectorSearchResponse> {
+    pub async fn vector_search(
+        &self,
+        request: &VectorSearchRequest,
+    ) -> ApiResult<VectorSearchResponse> {
         self.client.post("api-v1-vector-search", request).await
     }
 }

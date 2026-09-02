@@ -25,7 +25,9 @@ pub fn detect_image_format(data: &[u8]) -> Option<String> {
 /// MIME type string (e.g. "image/jpeg", "image/png", "image/webp"), or None.
 #[wasm_bindgen]
 pub fn get_image_mime_type(data: &[u8]) -> Option<String> {
-    crate::detect_format(data).ok().map(|f| f.mime_type().to_string())
+    crate::detect_format(data)
+        .ok()
+        .map(|f| f.mime_type().to_string())
 }
 
 /// Calculate optimal resized target width based on raw file size tiers and current dimensions.

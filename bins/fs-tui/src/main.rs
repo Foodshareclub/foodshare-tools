@@ -14,7 +14,7 @@ use clap::{Parser, Subcommand};
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
     backend::Backend,
@@ -117,8 +117,16 @@ impl App {
         Self {
             domains: vec![
                 Domain::new("Rust", "🦀", "16 crates, 217 tests, 6 benches"),
-                Domain::new("WASM", "📦", "5 modules: search/geo/crypto/compression/image"),
-                Domain::new("Web", "⚡", "Next.js 16 Turbopack 89 routes, tsc/oxlint/biome"),
+                Domain::new(
+                    "WASM",
+                    "📦",
+                    "5 modules: search/geo/crypto/compression/image",
+                ),
+                Domain::new(
+                    "Web",
+                    "⚡",
+                    "Next.js 16 Turbopack 89 routes, tsc/oxlint/biome",
+                ),
                 Domain::new("Backend", "🛡️", "Deno 434 tests, pgvector, Edge Functions"),
                 Domain::new("Mobile", "📱", "Skip transpile, Maestro 17 flows, Gradle"),
             ],
@@ -141,7 +149,8 @@ impl App {
         match code {
             KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
             KeyCode::Char('h') => {
-                self.message = "h:help  q:quit  r:run selected  v:verify all  c:clean disk  j/k:nav".into()
+                self.message =
+                    "h:help  q:quit  r:run selected  v:verify all  c:clean disk  j/k:nav".into()
             }
             KeyCode::Char('r') => {
                 let idx = self.selected;
@@ -209,9 +218,15 @@ fn ui(f: &mut Frame, app: &App) {
         .split(f.area());
 
     // Header
-    let title = Paragraph::new("  FoodShare Mono-Ecosystem — Rust 2024 + Bun + Next.js 16 + Supabase (TUI)")
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-        .block(Block::default().borders(Borders::ALL).title(" fs-tui "));
+    let title = Paragraph::new(
+        "  FoodShare Mono-Ecosystem — Rust 2024 + Bun + Next.js 16 + Supabase (TUI)",
+    )
+    .style(
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    )
+    .block(Block::default().borders(Borders::ALL).title(" fs-tui "));
     f.render_widget(title, chunks[0]);
 
     // Domains table
@@ -222,7 +237,11 @@ fn ui(f: &mut Frame, app: &App) {
         Cell::from(" Fail "),
         Cell::from(" Detail "),
     ])
-    .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+    .style(
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    )
     .height(1);
 
     let rows = app.domains.iter().enumerate().map(|(i, d)| {
@@ -243,15 +262,22 @@ fn ui(f: &mut Frame, app: &App) {
         .height(1)
     });
 
-    let table = Table::new(rows, [
-        Constraint::Length(14),
-        Constraint::Length(10),
-        Constraint::Length(8),
-        Constraint::Length(8),
-        Constraint::Min(30),
-    ])
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(14),
+            Constraint::Length(10),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Min(30),
+        ],
+    )
     .header(header)
-    .block(Block::default().borders(Borders::ALL).title(" Domains (j/k select, r run, v verify) "))
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Domains (j/k select, r run, v verify) "),
+    )
     .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
 
     f.render_widget(table, chunks[1]);
@@ -274,14 +300,16 @@ fn ui(f: &mut Frame, app: &App) {
         .started
         .map(|s| format!("{:.1}s", s.elapsed().as_secs_f32()))
         .unwrap_or_else(|| "-".into());
-    let footer = Paragraph::new(format!(" {} | elapsed: {} | {}", app.message, elapsed, sel.detail))
-        .style(Style::default().fg(Color::DarkGray))
-        .block(Block::default().borders(Borders::ALL).title(" Help "));
+    let footer = Paragraph::new(format!(
+        " {} | elapsed: {} | {}",
+        app.message, elapsed, sel.detail
+    ))
+    .style(Style::default().fg(Color::DarkGray))
+    .block(Block::default().borders(Borders::ALL).title(" Help "));
     f.render_widget(footer, chunks[3]);
 }
 
-async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()>
-{
+async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     let mut tick = tokio::time::interval(Duration::from_millis(200));
     // Channel for domain workers to send log lines (real impl would use this)
     let (_tx, mut _rx) = mpsc::channel::<(usize, String)>(100);

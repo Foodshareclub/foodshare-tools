@@ -1,8 +1,7 @@
 //! Property-based testing for vector search and ranking algorithms.
 
 use foodshare_search::{
-    apply_rrf, cosine_similarity, l2_distance, l2_normalize, normalize_dimensions,
-    DEFAULT_RRF_K,
+    DEFAULT_RRF_K, apply_rrf, cosine_similarity, l2_distance, l2_normalize, normalize_dimensions,
 };
 use proptest::prelude::*;
 

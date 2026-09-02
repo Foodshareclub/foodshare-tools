@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use foodshare_search::{apply_rrf, cosine_similarity, l2_distance};
 
 fn bench_cosine_similarity_384(c: &mut Criterion) {
@@ -6,9 +6,7 @@ fn bench_cosine_similarity_384(c: &mut Criterion) {
     let b: Vec<f32> = (0..384).map(|i| (i as f32) * 0.02).collect();
 
     c.bench_function("cosine_similarity_384d", |bencher| {
-        bencher.iter(|| {
-            cosine_similarity(black_box(&a), black_box(&b))
-        });
+        bencher.iter(|| cosine_similarity(black_box(&a), black_box(&b)));
     });
 }
 
@@ -17,9 +15,7 @@ fn bench_cosine_similarity_1536(c: &mut Criterion) {
     let b: Vec<f32> = (0..1536).map(|i| (i as f32) * 0.02).collect();
 
     c.bench_function("cosine_similarity_1536d", |bencher| {
-        bencher.iter(|| {
-            cosine_similarity(black_box(&a), black_box(&b))
-        });
+        bencher.iter(|| cosine_similarity(black_box(&a), black_box(&b)));
     });
 }
 
@@ -28,9 +24,7 @@ fn bench_l2_distance_384(c: &mut Criterion) {
     let b: Vec<f32> = (0..384).map(|i| (i as f32) * 0.02).collect();
 
     c.bench_function("l2_distance_384d", |bencher| {
-        bencher.iter(|| {
-            l2_distance(black_box(&a), black_box(&b))
-        });
+        bencher.iter(|| l2_distance(black_box(&a), black_box(&b)));
     });
 }
 
@@ -41,9 +35,7 @@ fn bench_rrf_rank_fusion(c: &mut Criterion) {
     let lists = vec![list_a, list_b, list_c];
 
     c.bench_function("rrf_rank_fusion_3x100", |bencher| {
-        bencher.iter(|| {
-            apply_rrf(black_box(&lists), black_box(60.0))
-        });
+        bencher.iter(|| apply_rrf(black_box(&lists), black_box(60.0)));
     });
 }
 
@@ -68,9 +60,8 @@ fn bench_hybrid_score(c: &mut Criterion) {
 
 fn bench_distance_decay(c: &mut Criterion) {
     c.bench_function("geo_distance_decay", |bencher| {
-        bencher.iter(|| {
-            foodshare_search::calculate_distance_decay(black_box(7.5), black_box(10.0))
-        });
+        bencher
+            .iter(|| foodshare_search::calculate_distance_decay(black_box(7.5), black_box(10.0)));
     });
 }
 

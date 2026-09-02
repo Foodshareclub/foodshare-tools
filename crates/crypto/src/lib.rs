@@ -19,4 +19,4 @@ mod wasm;
 pub use error::{CryptoError, Result};
 pub use hmac_impl::{hmac_sha1, hmac_sha256, verify_signature};
 pub use timing::constant_time_compare;
-pub use totp::{build_otpauth_uri, generate_totp, verify_totp, DEFAULT_DIGITS, DEFAULT_TIME_STEP};
+pub use totp::{DEFAULT_DIGITS, DEFAULT_TIME_STEP, build_otpauth_uri, generate_totp, verify_totp};

@@ -71,7 +71,10 @@ pub fn calculate_hybrid_score(
     if !text_query.is_empty() && !target_text.is_empty() {
         let text_score = if fuzzy_match(target_text, text_query) {
             1.0f32
-        } else if target_text.to_lowercase().contains(&text_query.to_lowercase()) {
+        } else if target_text
+            .to_lowercase()
+            .contains(&text_query.to_lowercase())
+        {
             0.8f32
         } else {
             0.0f32

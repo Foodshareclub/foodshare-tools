@@ -23,10 +23,7 @@ pub struct RankedResult<T> {
 ///
 /// # Returns
 /// A single merged and descending-sorted vector of results with their aggregated RRF score.
-pub fn apply_rrf<T: Clone + Eq + Hash>(
-    ranked_lists: &[Vec<T>],
-    k: f32,
-) -> Vec<RankedResult<T>> {
+pub fn apply_rrf<T: Clone + Eq + Hash>(ranked_lists: &[Vec<T>], k: f32) -> Vec<RankedResult<T>> {
     let mut scores: HashMap<T, f32> = HashMap::new();
 
     for list in ranked_lists {
@@ -43,7 +40,11 @@ pub fn apply_rrf<T: Clone + Eq + Hash>(
         .collect();
 
     // Sort descending by score
-    results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    results.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     results
 }
 

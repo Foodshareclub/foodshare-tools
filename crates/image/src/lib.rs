@@ -36,4 +36,3 @@ mod wasm;
 
 #[cfg(feature = "wasm")]
 pub use wasm::*;
-

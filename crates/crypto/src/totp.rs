@@ -26,7 +26,9 @@ pub fn generate_totp(
     digits: u32,
 ) -> Result<String> {
     if secret.is_empty() {
-        return Err(CryptoError::InvalidKey("Secret cannot be empty".to_string()));
+        return Err(CryptoError::InvalidKey(
+            "Secret cannot be empty".to_string(),
+        ));
     }
 
     let counter = time_seconds / time_step;
@@ -58,12 +60,7 @@ pub fn generate_totp(
 /// * `code` - User-provided code string (e.g. "123456")
 /// * `time_seconds` - Current Unix timestamp
 /// * `window_steps` - Number of steps to look behind and ahead (e.g. 1 allows ±30s)
-pub fn verify_totp(
-    secret: &[u8],
-    code: &str,
-    time_seconds: u64,
-    window_steps: i64,
-) -> bool {
+pub fn verify_totp(secret: &[u8], code: &str, time_seconds: u64, window_steps: i64) -> bool {
     let clean_code = code.trim().replace(' ', "");
     if clean_code.len() != DEFAULT_DIGITS as usize {
         return false;
@@ -73,7 +70,9 @@ pub fn verify_totp(
         let offset_seconds = (step_offset * DEFAULT_TIME_STEP as i64) as i128;
         let candidate_time = (time_seconds as i128 + offset_seconds).max(0) as u64;
 
-        if let Ok(expected) = generate_totp(secret, candidate_time, DEFAULT_TIME_STEP, DEFAULT_DIGITS) {
+        if let Ok(expected) =
+            generate_totp(secret, candidate_time, DEFAULT_TIME_STEP, DEFAULT_DIGITS)
+        {
             if constant_time_compare(clean_code.as_bytes(), expected.as_bytes()) {
                 return true;
             }
@@ -87,12 +86,7 @@ pub fn verify_totp(
 pub fn build_otpauth_uri(account_name: &str, issuer: &str, base32_secret: &str) -> String {
     format!(
         "otpauth://totp/{}:{}?secret={}&issuer={}&algorithm=SHA1&digits={}&period={}",
-        issuer,
-        account_name,
-        base32_secret,
-        issuer,
-        DEFAULT_DIGITS,
-        DEFAULT_TIME_STEP
+        issuer, account_name, base32_secret, issuer, DEFAULT_DIGITS, DEFAULT_TIME_STEP
     )
 }
 
