@@ -44,7 +44,7 @@ pub fn calculate_distance_decay(distance_km: f32, half_life_km: f32) -> f32 {
     } else {
         half_life_km
     };
-    (-0.69314718f32 * (distance_km / half_life)).exp()
+    (-std::f32::consts::LN_2 * (distance_km / half_life)).exp()
 }
 
 /// Calculate composite hybrid score for a listing.
