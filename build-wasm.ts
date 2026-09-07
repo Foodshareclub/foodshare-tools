@@ -5,11 +5,24 @@
  * - `foodshare-geo` -> WASM (Haversine distance, PostGIS point parser)
  * - `foodshare-search` -> WASM (Vector cosine similarity, L2 distance, RRF, fuzzy search)
  * - `foodshare-crypto` -> WASM (TOTP MFA generation/verification, HMAC-SHA256)
+ * - `foodshare-compression` -> WASM (Brotli/Gzip, ETag) + native node:zlib fallback
+ * - `foodshare-image` -> WASM (format detection, geometry)
+ *
+ * Target `nodejs` is intentional: bridges in `foodshare-web/src/lib/wasm-*.ts`
+ * are server-only (`import "server-only"`). Do not switch to `bundler`/`web`
+ * without migrating bridges to async `await init()` + dynamic import.
+ * Size is optimized via `wasm-opt = ["-Oz"]` in each crate Cargo.toml.
  *
  * @module tools/build-wasm
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 function postProcessWasmJs(outDir: string, crateName: string) {
@@ -79,6 +92,15 @@ async function compileWasmCrate(
 
   mkdirSync(outDir, { recursive: true });
 
+  // wasm-pack >= 0.13 required for wasm-opt -Oz + bulk-memory support.
+  try {
+    const v = Bun.spawnSync(["wasm-pack", "--version"], { stdout: "pipe" });
+    const version = new TextDecoder().decode(v.stdout).trim();
+    console.log(`  wasm-pack: ${version || "unknown"}`);
+  } catch {
+    console.warn("  ⚠️ could not detect wasm-pack version (need >= 0.13)");
+  }
+
   const cmd = [
     "wasm-pack",
     "build",
@@ -89,6 +111,7 @@ async function compileWasmCrate(
     outDir,
     "--release",
     "--",
+    "--locked",
     "--features",
     "wasm",
   ];
@@ -105,9 +128,17 @@ async function compileWasmCrate(
 
   if (code === 0) {
     postProcessWasmJs(outDir, crate.name);
-    console.log(
-      `✅ [${crate.name}] WASM compiled successfully in ${durationSec}s -> ${outDir}`,
-    );
+    try {
+      const wasmFile = join(outDir, `${crate.name.replace(/-/g, "_")}_bg.wasm`);
+      const kb = (statSync(wasmFile).size / 1024).toFixed(1);
+      console.log(
+        `✅ [${crate.name}] WASM compiled successfully in ${durationSec}s -> ${outDir} (${kb} KB, wasm-opt -Oz)`,
+      );
+    } catch {
+      console.log(
+        `✅ [${crate.name}] WASM compiled successfully in ${durationSec}s -> ${outDir}`,
+      );
+    }
     return true;
   } else {
     console.error(`❌ [${crate.name}] WASM compilation failed (code ${code})`);
@@ -120,11 +151,11 @@ export async function main() {
   console.log("🦀 FoodShare Rust -> WebAssembly (WASM) Build Engine (Bun)");
   console.log("🦀 =========================================================");
 
-  let allSuccess = true;
-  for (const crate of CRATES) {
-    const success = await compileWasmCrate(crate, "nodejs");
-    if (!success) allSuccess = false;
-  }
+  // Parallel builds reuse shared cargo target cache; use --quick path in cli.ts to skip when cached.
+  const results = await Promise.all(
+    CRATES.map((crate) => compileWasmCrate(crate, "nodejs")),
+  );
+  const allSuccess = results.every(Boolean);
 
   console.log("\n==========================================");
   if (allSuccess) {

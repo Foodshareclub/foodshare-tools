@@ -123,17 +123,17 @@ semver = "1.0"
 
 # WASM support
 wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
 js-sys = "0.3"
-wasm-bindgen-futures = "0.4"
-getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
 
 # Crypto (HMAC, constant-time)
 hmac = "0.12"
 subtle = "2.5"
 base64 = "0.22"
 
-# Image processing (0.24 series for stability; update to 0.25+ when dependencies allow)
-image = { version = "0.24", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
+# Image processing (0.25 series; check release notes before bumping major versions)
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
 
 # Compression
 brotli = "6.0"

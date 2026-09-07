@@ -1,4 +1,8 @@
 //! WASM bindings for search utilities.
+//!
+//! Structured data crosses the boundary via `serde-wasm-bindgen` (no JSON
+//! string roundtrip): callers pass JS objects/arrays directly and receive JS
+//! objects/arrays back.
 
 use wasm_bindgen::prelude::*;
 
@@ -29,17 +33,17 @@ pub fn edit_distance(a: &str, b: &str) -> usize {
     crate::levenshtein_distance(a, b)
 }
 
-/// Search items and return sorted results as JSON.
+/// Search items and return sorted results.
 ///
 /// # Arguments
 /// * `query` - Search query
-/// * `items_json` - JSON array of items with `id` and `text` fields
+/// * `items` - JS array of items with `id` and `text` fields
 /// * `max_results` - Maximum results to return (0 for all)
 ///
 /// # Returns
-/// JSON array of results with `id` and `score` fields, sorted by score
+/// JS array of results with `id` and `score` fields, sorted by score
 #[wasm_bindgen]
-pub fn search_items(query: &str, items_json: &str, max_results: usize) -> String {
+pub fn search_items(query: &str, items: JsValue, max_results: usize) -> Result<JsValue, JsValue> {
     use serde::{Deserialize, Serialize};
 
     #[derive(Deserialize)]
@@ -54,12 +58,10 @@ pub fn search_items(query: &str, items_json: &str, max_results: usize) -> String
         score: u32,
     }
 
-    let items: Vec<Item> = match serde_json::from_str(items_json) {
-        Ok(items) => items,
-        Err(_) => return "[]".to_string(),
-    };
+    let parsed: Vec<Item> = serde_wasm_bindgen::from_value(items)
+        .map_err(|e| JsValue::from_str(&format!("parse error: {}", e)))?;
 
-    let mut results: Vec<Result> = items
+    let mut results: Vec<Result> = parsed
         .into_iter()
         .map(|item| {
             let score = crate::calculate_relevance(&item.text, query);
@@ -74,7 +76,8 @@ pub fn search_items(query: &str, items_json: &str, max_results: usize) -> String
         results.truncate(max_results);
     }
 
-    serde_json::to_string(&results).unwrap_or_else(|_| "[]".to_string())
+    serde_wasm_bindgen::to_value(&results)
+        .map_err(|e| JsValue::from_str(&format!("serialize error: {}", e)))
 }
 
 /// Calculate cosine similarity between two float arrays in WebAssembly.
@@ -98,17 +101,15 @@ pub fn vector_normalize_dimensions(v: &[f32], target_dim: usize) -> Vec<f32> {
 /// Merge ranked result lists using Reciprocal Rank Fusion in WebAssembly.
 ///
 /// # Arguments
-/// * `lists_json` - JSON 2D array of item IDs: `[["item1", "item2"], ["item2", "item3"]]`
+/// * `lists` - JS 2D array of item IDs: `[["item1", "item2"], ["item2", "item3"]]`
 /// * `k` - RRF smoothing parameter (default 60.0)
 #[wasm_bindgen]
-pub fn rrf_merge(lists_json: &str, k: Option<f32>) -> String {
-    let lists: Vec<Vec<String>> = match serde_json::from_str(lists_json) {
-        Ok(l) => l,
-        Err(_) => return "[]".to_string(),
-    };
+pub fn rrf_merge(lists: JsValue, k: Option<f32>) -> Result<JsValue, JsValue> {
+    let parsed: Vec<Vec<String>> = serde_wasm_bindgen::from_value(lists)
+        .map_err(|e| JsValue::from_str(&format!("parse error: {}", e)))?;
 
     let k_val = k.unwrap_or(crate::DEFAULT_RRF_K);
-    let ranked = crate::apply_rrf(&lists, k_val);
+    let ranked = crate::apply_rrf(&parsed, k_val);
 
     #[derive(serde::Serialize)]
     struct RrfOutput {
@@ -124,7 +125,8 @@ pub fn rrf_merge(lists_json: &str, k: Option<f32>) -> String {
         })
         .collect();
 
-    serde_json::to_string(&output).unwrap_or_else(|_| "[]".to_string())
+    serde_wasm_bindgen::to_value(&output)
+        .map_err(|e| JsValue::from_str(&format!("serialize error: {}", e)))
 }
 
 /// Calculate multi-modal hybrid score in WebAssembly.

@@ -1,4 +1,7 @@
 //! WebAssembly bindings for FoodShare image processing & geometry utilities.
+//!
+//! Structured metadata crosses the boundary via `serde-wasm-bindgen` (no JSON
+//! string roundtrip): callers receive a JS object directly.
 
 use wasm_bindgen::prelude::*;
 
@@ -49,7 +52,7 @@ pub fn is_valid_image(data: &[u8]) -> bool {
     crate::detect_format(data).is_ok()
 }
 
-/// Extract image metadata (dimensions, format, aspect ratio, orientation) as a JSON string.
+/// Extract image metadata (dimensions, format, aspect ratio, orientation) as a JS object.
 ///
 /// Supports instant zero-allocation parsing for JPEG, PNG, and GIF.
 ///
@@ -57,9 +60,12 @@ pub fn is_valid_image(data: &[u8]) -> bool {
 /// * `data` - Image byte buffer
 ///
 /// # Returns
-/// JSON string with metadata object, or None if extraction failed.
+/// JS object with metadata, or null if extraction failed.
 #[wasm_bindgen]
-pub fn extract_image_metadata_json(data: &[u8]) -> Option<String> {
-    let meta = crate::extract_metadata(data)?;
-    serde_json::to_string(&meta).ok()
+pub fn extract_image_metadata_json(data: &[u8]) -> Result<JsValue, JsValue> {
+    match crate::extract_metadata(data) {
+        Some(meta) => serde_wasm_bindgen::to_value(&meta)
+            .map_err(|e| JsValue::from_str(&format!("serialize error: {}", e))),
+        None => Ok(JsValue::NULL),
+    }
 }

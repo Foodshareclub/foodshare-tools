@@ -2,6 +2,10 @@
 //!
 //! These bindings allow the geo crate to be used from JavaScript/TypeScript
 //! in both browser and Deno environments.
+//!
+//! Structured data crosses the boundary via `serde-wasm-bindgen` (no JSON
+//! string roundtrip): callers pass JS objects/arrays directly and receive JS
+//! objects/arrays back.
 
 use crate::{
     Coordinate, batch::LocationItem, calculate_distances, haversine_distance, parse_postgis_point,
@@ -32,41 +36,39 @@ pub fn distance(lat1: f64, lng1: f64, lat2: f64, lng2: f64) -> f64 {
 /// # Arguments
 /// * `user_lat` - User's latitude
 /// * `user_lng` - User's longitude
-/// * `products_json` - JSON string of products with id and location fields
+/// * `products` - JS array of products with id and location fields
 ///
 /// # Returns
-/// JSON string of products with added distance field
+/// JS array of products with added distance field
 #[wasm_bindgen]
 pub fn calculate_product_distances(
     user_lat: f64,
     user_lng: f64,
-    products_json: &str,
-) -> Result<String, JsValue> {
-    // Parse input JSON
-    let items: Vec<LocationItem> = serde_json::from_str(products_json)
-        .map_err(|e| JsValue::from_str(&format!("JSON parse error: {}", e)))?;
+    products: JsValue,
+) -> Result<JsValue, JsValue> {
+    // Deserialize input directly from JsValue (no JSON string roundtrip)
+    let items: Vec<LocationItem> = serde_wasm_bindgen::from_value(products)
+        .map_err(|e| JsValue::from_str(&format!("parse error: {}", e)))?;
 
     // Calculate distances
     let results = calculate_distances(user_lat, user_lng, &items);
 
-    // Serialize results
-    serde_json::to_string(&results)
-        .map_err(|e| JsValue::from_str(&format!("JSON serialize error: {}", e)))
+    // Serialize results directly to JsValue
+    serde_wasm_bindgen::to_value(&results)
+        .map_err(|e| JsValue::from_str(&format!("serialize error: {}", e)))
 }
 
 /// Parse a PostGIS location and return coordinates.
 ///
 /// # Arguments
-/// * `location_json` - JSON string of location (GeoJSON or WKT string)
+/// * `location` - JS value holding the location (GeoJSON object or WKT string)
 ///
 /// # Returns
-/// JSON string with lat/lng, or null if parsing fails
+/// JS object with lat/lng, or null if parsing fails
 #[wasm_bindgen]
-pub fn parse_location(location_json: &str) -> Result<String, JsValue> {
-    let value: serde_json::Value = match serde_json::from_str(location_json) {
-        Ok(v) => v,
-        Err(_) => serde_json::Value::String(location_json.to_string()),
-    };
+pub fn parse_location(location: JsValue) -> Result<JsValue, JsValue> {
+    let value: serde_json::Value = serde_wasm_bindgen::from_value(location)
+        .map_err(|e| JsValue::from_str(&format!("parse error: {}", e)))?;
 
     match parse_postgis_point(&value) {
         Some(coord) => {
@@ -74,9 +76,10 @@ pub fn parse_location(location_json: &str) -> Result<String, JsValue> {
                 "latitude": coord.latitude,
                 "longitude": coord.longitude
             });
-            Ok(result.to_string())
+            serde_wasm_bindgen::to_value(&result)
+                .map_err(|e| JsValue::from_str(&format!("serialize error: {}", e)))
         }
-        None => Ok("null".to_string()),
+        None => Ok(JsValue::NULL),
     }
 }
 
@@ -85,20 +88,20 @@ pub fn parse_location(location_json: &str) -> Result<String, JsValue> {
 /// # Arguments
 /// * `user_lat` - User's latitude
 /// * `user_lng` - User's longitude
-/// * `products_json` - JSON string of products
+/// * `products` - JS array of products
 /// * `max_results` - Maximum results to return (0 for all)
 ///
 /// # Returns
-/// JSON string of sorted results
+/// JS array of sorted results
 #[wasm_bindgen]
 pub fn calculate_distances_sorted(
     user_lat: f64,
     user_lng: f64,
-    products_json: &str,
+    products: JsValue,
     max_results: u32,
-) -> Result<String, JsValue> {
-    let items: Vec<LocationItem> = serde_json::from_str(products_json)
-        .map_err(|e| JsValue::from_str(&format!("JSON parse error: {}", e)))?;
+) -> Result<JsValue, JsValue> {
+    let items: Vec<LocationItem> = serde_wasm_bindgen::from_value(products)
+        .map_err(|e| JsValue::from_str(&format!("parse error: {}", e)))?;
 
     let max = if max_results == 0 {
         None
@@ -107,8 +110,8 @@ pub fn calculate_distances_sorted(
     };
     let results = crate::batch::calculate_distances_sorted(user_lat, user_lng, &items, max);
 
-    serde_json::to_string(&results)
-        .map_err(|e| JsValue::from_str(&format!("JSON serialize error: {}", e)))
+    serde_wasm_bindgen::to_value(&results)
+        .map_err(|e| JsValue::from_str(&format!("serialize error: {}", e)))
 }
 
 /// Filter products within a radius.
@@ -116,24 +119,24 @@ pub fn calculate_distances_sorted(
 /// # Arguments
 /// * `user_lat` - User's latitude
 /// * `user_lng` - User's longitude
-/// * `products_json` - JSON string of products
+/// * `products` - JS array of products
 /// * `radius_km` - Maximum distance in kilometers
 ///
 /// # Returns
-/// JSON string of filtered and sorted results
+/// JS array of filtered and sorted results
 #[wasm_bindgen]
 pub fn filter_within_radius(
     user_lat: f64,
     user_lng: f64,
-    products_json: &str,
+    products: JsValue,
     radius_km: f64,
-) -> Result<String, JsValue> {
-    let items: Vec<LocationItem> = serde_json::from_str(products_json)
-        .map_err(|e| JsValue::from_str(&format!("JSON parse error: {}", e)))?;
+) -> Result<JsValue, JsValue> {
+    let items: Vec<LocationItem> = serde_wasm_bindgen::from_value(products)
+        .map_err(|e| JsValue::from_str(&format!("parse error: {}", e)))?;
 
     let results =
         crate::batch::calculate_distances_within_radius(user_lat, user_lng, &items, radius_km);
 
-    serde_json::to_string(&results)
-        .map_err(|e| JsValue::from_str(&format!("JSON serialize error: {}", e)))
+    serde_wasm_bindgen::to_value(&results)
+        .map_err(|e| JsValue::from_str(&format!("serialize error: {}", e)))
 }

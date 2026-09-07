@@ -22,6 +22,7 @@ rayon = { workspace = true, optional = true }
 
 # WASM dependencies (feature-gated)
 wasm-bindgen = { workspace = true, optional = true }
+serde-wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
@@ -30,14 +31,14 @@ criterion = { workspace = true }
 [features]
 default = ["parallel"]
 parallel = ["rayon"]
-wasm = ["wasm-bindgen"]
+wasm = ["wasm-bindgen", "serde-wasm-bindgen"]
 
 [[bench]]
 name = "vector_benchmark"
 harness = false
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = false
+wasm-opt = ["-Oz", "--enable-bulk-memory"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -20,6 +20,7 @@ rayon = { workspace = true, optional = true }
 
 # WASM dependencies (feature-gated)
 wasm-bindgen = { workspace = true, optional = true }
+serde-wasm-bindgen = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
 getrandom = { workspace = true, optional = true }
 
@@ -30,10 +31,10 @@ criterion = { workspace = true }
 [features]
 default = ["parallel"]
 parallel = ["rayon"]
-wasm = ["wasm-bindgen", "js-sys", "getrandom"]
+wasm = ["wasm-bindgen", "serde-wasm-bindgen", "js-sys", "getrandom"]
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = false
+wasm-opt = ["-Oz", "--enable-bulk-memory"]
 
 [[bench]]
 name = "distance"

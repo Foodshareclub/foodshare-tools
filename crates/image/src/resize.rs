@@ -1,7 +1,8 @@
 //! Image resizing with the image crate.
 
 use crate::{ImageError, ImageFormat, Result, detect_format, smart_width::calculate_dimensions};
-use image::{DynamicImage, ImageOutputFormat};
+use image::DynamicImage;
+use image::codecs::jpeg::JpegEncoder;
 use std::io::Cursor;
 
 /// Options for image resizing.
@@ -60,20 +61,27 @@ pub fn resize_image(data: &[u8], options: &ResizeOptions) -> Result<Vec<u8>> {
 fn encode_image(img: &DynamicImage, format: ImageFormat, quality: u8) -> Result<Vec<u8>> {
     let mut buffer = Cursor::new(Vec::new());
 
-    let output_format = match format {
-        ImageFormat::Jpeg => ImageOutputFormat::Jpeg(quality),
-        ImageFormat::Png => ImageOutputFormat::Png,
-        ImageFormat::Gif => ImageOutputFormat::Gif,
-        ImageFormat::WebP => ImageOutputFormat::WebP,
+    match format {
+        ImageFormat::Jpeg => {
+            JpegEncoder::new_with_quality(&mut buffer, quality).encode_image(img)?;
+        }
+        ImageFormat::Png => {
+            img.write_to(&mut buffer, image::ImageFormat::Png)?;
+        }
+        ImageFormat::Gif => {
+            img.write_to(&mut buffer, image::ImageFormat::Gif)?;
+        }
+        ImageFormat::WebP => {
+            img.write_to(&mut buffer, image::ImageFormat::WebP)?;
+        }
         _ => {
             return Err(ImageError::ResizeError(format!(
                 "Unsupported output format: {:?}",
                 format
             )));
         }
-    };
+    }
 
-    img.write_to(&mut buffer, output_format)?;
     Ok(buffer.into_inner())
 }
 
