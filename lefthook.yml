@@ -56,7 +56,7 @@ pre-commit:
       glob: "src/__tests__/**/*.test.{ts,tsx}"
       run: |
         if [ -f package.json ]; then
-          bun test {staged_files}
+          bun test --isolate {staged_files}
         fi
 
     web-action-tests:
@@ -64,7 +64,7 @@ pre-commit:
       glob: "src/app/actions/**/*.ts"
       run: |
         if [ -f package.json ] && [ -d src/__tests__/actions ]; then
-          bun test src/__tests__/actions/
+          bun test --isolate src/__tests__/actions/
         fi
 
     web-lib-tests:
@@ -72,7 +72,7 @@ pre-commit:
       glob: "src/lib/**/*.ts"
       run: |
         if [ -f package.json ] && [ -d src/__tests__/lib ]; then
-          bun test src/__tests__/lib/
+          bun test --isolate src/__tests__/lib/
         fi
 
     backend-staged-tests:
@@ -283,9 +283,12 @@ pre-push:
       run: |
         if command -v deno >/dev/null 2>&1 && [ -d supabase/functions ]; then
           echo "⚡ Verifying Deno Edge Function types before push..."
+          status=0
           for f in supabase/functions/*/index.ts; do
-            [ -f "$f" ] && deno check --config supabase/functions/deno.json "$f"
+            [ -f "$f" ] || continue
+            deno check --config supabase/functions/deno.json "$f" || status=1
           done
+          exit $status
         fi
 
     backend-unit-tests:
