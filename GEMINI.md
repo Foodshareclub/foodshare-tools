@@ -4,6 +4,17 @@ Rust CLI workspace for git hooks, code quality, and development tooling across i
 
 **Version:** 1.4.0 | **Edition:** 2024 | **MSRV:** 1.88 (via `Cargo.toml`; no `rust-toolchain.toml`) | **License:** MIT
 
+## Toolchain
+
+The Rust in this repository is the toolchain; Bun runs everything around it —
+the package manager, the script runner, the TypeScript executor, the test
+runner and the type checker. Type checking is `tsrs`, the Rust port of the
+TypeScript 7 compiler, with `tsc` on TypeScript 7.1 kept as a parity gate.
+
+Node.js is not part of it. `bun scripts/check-no-node.ts` fails the build if
+it creeps back in. `bunx` is the one exception to `[run] bun = true` — it
+resolves a package's own shebang — so every `bunx` call here passes `--bun`.
+
 ## Commands
 
 | Command                                                 | Purpose            |

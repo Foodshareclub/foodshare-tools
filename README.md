@@ -135,6 +135,20 @@ cargo fmt --all -- --check          # Check formatting
 cargo clippy --workspace --all-targets -- -D warnings  # Lint
 ```
 
+### Toolchain
+
+The Rust in this repository is the toolchain; Bun runs everything around it —
+the package manager, the script runner, the TypeScript executor, the test
+runner and the type checker. Type checking is `tsrs`, the Rust port of the
+TypeScript 7 compiler, with `tsc` on TypeScript 7.1 kept as a parity gate.
+
+Node.js is not part of it. `bun scripts/check-no-node.ts` fails the build if
+it creeps back in. `bunx` is the one exception to `[run] bun = true` — it
+resolves a package's own shebang — so every `bunx` call here passes `--bun`.
+
+Deno appears only where the Supabase Edge Functions are involved, which
+live in the backend rather than here.
+
 ## Error Codes
 
 | Code Range | Category      | Example                 |
