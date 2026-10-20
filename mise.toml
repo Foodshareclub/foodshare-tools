@@ -1,0 +1,18 @@
+# Toolchain pinned for this repository.
+#
+# Bun is the only runtime for this project's own code: package manager,
+# script runner, TypeScript executor and test runner.
+#
+# Deno is pinned alongside it for one reason only: the Supabase Edge
+# Functions in `supabase/functions/` run on the Edge Runtime, which is
+# Deno. `Deno.serve`, `Deno.env` and `Deno.test` are load-bearing there
+# and cannot be ported. Everything outside `supabase/functions/` runs
+# on Bun.
+#
+# The Bun version is tracked as the canary channel, so a local checkout
+# always runs the newest canary. The *exact* build is pinned in
+# package.json ("packageManager"), where it matters for reproducibility.
+# Keep the two in step when the canary is refreshed.
+[tools]
+"npm:bun" = "canary"
+deno = "2.9.6"
