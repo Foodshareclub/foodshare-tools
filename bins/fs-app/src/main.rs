@@ -2027,6 +2027,7 @@ fn run_supabase_auth_fix(
     // Run supabase secrets set
     let output = std::process::Command::new("bunx")
         .args([
+            "--bun",
             "supabase",
             "secrets",
             "set",
@@ -2062,7 +2063,7 @@ fn run_supabase_auth_fix(
 
     // Deploy the function
     let deploy_output = std::process::Command::new("bunx")
-        .args(["supabase", "functions", "deploy", "geolocate-user"])
+        .args(["--bun", "supabase", "functions", "deploy", "geolocate-user"])
         .current_dir(backend_path)
         .output();
 
@@ -2110,7 +2111,7 @@ fn run_supabase_auth_check(backend_path: &PathBuf) -> i32 {
 
     // Check if secret is set
     let output = std::process::Command::new("bunx")
-        .args(["supabase", "secrets", "list"])
+        .args(["--bun", "supabase", "secrets", "list"])
         .current_dir(backend_path)
         .output();
 
@@ -2164,7 +2165,7 @@ fn run_supabase_secrets(list: bool, backend_path: &PathBuf) -> i32 {
     if list {
         Status::info("Listing Supabase secrets...");
         let output = std::process::Command::new("bunx")
-            .args(["supabase", "secrets", "list"])
+            .args(["--bun", "supabase", "secrets", "list"])
             .current_dir(backend_path)
             .status();
 
@@ -2196,7 +2197,7 @@ fn run_supabase_deploy(function: Option<&str>, backend_path: &PathBuf) -> i32 {
         return exit_codes::FAILURE;
     }
 
-    let mut args = vec!["supabase", "functions", "deploy"];
+    let mut args = vec!["--bun", "supabase", "functions", "deploy"];
     if let Some(name) = function {
         args.push(name);
         Status::info(&format!("Deploying function: {}", name));
@@ -2239,7 +2240,7 @@ fn run_supabase_logs(function: &str, tail: bool, limit: usize, backend_path: &Pa
         return exit_codes::FAILURE;
     }
 
-    let mut args = vec!["supabase", "functions", "logs", function];
+    let mut args = vec!["--bun", "supabase", "functions", "logs", function];
 
     if tail {
         args.push("--tail");
@@ -2272,7 +2273,7 @@ fn run_supabase_logs(function: &str, tail: bool, limit: usize, backend_path: &Pa
 
 fn has_supabase_cli() -> bool {
     std::process::Command::new("bunx")
-        .args(["supabase", "--version"])
+        .args(["--bun", "supabase", "--version"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()

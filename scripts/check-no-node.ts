@@ -52,7 +52,40 @@ const NODE_TOOLS = ["node", "npm", "npx", "pnpm", "yarn"];
  * In code that only ever runs on Bun, naming Bun's modules states that
  * dependency instead of implying a Node one.
  */
-const BUN_ONLY_DIRS = ["scripts", "tools", "types"];
+const BUN_ONLY_DIRS = ["scripts", "tools", "types", "supabase/oracle", "packages"];
+
+/**
+ * The one place Deno is allowed.
+ *
+ * The Supabase Edge Functions run on the Supabase Edge Runtime, which *is*
+ * Deno: `Deno.serve`, `Deno.env` and `Deno.test` are load-bearing there and
+ * cannot be ported. `packages/functions` is the wrapper that tests them, and
+ * `volumes/functions` is a symlink to the same tree.
+ *
+ * Everywhere else, Deno is a second runtime where there should be one — and
+ * one that is not installed on the runner that builds this project's own
+ * code. The oracle, the scripts and the packages all run on Bun.
+ */
+const DENO_ALLOWED_DIRS: string[] = [];
+
+/** True when the file is one of the edge functions, where Deno is the runtime. */
+function isDenoAllowed(file: string): boolean {
+  return DENO_ALLOWED_DIRS.some((dir) => file.startsWith(dir));
+}
+
+/**
+ * The code on a line, with any trailing comment removed.
+ *
+ * A comment that mentions `Deno.serve` is describing the edge functions, not
+ * depending on the Deno runtime, so the Deno rule reads the code and not the
+ * prose around it.
+ */
+function codeOnLine(line: string): string {
+  const trimmed = line.trim();
+  if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return "";
+  const comment = line.indexOf("//");
+  return comment === -1 ? line : line.slice(0, comment);
+}
 
 /** The `bun:` module that replaces each `node:` builtin. */
 const BUN_MODULE_FOR: Record<string, string> = {
@@ -110,7 +143,7 @@ const BARE_NODE_BUILTINS = new Set([
 
 const ROOT_FILES = ["package.json", "bunfig.toml", "lefthook.yml", "tsconfig.json"];
 
-const SCANNED_DIRS = ["scripts", "tools", "types", ".github/workflows"];
+const SCANNED_DIRS = ["scripts", "tools", "types", "supabase/oracle", "packages", ".github/workflows"];
 
 const SCAN_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sh", ".yml", ".yaml", ".json", ".toml"];
 
@@ -390,6 +423,23 @@ function checkLine(
       line: lineNumber,
       text: line.trim(),
       reason: "`actions/setup-node` installs a Node.js toolchain — this project runs on Bun",
+    });
+  }
+
+  // Deno is a second runtime, and one that is not installed on the runner
+  // that builds this project's own code. It is allowed in exactly one place:
+  // the Supabase Edge Functions, which run on the Edge Runtime.
+  //
+  // Only source is checked. A workflow that *runs* `deno` is running the edge
+  // functions — the jobs that do it set `working-directory: supabase/functions`
+  // — and a report that prints the name of an API is not a dependency on it.
+  if (!isDenoAllowed(file) && !isYaml && !isScript && /\bDeno\.[a-zA-Z]/.test(codeOnLine(line))) {
+    violations.push({
+      file,
+      line: lineNumber,
+      text: line.trim(),
+      reason:
+        "`Deno.*` is the Deno runtime — it belongs only in `supabase/functions/`, which runs on the Supabase Edge Runtime",
     });
   }
 

@@ -11,6 +11,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # The canary channel, pinned to an exact build so a CI run and a local run
+  # execute the same binary.
+  BUN_VERSION: "1.4.3-canary.20261019.1"
   # NOTE: no global RUSTFLAGS="-D warnings" — it escalates every pedantic
   # clippy warning to a hard error and breaks plain cargo check/build.
   # Lint enforcement lives in the Lint job's scoped clippy deny-list.
@@ -20,6 +23,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  toolchain:
+    name: Toolchain guard
+    # Bun is the only runtime for this project's own code. The guard fails the
+    # build if Node creeps back in, or if Deno spreads past the edge functions
+    # it is allowed in.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: No Node.js in the toolchain
+        run: bun run check:no-node
+      - name: Type-check with tsrs
+        run: bun run type-check
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

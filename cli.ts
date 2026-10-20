@@ -137,7 +137,7 @@ async function handleBackend(args: string[]) {
       break;
     case "sync-types":
       await runCommand(
-        ["bunx", "supabase", "gen", "types", "typescript", "--local"],
+        ["bunx", "--bun", "supabase", "gen", "types", "typescript", "--local"],
         BACKEND_DIR,
       );
       break;

@@ -32,6 +32,7 @@
     "auto": "bun cli.ts auto",
     "auto:quick": "bun cli.ts auto --quick",
     "auto:keep": "bun cli.ts auto --keep",
+    "check:no-node": "bun scripts/check-no-node.ts",
     "auto:headless": "cargo run --bin fs-auto -- --quick"
   },
   "devDependencies": {

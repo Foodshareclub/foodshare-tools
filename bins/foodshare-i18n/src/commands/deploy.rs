@@ -207,7 +207,7 @@ fn check_environment() -> Result<()> {
 /// Apply database migrations using Supabase CLI
 fn apply_db_migrations() -> Result<()> {
     let output = Command::new("bunx")
-        .args(["supabase", "db", "push"])
+        .args(["--bun", "supabase", "db", "push"])
         .current_dir(find_supabase_dir()?)
         .output()
         .context("Failed to run supabase db push")?;
@@ -231,7 +231,7 @@ fn deploy_edge_functions() -> Result<()> {
         println!("  Deploying {}...", func.cyan());
 
         let output = Command::new("bunx")
-            .args(["supabase", "functions", "deploy", func, "--no-verify-jwt"])
+            .args(["--bun", "supabase", "functions", "deploy", func, "--no-verify-jwt"])
             .current_dir(&supabase_dir)
             .output()
             .with_context(|| format!("Failed to deploy {}", func))?;
