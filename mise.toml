@@ -3,16 +3,25 @@
 # Bun is the only runtime for this project's own code: package manager,
 # script runner, TypeScript executor and test runner.
 #
-# Deno is pinned alongside it for one reason only: the Supabase Edge
-# Functions in `supabase/functions/` run on the Edge Runtime, which is
-# Deno. `Deno.serve`, `Deno.env` and `Deno.test` are load-bearing there
-# and cannot be ported. Everything outside `supabase/functions/` runs
-# on Bun.
+# Deno is pinned alongside it for one reason only: this repo's CLI runs the
+# Supabase Edge Functions' test suite, and those functions live in
+# `foodshare-backend/supabase/functions/` and run on the Edge Runtime, which
+# is Deno. `Deno.serve`, `Deno.env` and `Deno.test` are load-bearing there
+# and cannot be ported. Everything this repo itself runs is on Bun.
 #
-# The Bun version is tracked as the canary channel, so a local checkout
-# always runs the newest canary. The *exact* build is pinned in
-# package.json ("packageManager"), where it matters for reproducibility.
-# Keep the two in step when the canary is refreshed.
+# The *exact* build is pinned in three places, and all three have to
+# name the same one:
+#
+#   mise.toml                 ->  "npm:bun" = "<version>"
+#   package.json              ->  "packageManager": "bun@<version>"
+#   .github/workflows/*.yml   ->  BUN_VERSION: "<version>"
+#
+# The version is the newest canary published to npm, which is the newest
+# build `oven-sh/setup-bun` can install in CI — a canary that exists only
+# on one developer's machine cannot be installed there, and pinning to it
+# makes local and CI run different binaries.
+#
+# Keep all three in step when the canary is refreshed.
 [tools]
-"npm:bun" = "canary"
+"npm:bun" = "1.4.3-canary.20261019.1"
 deno = "2.9.6"
