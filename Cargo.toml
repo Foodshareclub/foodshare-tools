@@ -16,6 +16,7 @@ members = [
     "crates/swift-toolchain",
     "crates/api-client",
     "crates/quadlet",
+    "crates/orchestrator",
     "bins/fs-app",
     "bins/lefthook-rs",
     "bins/fs-image",
@@ -25,6 +26,7 @@ members = [
     "bins/foodshare-migrate",
     "bins/fs-tui",
     "bins/fs-auto",
+    "bins/fs-orchestrator",
 ]
 
 [workspace.package]
@@ -104,15 +106,25 @@ handlebars = "5.1"
 # Compression (xcactivitylog parsing)
 flate2 = "1.0"
 
-# Async runtime (for telemetry + TUI)
-tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util"] }
+# Async runtime (for telemetry + TUI + orchestrator)
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "net", "signal"] }
 
 # HTTP client (for telemetry)
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 
 # Metrics
-metrics = "0.22"
-metrics-exporter-prometheus = "0.13"
+# The Prometheus registry, not the `metrics` facade: the backend's
+# `foodshare-backend/services` already standardises on this crate, and one
+# registry means one exposition format across the workspace.
+prometheus = { version = "0.13", default-features = false }
+
+# HTTP server (orchestrator daemon)
+# axum 0.8 matches `foodshare-backend/services`, so the two services share
+# one framework, one middleware stack and one probe contract.
+axum = { version = "0.8", default-features = false }
+tower = { version = "0.5", default-features = false }
+tower-http = { version = "0.6", default-features = false }
+http-body-util = "0.1"
 
 # Hashing (for cache keys, checksums)
 sha2 = "0.10"
@@ -161,6 +173,7 @@ foodshare-image = { path = "crates/image" }
 foodshare-swift-toolchain = { path = "crates/swift-toolchain" }
 foodshare-api-client = { path = "crates/api-client" }
 foodshare-migrate = { path = "crates/migrate" }
+foodshare-orchestrator = { path = "crates/orchestrator" }
 
 # Testing
 [workspace.dependencies.proptest]
@@ -190,6 +203,14 @@ codegen-units = 1
 panic = "abort"
 strip = true
 opt-level = 3
+
+# The orchestrator daemon serves HTTP for the life of the process, so it
+# needs unwinding: under `panic = "abort"` a panicking handler takes the
+# whole process down, and the catch-panic middleware cannot catch it. The
+# CLI binaries keep the smaller, faster release build.
+[profile.release-service]
+inherits = "release"
+panic = "unwind"
 
 [profile.dev]
 opt-level = 0

@@ -2,22 +2,41 @@
 //!
 //! This crate provides enterprise-grade observability:
 //! - Structured logging with tracing
-//! - Metrics collection and export
+//! - Metrics collection, backed by a Prometheus registry
 //! - Performance tracking
 //! - Error reporting
+//!
+//! The metrics registry is the single source of truth. It renders to the
+//! Prometheus text exposition format for scraping, and to JSON for the
+//! status endpoint.
+//!
+//! # Example
+//!
+//! ```rust
+//! use foodshare_telemetry::metrics;
+//!
+//! metrics().increment("files_processed");
+//! metrics().gauge("active_jobs", 2);
+//! metrics().histogram("processing_ms", 12.5);
+//!
+//! let prometheus = foodshare_telemetry::prometheus::render();
+//! assert!(prometheus.contains("files_processed"));
+//! ```
 
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::RwLock;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 use uuid::Uuid;
 
+pub mod metrics;
+pub mod prometheus;
+
+pub use metrics::{HistogramStats, Telemetry};
+
 /// Global metrics registry
-static METRICS: Lazy<MetricsRegistry> = Lazy::new(MetricsRegistry::new);
+static METRICS: Lazy<Telemetry> = Lazy::new(Telemetry::new);
 
 /// Global session ID for correlating logs
 static SESSION_ID: Lazy<String> = Lazy::new(|| Uuid::new_v4().to_string());
@@ -50,6 +69,11 @@ pub fn init_with_config(config: TelemetryConfig) -> anyhow::Result<()> {
         "Telemetry initialized"
     );
 
+    // The registry is created on first use, and its uptime is measured
+    // from that moment. Creating it here makes the uptime the process's
+    // uptime rather than the time since the first scrape.
+    let _ = metrics();
+
     Ok(())
 }
 
@@ -61,11 +85,17 @@ pub fn session_id() -> &'static str {
 /// Telemetry configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TelemetryConfig {
+    /// Minimum log level to emit.
     pub log_level: String,
+    /// Whether the log target is shown.
     pub show_target: bool,
+    /// Whether thread ids are shown.
     pub show_thread_ids: bool,
+    /// Whether the source file is shown.
     pub show_file: bool,
+    /// Whether the source line is shown.
     pub show_line_number: bool,
+    /// Whether metrics collection is enabled.
     pub metrics_enabled: bool,
 }
 
@@ -82,149 +112,8 @@ impl Default for TelemetryConfig {
     }
 }
 
-/// Metrics registry for collecting and exporting metrics
-pub struct MetricsRegistry {
-    counters: RwLock<HashMap<String, AtomicU64>>,
-    gauges: RwLock<HashMap<String, AtomicU64>>,
-    histograms: RwLock<HashMap<String, Vec<f64>>>,
-    start_time: Instant,
-}
-
-impl MetricsRegistry {
-    fn new() -> Self {
-        Self {
-            counters: RwLock::new(HashMap::new()),
-            gauges: RwLock::new(HashMap::new()),
-            histograms: RwLock::new(HashMap::new()),
-            start_time: Instant::now(),
-        }
-    }
-
-    /// Increment a counter
-    pub fn increment(&self, name: &str) {
-        self.increment_by(name, 1);
-    }
-
-    /// Increment a counter by a specific amount
-    pub fn increment_by(&self, name: &str, value: u64) {
-        let counters = self.counters.read().unwrap();
-        if let Some(counter) = counters.get(name) {
-            counter.fetch_add(value, Ordering::Relaxed);
-        } else {
-            drop(counters);
-            let mut counters = self.counters.write().unwrap();
-            counters
-                .entry(name.to_string())
-                .or_insert_with(|| AtomicU64::new(0))
-                .fetch_add(value, Ordering::Relaxed);
-        }
-    }
-
-    /// Set a gauge value
-    pub fn gauge(&self, name: &str, value: u64) {
-        let mut gauges = self.gauges.write().unwrap();
-        gauges
-            .entry(name.to_string())
-            .or_insert_with(|| AtomicU64::new(0))
-            .store(value, Ordering::Relaxed);
-    }
-
-    /// Record a histogram value
-    pub fn histogram(&self, name: &str, value: f64) {
-        let mut histograms = self.histograms.write().unwrap();
-        histograms.entry(name.to_string()).or_default().push(value);
-    }
-
-    /// Get uptime in seconds
-    pub fn uptime_secs(&self) -> u64 {
-        self.start_time.elapsed().as_secs()
-    }
-
-    /// Export metrics as JSON
-    pub fn export_json(&self) -> serde_json::Value {
-        let counters = self.counters.read().unwrap();
-        let gauges = self.gauges.read().unwrap();
-        let histograms = self.histograms.read().unwrap();
-
-        let counter_values: HashMap<String, u64> = counters
-            .iter()
-            .map(|(k, v)| (k.clone(), v.load(Ordering::Relaxed)))
-            .collect();
-
-        let gauge_values: HashMap<String, u64> = gauges
-            .iter()
-            .map(|(k, v)| (k.clone(), v.load(Ordering::Relaxed)))
-            .collect();
-
-        let histogram_stats: HashMap<String, HistogramStats> = histograms
-            .iter()
-            .map(|(k, v)| (k.clone(), HistogramStats::from_values(v)))
-            .collect();
-
-        serde_json::json!({
-            "session_id": session_id(),
-            "uptime_secs": self.uptime_secs(),
-            "counters": counter_values,
-            "gauges": gauge_values,
-            "histograms": histogram_stats,
-        })
-    }
-}
-
-/// Histogram statistics
-#[derive(Debug, Serialize)]
-pub struct HistogramStats {
-    pub count: usize,
-    pub min: f64,
-    pub max: f64,
-    pub mean: f64,
-    pub p50: f64,
-    pub p95: f64,
-    pub p99: f64,
-}
-
-impl HistogramStats {
-    fn from_values(values: &[f64]) -> Self {
-        if values.is_empty() {
-            return Self {
-                count: 0,
-                min: 0.0,
-                max: 0.0,
-                mean: 0.0,
-                p50: 0.0,
-                p95: 0.0,
-                p99: 0.0,
-            };
-        }
-
-        let mut sorted = values.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-        let count = sorted.len();
-        let sum: f64 = sorted.iter().sum();
-
-        Self {
-            count,
-            min: sorted[0],
-            max: sorted[count - 1],
-            mean: sum / count as f64,
-            p50: percentile(&sorted, 50.0),
-            p95: percentile(&sorted, 95.0),
-            p99: percentile(&sorted, 99.0),
-        }
-    }
-}
-
-fn percentile(sorted: &[f64], p: f64) -> f64 {
-    if sorted.is_empty() {
-        return 0.0;
-    }
-    let idx = ((p / 100.0) * (sorted.len() - 1) as f64).round() as usize;
-    sorted[idx.min(sorted.len() - 1)]
-}
-
 /// Get the global metrics registry
-pub fn metrics() -> &'static MetricsRegistry {
+pub fn metrics() -> &'static Telemetry {
     &METRICS
 }
 
@@ -236,6 +125,7 @@ pub struct Timer {
 
 impl Timer {
     /// Start a new timer
+    #[must_use]
     pub fn start(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -280,13 +170,18 @@ macro_rules! timed_span {
 /// Event for structured logging
 #[derive(Debug, Serialize)]
 pub struct Event {
+    /// When the event happened.
     pub timestamp: DateTime<Utc>,
+    /// The session the event belongs to.
     pub session_id: String,
+    /// The event type.
     pub event_type: String,
+    /// The event payload.
     pub data: serde_json::Value,
 }
 
 impl Event {
+    /// Create a new event.
     pub fn new(event_type: impl Into<String>, data: serde_json::Value) -> Self {
         Self {
             timestamp: Utc::now(),
@@ -296,6 +191,7 @@ impl Event {
         }
     }
 
+    /// Emit the event to the log.
     pub fn log(&self) {
         tracing::info!(
             event_type = %self.event_type,
@@ -311,43 +207,32 @@ mod tests {
 
     #[test]
     fn test_metrics_counter() {
-        let registry = MetricsRegistry::new();
+        let registry = Telemetry::new();
         registry.increment("test_counter");
         registry.increment("test_counter");
         registry.increment_by("test_counter", 3);
 
-        let counters = registry.counters.read().unwrap();
-        assert_eq!(
-            counters
-                .get("test_counter")
-                .unwrap()
-                .load(Ordering::Relaxed),
-            5
-        );
+        assert_eq!(registry.counters().get("test_counter").copied(), Some(5));
     }
 
     #[test]
     fn test_metrics_gauge() {
-        let registry = MetricsRegistry::new();
+        let registry = Telemetry::new();
         registry.gauge("test_gauge", 42);
         registry.gauge("test_gauge", 100);
-
-        let gauges = registry.gauges.read().unwrap();
-        assert_eq!(
-            gauges.get("test_gauge").unwrap().load(Ordering::Relaxed),
-            100
-        );
+        assert_eq!(registry.gauges().get("test_gauge").copied(), Some(100));
     }
 
     #[test]
     fn test_histogram_stats() {
-        let values = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
-        let stats = HistogramStats::from_values(&values);
-
+        let registry = Telemetry::new();
+        for value in [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0] {
+            registry.histogram("test_histogram", value);
+        }
+        let stats = registry.histograms();
+        let stats = stats.get("test_histogram").expect("histogram registered");
         assert_eq!(stats.count, 10);
-        assert_eq!(stats.min, 1.0);
-        assert_eq!(stats.max, 10.0);
-        assert_eq!(stats.mean, 5.5);
+        assert!((stats.mean - 5.5).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -364,5 +249,12 @@ mod tests {
         assert!(!id.is_empty());
         // Should be a valid UUID
         assert!(Uuid::parse_str(id).is_ok());
+    }
+
+    #[test]
+    fn test_event_log() {
+        let event = Event::new("test_event", serde_json::json!({"key": "value"}));
+        assert_eq!(event.event_type, "test_event");
+        assert!(!event.session_id.is_empty());
     }
 }

@@ -12,6 +12,8 @@ name = "fs-auto"
 path = "src/main.rs"
 
 [dependencies]
+foodshare-orchestrator.workspace = true
+foodshare-telemetry.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 tokio.workspace = true

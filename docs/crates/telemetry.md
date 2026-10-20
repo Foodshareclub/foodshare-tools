@@ -5,80 +5,94 @@ Observability infrastructure for logging, metrics, and tracing.
 ## Features
 
 - Structured logging with tracing
-- Metrics collection
-- Prometheus export
-- JSON log format support
+- Metrics collection, backed by a Prometheus registry
+- Prometheus text exposition, for scraping
+- JSON export, for the status endpoint and for tests
+
+The registry is the single source of truth. It renders to the Prometheus
+text exposition format for scraping, and to JSON for the status endpoint.
 
 ## Usage
 
 ```rust
-use foodshare_telemetry::{init, metrics};
-use tracing::{info, warn, error};
+use foodshare_telemetry::{metrics, prometheus};
 
-// Initialize telemetry
-init(&Config::default())?;
+metrics().increment("files_processed");
+metrics().increment_by("files_processed", 3);
+metrics().gauge("active_jobs", 2);
+metrics().histogram("processing_ms", 12.5);
 
-// Structured logging
-info!(file = "main.rs", line = 42, "Processing file");
-warn!(duration_ms = 150, "Slow operation");
-error!(code = "E2001", "File not found");
-
-// Metrics
-metrics::counter("files_processed").inc();
-metrics::histogram("processing_time").record(150.0);
+// The Prometheus text exposition format.
+let text = prometheus::render();
+assert!(text.contains("files_processed"));
 ```
 
 ## Modules
 
-### `logging`
-
-Structured logging setup.
-
-```rust
-use foodshare_telemetry::logging;
-
-// Initialize with defaults
-logging::init()?;
-
-// Custom configuration
-logging::init_with_config(&LogConfig {
-    level: "debug",
-    format: LogFormat::Json,
-    file: Some("app.log"),
-})?;
-```
-
 ### `metrics`
 
-Metrics collection.
+The registry.
 
 ```rust
 use foodshare_telemetry::metrics;
 
 // Counter
-metrics::counter("operations_total").inc();
-metrics::counter("errors_total").inc_by(5);
+metrics().increment("operations_total");
+metrics().increment_by("operations_total", 5);
 
 // Histogram
-metrics::histogram("duration_seconds").record(0.15);
+metrics().histogram("duration_ms", 0.15);
 
 // Gauge
-metrics::gauge("active_connections").set(42.0);
+metrics().gauge("active_connections", 42);
 ```
+
+Metric names are sanitised to the character set Prometheus accepts, so a
+caller can pass a human-readable name and still get a valid metric. A
+name is registered on first use, and a name already in use by a different
+metric type is left alone.
 
 ### `prometheus`
 
-Prometheus export.
+Rendering.
 
 ```rust
 use foodshare_telemetry::prometheus;
 
-// Get metrics as Prometheus format
-let output = prometheus::export()?;
+// The Prometheus text exposition format.
+let output = prometheus::render();
 
-// Start metrics server
-prometheus::serve(9090)?;
+// The raw metric families, for callers that want the protobuf.
+let families = prometheus::gather();
 ```
+
+The crate does not open a port. A service that wants to expose metrics
+serves `prometheus::render()` on its own route, so one process owns one
+port rather than two servers racing for the same metrics. The
+`fs-orchestrator` daemon does exactly that, on `/metrics`.
+
+### Logging
+
+```rust
+use foodshare_telemetry::{init, init_with_config, TelemetryConfig};
+
+init()?;
+init_with_config(TelemetryConfig {
+    log_level: "debug".to_string(),
+    ..TelemetryConfig::default()
+});
+```
+
+### Timers
+
+```rust
+use foodshare_telemetry::Timer;
+
+let timer = Timer::start("scanning");
+let duration = timer.stop();
+```
+
+The duration is recorded in the `scanning` histogram, in milliseconds.
 
 ## Configuration
 
@@ -92,10 +106,10 @@ metrics_endpoint = "http://localhost:9090"
 
 ## Log Levels
 
-| Level | Usage |
-|-------|-------|
-| `trace` | Very detailed debugging |
-| `debug` | Debugging information |
-| `info` | General information |
-| `warn` | Warning conditions |
-| `error` | Error conditions |
+| Level  | Usage                          |
+| ------ | ------------------------------ |
+| `trace` | Very detailed debugging        |
+| `debug` | Debugging information          |
+| `info`  | General information            |
+| `warn`  | Warning conditions             |
+| `error` | Error conditions               |

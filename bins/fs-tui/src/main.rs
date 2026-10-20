@@ -1,13 +1,19 @@
-//! FoodShare TUI — Live mono-ecosystem build/test monitor
+//! FoodShare TUI — live mono-ecosystem build/test monitor
 //!
-//! `fs-tui` wraps `bun cli.ts verify` domains in a Rust TUI:
+//! The TUI is a front-end over `foodshare-orchestrator`: the same
+//! implementation the CLI and the HTTP daemon drive. It shows the five
+//! verification domains and their live state, and starts them on demand.
+//!
 //! - Rust 2024 (cargo test --workspace, bench)
 //! - WASM (wasm-pack 5 crates)
-//! - Web (Next.js Turbopack, tsc, oxlint/biome)
-//! - Backend (deno test 434)
+//! - Web (Next.js Turbopack, tsrs, oxlint/biome)
+//! - Backend (deno edge function tests)
 //! - Mobile (Skip transpile, Maestro, Gradle)
 //!
 //! Run: `cargo run --bin fs-tui` or `cargo run --bin fs-tui -- verify`
+
+use std::io;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -21,11 +27,14 @@ use ratatui::{
     prelude::*,
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
 };
-use std::{
-    io,
-    time::{Duration, Instant},
-};
-use tokio::sync::mpsc;
+
+use foodshare_orchestrator::{DomainKind, Orchestrator, Status, Workspace, disk};
+
+/// How often the screen is redrawn.
+const TICK: Duration = Duration::from_millis(200);
+
+/// How long the keyboard is polled for between redraws.
+const POLL: Duration = Duration::from_millis(50);
 
 #[derive(Parser)]
 #[command(name = "fs-tui", version, about = "FoodShare live build/test TUI")]
@@ -50,100 +59,50 @@ enum Commands {
     Mobile,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Status {
-    Idle,
-    Running,
-    Pass,
-    Fail,
-}
-
-impl Status {
-    fn label(self) -> (&'static str, Color) {
+impl Commands {
+    /// The domain the command runs, or `None` for the whole plan.
+    fn domain(self) -> Option<DomainKind> {
         match self {
-            Self::Idle => ("IDLE", Color::DarkGray),
-            Self::Running => ("RUN", Color::Yellow),
-            Self::Pass => ("PASS", Color::Green),
-            Self::Fail => ("FAIL", Color::Red),
+            Self::Verify => None,
+            Self::Rust => Some(DomainKind::Rust),
+            Self::Wasm => Some(DomainKind::Wasm),
+            Self::Web => Some(DomainKind::Web),
+            Self::Backend => Some(DomainKind::Backend),
+            Self::Mobile => Some(DomainKind::Mobile),
         }
     }
 }
 
-#[derive(Clone, Debug)]
-struct Domain {
-    name: &'static str,
-    icon: &'static str,
-    status: Status,
-    duration: Option<Duration>,
-    logs: Vec<String>,
-    pass: usize,
-    fail: usize,
-    detail: &'static str,
-}
-
-impl Domain {
-    fn new(name: &'static str, icon: &'static str, detail: &'static str) -> Self {
-        Self {
-            name,
-            icon,
-            status: Status::Idle,
-            duration: None,
-            logs: vec![format!("{} ready — press 'r' to run", name)],
-            pass: 0,
-            fail: 0,
-            detail,
-        }
-    }
-    fn push(&mut self, line: impl Into<String>) {
-        self.logs.push(line.into());
-        if self.logs.len() > 200 {
-            self.logs.drain(0..50);
-        }
-    }
-}
-
+/// The TUI's own state.
 struct App {
-    domains: Vec<Domain>,
+    orchestrator: Orchestrator,
     selected: usize,
     started: Option<Instant>,
-    total_pass: usize,
-    total_fail: usize,
-    should_quit: bool,
     message: String,
+    should_quit: bool,
+    /// Whether a run is in progress, so a second one is not started.
+    running: bool,
 }
 
 impl App {
-    fn new() -> Self {
+    fn new(orchestrator: Orchestrator) -> Self {
         Self {
-            domains: vec![
-                Domain::new("Rust", "🦀", "16 crates, 217 tests, 6 benches"),
-                Domain::new(
-                    "WASM",
-                    "📦",
-                    "5 modules: search/geo/crypto/compression/image",
-                ),
-                Domain::new(
-                    "Web",
-                    "⚡",
-                    "Next.js 16 Turbopack 89 routes, tsc/oxlint/biome",
-                ),
-                Domain::new("Backend", "🛡️", "Deno 434 tests, pgvector, Edge Functions"),
-                Domain::new("Mobile", "📱", "Skip transpile, Maestro 17 flows, Gradle"),
-            ],
+            orchestrator,
             selected: 0,
             started: None,
-            total_pass: 0,
-            total_fail: 0,
-            should_quit: false,
             message: "q:quit  r:run domain  v:verify all  c:clean disk  h:help".into(),
+            should_quit: false,
+            running: false,
         }
     }
 
-    fn selected_domain(&self) -> &Domain {
-        &self.domains[self.selected]
+    fn domains() -> [DomainKind; 5] {
+        DomainKind::ALL
     }
 
-    fn on_tick(&mut self) {}
+    fn selected_domain(&self) -> DomainKind {
+        Self::domains()[self.selected]
+    }
 
     fn on_key(&mut self, code: KeyCode) {
         match code {
@@ -152,58 +111,101 @@ impl App {
                 self.message =
                     "h:help  q:quit  r:run selected  v:verify all  c:clean disk  j/k:nav".into()
             }
-            KeyCode::Char('r') => {
-                let idx = self.selected;
-                self.spawn_domain(idx);
-            }
-            KeyCode::Char('v') => self.spawn_verify(),
-            KeyCode::Char('c') => {
-                for d in &mut self.domains {
-                    d.push("🧹 clean-disk: pruning Cargo incremental caches...");
-                }
-                self.message = "Disk heal triggered — see Rust pane".into();
-            }
+            KeyCode::Char('r') => self.start_domain(self.selected_domain()),
+            KeyCode::Char('v') => self.start_plan(),
+            KeyCode::Char('c') => self.clean_disk(),
             KeyCode::Down | KeyCode::Char('j') => {
-                self.selected = (self.selected + 1) % self.domains.len();
+                self.selected = (self.selected + 1) % Self::domains().len();
             }
             KeyCode::Up | KeyCode::Char('k') => {
-                if self.selected == 0 {
-                    self.selected = self.domains.len() - 1;
+                self.selected = if self.selected == 0 {
+                    Self::domains().len() - 1
                 } else {
-                    self.selected -= 1;
-                }
+                    self.selected - 1
+                };
             }
             _ => {}
         }
     }
 
-    fn spawn_domain(&mut self, idx: usize) {
-        let name = self.domains[idx].name;
-        self.domains[idx].status = Status::Running;
-        self.domains[idx].push(format!("▶ running {}...", name));
-        self.domains[idx].duration = None;
-        let started = Instant::now();
-
-        // For MVP we simulate; real impl would tokio::process::Command
-        // Example real command:
-        // tokio::spawn(run_command(idx, tx, vec!["cargo","test","--workspace"]))
-        let detail = self.domains[idx].detail;
-        let tx_name = name.to_string();
-        // Simulate async completion via channel would be wired in real run()
-        // Here we mark pass instantly for demo; real run() will update via mpsc
-        let _ = (started, tx_name, detail);
-    }
-
-    fn spawn_verify(&mut self) {
-        self.started = Some(Instant::now());
-        for (i, d) in self.domains.iter_mut().enumerate() {
-            d.status = Status::Running;
-            d.push(format!("▶ verify [{}/5] {} — {}", i + 1, d.name, d.detail));
+    /// Start one domain, if nothing else is running.
+    fn start_domain(&mut self, kind: DomainKind) {
+        if self.running {
+            self.message = format!("⚠ {} is already running", kind.label());
+            return;
         }
-        self.message = "Running full verify — Rust→WASM→Web→Backend→Mobile".into();
-        // Real impl would sequentially spawn each domain and collect results
-        // For demo we simulate pass after ticks
+        self.running = true;
+        self.started = Some(Instant::now());
+        self.message = format!("▶ running {}...", kind.label());
+
+        let orchestrator = self.orchestrator.clone();
+        tokio::spawn(async move {
+            let outcome = orchestrator.run_domain(kind).await;
+            match outcome {
+                Ok(outcome) => tracing::info!(
+                    domain = kind.name(),
+                    success = outcome.success,
+                    duration_ms = outcome.duration_ms,
+                    "domain finished"
+                ),
+                Err(e) => tracing::error!(domain = kind.name(), error = %e, "domain failed"),
+            }
+        });
     }
+
+    /// Start the whole plan.
+    fn start_plan(&mut self) {
+        if self.running {
+            self.message = "⚠ a run is already in progress".into();
+            return;
+        }
+        self.running = true;
+        self.started = Some(Instant::now());
+        self.message = "Running full verify — Rust→WASM→Web→Backend→Mobile".into();
+
+        let orchestrator = self.orchestrator.clone();
+        tokio::spawn(async move {
+            let outcome = orchestrator.run_plan().await;
+            match outcome {
+                Ok(outcome) => tracing::info!(
+                    success = outcome.success,
+                    duration_ms = outcome.duration_ms,
+                    "plan finished"
+                ),
+                Err(e) => tracing::error!(error = %e, "plan failed"),
+            }
+        });
+    }
+
+    /// Prune the build artefacts.
+    fn clean_disk(&mut self) {
+        let root = self.orchestrator.workspace().root().to_path_buf();
+        let removed = disk::clean_artifacts(&root);
+        self.message = if removed.is_empty() {
+            "🧹 nothing to clean".into()
+        } else {
+            format!("🧹 cleaned {} artefact director(ies)", removed.len())
+        };
+    }
+
+    /// Refresh the running flag from the orchestrator's state.
+    fn on_tick(&mut self) {
+        let snapshot = self.orchestrator.snapshot();
+        if !snapshot.running && self.running {
+            self.running = false;
+            self.message = "✓ run finished".into();
+        }
+    }
+}
+
+fn status_style(status: Status) -> Style {
+    let color = match status {
+        Status::Idle => Color::DarkGray,
+        Status::Running => Color::Yellow,
+        Status::Pass => Color::Green,
+        Status::Fail => Color::Red,
+    };
+    Style::default().fg(color)
 }
 
 fn ui(f: &mut Frame, app: &App) {
@@ -233,8 +235,6 @@ fn ui(f: &mut Frame, app: &App) {
     let header = Row::new(vec![
         Cell::from(" Domain "),
         Cell::from(" Status "),
-        Cell::from(" Pass "),
-        Cell::from(" Fail "),
         Cell::from(" Detail "),
     ])
     .style(
@@ -244,19 +244,21 @@ fn ui(f: &mut Frame, app: &App) {
     )
     .height(1);
 
-    let rows = app.domains.iter().enumerate().map(|(i, d)| {
-        let (label, color) = d.status.label();
-        let style = if i == app.selected {
+    let snapshot = app.orchestrator.snapshot();
+    let rows = App::domains().into_iter().enumerate().map(|(index, kind)| {
+        let status = snapshot
+            .domain(kind)
+            .map(|d| d.status)
+            .unwrap_or(Status::Idle);
+        let style = if index == app.selected {
             Style::default().bg(Color::DarkGray).fg(Color::White)
         } else {
             Style::default()
         };
         Row::new(vec![
-            Cell::from(format!(" {} {} ", d.icon, d.name)),
-            Cell::from(format!(" {} ", label)).style(Style::default().fg(color)),
-            Cell::from(format!(" {} ", d.pass)),
-            Cell::from(format!(" {} ", d.fail)),
-            Cell::from(format!(" {} ", d.detail)),
+            Cell::from(format!(" {} {} ", kind.icon(), kind.label())),
+            Cell::from(format!(" {} ", status.label())).style(status_style(status)),
+            Cell::from(format!(" {} ", kind.detail())),
         ])
         .style(style)
         .height(1)
@@ -267,8 +269,6 @@ fn ui(f: &mut Frame, app: &App) {
         [
             Constraint::Length(14),
             Constraint::Length(10),
-            Constraint::Length(8),
-            Constraint::Length(8),
             Constraint::Min(30),
         ],
     )
@@ -282,15 +282,17 @@ fn ui(f: &mut Frame, app: &App) {
 
     f.render_widget(table, chunks[1]);
 
-    // Logs for selected domain
-    let sel = app.selected_domain();
-    let log_text = sel.logs.join("\n");
+    // Logs for the selected domain
+    let log_text = snapshot
+        .domain(app.selected_domain())
+        .map(|d| d.logs.join("\n"))
+        .unwrap_or_default();
     let logs = Paragraph::new(log_text)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(format!(" Logs: {} {} ", sel.icon, sel.name)),
-        )
+        .block(Block::default().borders(Borders::ALL).title(format!(
+            " Logs: {} {} ",
+            app.selected_domain().icon(),
+            app.selected_domain().label()
+        )))
         .wrap(Wrap { trim: true })
         .style(Style::default().fg(Color::White));
     f.render_widget(logs, chunks[2]);
@@ -302,7 +304,9 @@ fn ui(f: &mut Frame, app: &App) {
         .unwrap_or_else(|| "-".into());
     let footer = Paragraph::new(format!(
         " {} | elapsed: {} | {}",
-        app.message, elapsed, sel.detail
+        app.message,
+        elapsed,
+        app.selected_domain().detail()
     ))
     .style(Style::default().fg(Color::DarkGray))
     .block(Block::default().borders(Borders::ALL).title(" Help "));
@@ -310,9 +314,7 @@ fn ui(f: &mut Frame, app: &App) {
 }
 
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
-    let mut tick = tokio::time::interval(Duration::from_millis(200));
-    // Channel for domain workers to send log lines (real impl would use this)
-    let (_tx, mut _rx) = mpsc::channel::<(usize, String)>(100);
+    let mut tick = tokio::time::interval(TICK);
 
     loop {
         terminal.draw(|f| ui(f, &app))?;
@@ -320,39 +322,9 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
         tokio::select! {
             _ = tick.tick() => {
                 app.on_tick();
-                // Simulate verify progression for demo
-                if app.started.is_some() {
-                    // After 1s, mark first domain pass as demo
-                    if app.domains[0].status == Status::Running && app.started.unwrap().elapsed() > Duration::from_millis(800) {
-                        app.domains[0].status = Status::Pass;
-                        app.domains[0].pass = 217;
-                        app.domains[0].push("✓ 217 tests ok (<0.05s) — search/geo/crypto/compression/image");
-                    }
-                    if app.domains[1].status == Status::Running && app.started.unwrap().elapsed() > Duration::from_millis(1500) {
-                        app.domains[1].status = Status::Pass;
-                        app.domains[1].pass = 21;
-                        app.domains[1].push("✓ 5 WASM modules + 21 bridge tests 385ms");
-                    }
-                    if app.domains[2].status == Status::Running && app.started.unwrap().elapsed() > Duration::from_millis(2200) {
-                        app.domains[2].status = Status::Pass;
-                        app.domains[2].pass = 89;
-                        app.domains[2].push("✓ Next.js 89/89 routes Turbopack, tsc 0, oxlint 0");
-                    }
-                    if app.domains[3].status == Status::Running && app.started.unwrap().elapsed() > Duration::from_millis(2800) {
-                        app.domains[3].status = Status::Pass;
-                        app.domains[3].pass = 434;
-                        app.domains[3].push("✓ Deno 434 tests 9s — vector-search ONNX gte-small");
-                    }
-                    if app.domains[4].status == Status::Running && app.started.unwrap().elapsed() > Duration::from_millis(3500) {
-                        app.domains[4].status = Status::Pass;
-                        app.domains[4].pass = 17;
-                        app.domains[4].push("✓ Maestro 17 flows syntax ok, Skip transpile ok");
-                        app.message = "✅ verify complete — all 5 domains PASS".into();
-                    }
-                }
             }
             maybe_event = async {
-                if event::poll(Duration::from_millis(50)).unwrap_or(false) {
+                if event::poll(POLL).unwrap_or(false) {
                     Some(event::read())
                 } else {
                     None
@@ -372,80 +344,28 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    let workspace = Workspace::discover()?;
+    let orchestrator = Orchestrator::new(workspace);
 
-    // Non-interactive mode: dispatch to existing Bun CLI for CI parity
-    if let Some(cmd) = cli.command {
-        match cmd {
-            Commands::Verify => {
-                println!("fs-tui verify -> delegating to bun cli.ts verify");
-                let status = tokio::process::Command::new("bun")
-                    .args(["cli.ts", "verify"])
-                    .current_dir(
-                        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                            .join("../../..")
-                            .join("foodshare-app"),
-                    )
-                    .status()
-                    .await?;
-                std::process::exit(status.code().unwrap_or(1));
+    // Non-interactive mode: run one domain, or the whole plan.
+    if let Some(command) = cli.command {
+        match command.domain() {
+            Some(kind) => {
+                println!("fs-tui: running {}", kind.label());
+                let outcome = orchestrator.run_domain(kind).await?;
+                println!(
+                    "{} {} ({}ms)",
+                    outcome.kind.label(),
+                    if outcome.success { "PASS" } else { "FAIL" },
+                    outcome.duration_ms
+                );
+                std::process::exit(if outcome.success { 0 } else { 1 });
             }
-            Commands::Rust => {
-                let status = tokio::process::Command::new("cargo")
-                    .args(["test", "--workspace"])
-                    .current_dir(env!("CARGO_MANIFEST_DIR"))
-                    .status()
-                    .await?;
-                std::process::exit(status.code().unwrap_or(1));
-            }
-            Commands::Wasm => {
-                let status = tokio::process::Command::new("bun")
-                    .args(["tools/build-wasm.ts"])
-                    .current_dir(env!("CARGO_MANIFEST_DIR"))
-                    .status()
-                    .await?;
-                std::process::exit(status.code().unwrap_or(1));
-            }
-            Commands::Web => {
-                let status = tokio::process::Command::new("bun")
-                    .args(["run", "type-check"])
-                    .current_dir(
-                        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                            .join("../../..")
-                            .join("foodshare-web"),
-                    )
-                    .status()
-                    .await?;
-                std::process::exit(status.code().unwrap_or(1));
-            }
-            Commands::Backend => {
-                let status = tokio::process::Command::new("deno")
-                    .args([
-                        "test",
-                        "--allow-all",
-                        "--config",
-                        "supabase/functions/deno.json",
-                        "supabase/functions/__tests__/",
-                    ])
-                    .current_dir(
-                        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                            .join("../../..")
-                            .join("foodshare-backend"),
-                    )
-                    .status()
-                    .await?;
-                std::process::exit(status.code().unwrap_or(1));
-            }
-            Commands::Mobile => {
-                let status = tokio::process::Command::new("bun")
-                    .args(["tools/maestro-runner.ts", "syntax"])
-                    .current_dir(
-                        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                            .join("../../..")
-                            .join("foodshare-app"),
-                    )
-                    .status()
-                    .await?;
-                std::process::exit(status.code().unwrap_or(1));
+            None => {
+                println!("fs-tui: verifying every domain");
+                let outcome = orchestrator.run_plan().await?;
+                print_outcome(&outcome);
+                std::process::exit(if outcome.success { 0 } else { 1 });
             }
         }
     }
@@ -457,7 +377,7 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let app = App::new();
+    let app = App::new(orchestrator);
     let res = run_app(&mut terminal, app).await;
 
     disable_raw_mode()?;
@@ -468,4 +388,21 @@ async fn main() -> Result<()> {
         eprintln!("tui error: {e:?}");
     }
     Ok(())
+}
+
+/// Print what a run did.
+fn print_outcome(outcome: &foodshare_orchestrator::PlanOutcome) {
+    for domain in &outcome.domains {
+        println!(
+            "{} {} ({}ms)",
+            domain.kind.label(),
+            if domain.success { "PASS" } else { "FAIL" },
+            domain.duration_ms
+        );
+    }
+    if outcome.success {
+        println!("🎉 all green in {}ms", outcome.duration_ms);
+    } else {
+        println!("❌ failed after {}ms", outcome.duration_ms);
+    }
 }

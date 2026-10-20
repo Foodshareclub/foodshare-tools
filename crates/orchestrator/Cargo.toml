@@ -1,0 +1,24 @@
+[package]
+name = "foodshare-orchestrator"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Workspace build, test and verification orchestration for Foodshare tools"
+keywords = ["orchestration", "build", "ci", "foodshare"]
+categories = ["development-tools::build-utils"]
+
+[dependencies]
+foodshare-core.workspace = true
+foodshare-telemetry.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+proptest.workspace = true
