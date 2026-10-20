@@ -58,6 +58,18 @@ pub fn calculate_product_distances(
         .map_err(|e| JsValue::from_str(&format!("serialize error: {}", e)))
 }
 
+/// The coordinates a parsed location resolves to.
+///
+/// A derived struct rather than a `serde_json::Value`, because
+/// `serde-wasm-bindgen` serializes a JSON object as a JavaScript `Map`,
+/// and a `Map` has no readable properties. A struct becomes a plain
+/// object, which is what a JavaScript caller expects.
+#[derive(serde::Serialize)]
+struct LocationResponse {
+    latitude: f64,
+    longitude: f64,
+}
+
 /// Parse a PostGIS location and return coordinates.
 ///
 /// # Arguments
@@ -71,14 +83,11 @@ pub fn parse_location(location: JsValue) -> Result<JsValue, JsValue> {
         .map_err(|e| JsValue::from_str(&format!("parse error: {}", e)))?;
 
     match parse_postgis_point(&value) {
-        Some(coord) => {
-            let result = serde_json::json!({
-                "latitude": coord.latitude,
-                "longitude": coord.longitude
-            });
-            serde_wasm_bindgen::to_value(&result)
-                .map_err(|e| JsValue::from_str(&format!("serialize error: {}", e)))
-        }
+        Some(coord) => serde_wasm_bindgen::to_value(&LocationResponse {
+            latitude: coord.latitude,
+            longitude: coord.longitude,
+        })
+        .map_err(|e| JsValue::from_str(&format!("serialize error: {}", e))),
         None => Ok(JsValue::NULL),
     }
 }

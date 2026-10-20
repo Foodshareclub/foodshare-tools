@@ -1,0 +1,24 @@
+[package]
+name = "fs-xccloud"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Xcode Cloud build runs, logs and diagnostics over the App Store Connect API"
+keywords = ["xcode", "cloud", "appstore", "foodshare"]
+categories = ["development-tools::build-utils"]
+
+[[bin]]
+name = "fs-xccloud"
+path = "src/main.rs"
+
+[dependencies]
+foodshare-xccloud.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true

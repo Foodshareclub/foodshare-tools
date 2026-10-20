@@ -1,0 +1,21 @@
+[package]
+name = "foodshare-maestro"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Maestro E2E flow discovery, syntax checking and multi-device matrix execution"
+keywords = ["maestro", "e2e", "testing", "foodshare"]
+categories = ["development-tools::testing"]
+
+[dependencies]
+foodshare-core.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

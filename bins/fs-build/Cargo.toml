@@ -1,0 +1,24 @@
+[package]
+name = "fs-build"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "FoodShare cross-platform build engine: Swift core, iOS and Android"
+keywords = ["build", "ios", "android", "foodshare"]
+categories = ["development-tools::build-utils"]
+
+[[bin]]
+name = "fs-build"
+path = "src/main.rs"
+
+[dependencies]
+fs-app.workspace = true
+foodshare-orchestrator.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true

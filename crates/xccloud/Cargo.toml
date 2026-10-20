@@ -1,0 +1,24 @@
+[package]
+name = "foodshare-xccloud"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Xcode Cloud build runs, logs and diagnostics over the App Store Connect API"
+keywords = ["xcode", "cloud", "appstore", "foodshare"]
+categories = ["development-tools::build-utils"]
+
+[dependencies]
+foodshare-core.workspace = true
+anyhow.workspace = true
+base64.workspace = true
+p256 = { version = "0.13", features = ["ecdsa"] }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

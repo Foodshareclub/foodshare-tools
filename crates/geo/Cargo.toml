@@ -34,7 +34,7 @@ parallel = ["rayon"]
 wasm = ["wasm-bindgen", "serde-wasm-bindgen", "js-sys", "getrandom"]
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Oz", "--enable-bulk-memory"]
+wasm-opt = ["-Oz", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]
 
 [[bench]]
 name = "distance"

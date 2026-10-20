@@ -7,12 +7,15 @@
 //! - Build analysis
 //! - Enterprise-grade git hooks
 //! - Code protection system
+//! - The cross-platform build engine and the simulator flow
 
 #![warn(missing_docs)]
 
 // iOS modules
+pub mod build;
 pub mod code_protection;
 pub mod hooks;
+pub mod sim_flow;
 pub mod simulator;
 pub mod swift_tools;
 pub mod xcode;

@@ -17,6 +17,9 @@ members = [
     "crates/api-client",
     "crates/quadlet",
     "crates/orchestrator",
+    "crates/maestro",
+    "crates/wasm",
+    "crates/xccloud",
     "bins/fs-app",
     "bins/lefthook-rs",
     "bins/fs-image",
@@ -27,6 +30,11 @@ members = [
     "bins/fs-tui",
     "bins/fs-auto",
     "bins/fs-orchestrator",
+    "bins/fs-maestro",
+    "bins/fs-wasm",
+    "bins/fs-build",
+    "bins/fs-sim",
+    "bins/fs-xccloud",
 ]
 
 [workspace.package]
@@ -107,7 +115,7 @@ handlebars = "5.1"
 flate2 = "1.0"
 
 # Async runtime (for telemetry + TUI + orchestrator)
-tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "net", "signal"] }
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "net", "signal", "fs"] }
 
 # HTTP client (for telemetry)
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
@@ -174,6 +182,9 @@ foodshare-swift-toolchain = { path = "crates/swift-toolchain" }
 foodshare-api-client = { path = "crates/api-client" }
 foodshare-migrate = { path = "crates/migrate" }
 foodshare-orchestrator = { path = "crates/orchestrator" }
+foodshare-maestro = { path = "crates/maestro" }
+foodshare-wasm = { path = "crates/wasm" }
+foodshare-xccloud = { path = "crates/xccloud" }
 
 # Testing
 [workspace.dependencies.proptest]
