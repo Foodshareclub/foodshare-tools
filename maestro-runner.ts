@@ -10,8 +10,8 @@
  * @module tools/maestro-runner
  */
 
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync } from "bun:fs";
+import { join } from "bun:path";
 import { autoHealDiskSpace } from "./clean-disk.ts";
 
 function resolveAppDir(): string {

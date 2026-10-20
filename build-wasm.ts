@@ -22,8 +22,8 @@ import {
   readFileSync,
   statSync,
   writeFileSync,
-} from "node:fs";
-import { join } from "node:path";
+} from "bun:fs";
+import { join } from "bun:path";
 
 function postProcessWasmJs(outDir: string, crateName: string) {
   const jsName = `${crateName.replace(/-/g, "_")}.js`;

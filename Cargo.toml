@@ -15,6 +15,7 @@ members = [
     "crates/motherduck-sync",
     "crates/swift-toolchain",
     "crates/api-client",
+    "crates/quadlet",
     "bins/fs-app",
     "bins/lefthook-rs",
     "bins/fs-image",

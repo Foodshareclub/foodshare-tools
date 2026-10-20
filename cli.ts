@@ -21,8 +21,8 @@
  * @module tools/cli
  */
 
-import { existsSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, rmSync } from "bun:fs";
+import { join } from "bun:path";
 import { autoHealDiskSpace } from "./clean-disk.ts";
 import { runSimFlow } from "./sim-runner.ts";
 import { main as runMaestro } from "./maestro-runner.ts";
@@ -178,11 +178,9 @@ const ARTIFACT_DIRS = [
   "foodshare-app/Android/.skip-stub",
   "foodshare-app/Android/.skip-plugin-marker",
   "foodshare-web/.next",
-  "foodshare-web/.turbo",
   "foodshare-web/node_modules/.cache",
   "foodshare-web/.next/cache",
   "foodshare-backend/supabase/.temp",
-  ".turbo",
 ];
 
 function cleanArtifacts(root: string = ROOT_DIR) {

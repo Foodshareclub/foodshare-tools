@@ -206,8 +206,10 @@ impl HealthChecker {
     /// Add web-specific checks
     #[must_use]
     pub fn with_web_checks(self) -> Self {
-        self.add_check(CommandCheck::new("node", Some("--version")))
-            .add_check(CommandCheck::new("bun", Some("--version")))
+        // Bun is the only JavaScript runtime in this stack: it is the package
+        // manager, the script runner, the test runner and the Next.js runtime.
+        // A separate Node install would be a second toolchain, not a fallback.
+        self.add_check(CommandCheck::new("bun", Some("--version")))
     }
 
     /// Run all health checks

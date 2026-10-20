@@ -7,9 +7,9 @@
  * - Clears temp caches
  */
 
-import { existsSync, readdirSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { existsSync, readdirSync, rmSync } from "bun:fs";
+import { homedir } from "bun:os";
+import { join } from "bun:path";
 
 export interface DiskStats {
   totalGb: number;

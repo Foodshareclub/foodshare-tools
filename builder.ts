@@ -11,8 +11,8 @@
  * @module tools/builder
  */
 
-import { existsSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, rmSync } from "bun:fs";
+import { join } from "bun:path";
 import { autoHealDiskSpace } from "./clean-disk.ts";
 
 function resolveAppDir(): string {
@@ -61,7 +61,7 @@ const ANDROID_DIR = join(APP_DIR, "Android");
 
 async function checkSkipInstalled(): Promise<boolean> {
   try {
-    const proc = Bun.spawn(["skip", "--version"], {
+    const proc = Bun.spawn(["skip", "version"], {
       stdout: "ignore",
       stderr: "ignore",
     });
@@ -199,10 +199,10 @@ module ConcurrencyRuntimeC [system] {
   for (const target of targets) {
     try {
       if (!existsSync(target)) {
-        const fs = require("node:fs");
+        const fs = require("bun:fs");
         fs.mkdirSync(target, { recursive: true });
       }
-      const fs = require("node:fs");
+      const fs = require("bun:fs");
       fs.writeFileSync(join(target, "module.modulemap"), moduleMap, "utf8");
       if (existsSync(jniPath)) fs.copyFileSync(jniPath, join(target, "jni.h"));
       if (existsSync(ndkPath)) fs.copyFileSync(ndkPath, join(target, "ndk.h"));
@@ -357,6 +357,27 @@ export async function main() {
   const args = process.argv.slice(2);
   const isRelease = args.includes("--release");
   const cleanFlag = args.includes("--clean");
+
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`
+Usage: bun tools/builder.ts [options]
+
+Build Modes:
+  --android              Build Android debug APK (assembleDebug)
+  --ios                  Build iOS simulator app
+  --all                  Build both iOS and Android
+  --swift                Build Swift SPM core
+  --release              Build Release configuration instead of Debug
+  --clean                Clean build artifacts before building
+
+Test Modes:
+  --test, test, all      Run full cross-platform test suite (Swift + Kotlin + Bridges)
+  swift                  Run Swift unit tests
+  kotlin                 Run Kotlin unit tests
+  bridge                 Run Skip cross-platform bridge tests
+`);
+    process.exit(0);
+  }
 
   // Test modes: --test, swift, kotlin, bridge
   const isSwiftTest = args.includes("swift");

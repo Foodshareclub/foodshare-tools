@@ -1,0 +1,30 @@
+# Bun configuration for FoodShare Tools
+# https://bun.sh/docs/runtime/bunfig
+#
+# Bun is the only runtime in this project's toolchain. Node.js is not
+# installed and must not be required:
+#
+#   - Package management  → bun install
+#   - Script execution     → bun run <script>
+#   - TypeScript execution → bun <script>.ts   (Bun runs TypeScript natively)
+#   - Test runner          → bun test
+#   - Workspace commands   → bun run --filter '<pkg>' <script>
+#
+# Why `[run] bun = true` matters, and why it is not optional:
+#
+# `bun run <binary>` resolves `node_modules/.bin/<binary>` and executes it.
+# By default Bun honours the shebang at the top of that file, and every
+# JavaScript CLI in the ecosystem ships `#!/usr/bin/env node`. That hands the
+# process to Node — which is not installed here, so the command dies with
+# "command not found" (or, worse, silently runs on a different runtime than
+# the one the rest of the project assumes).
+#
+# This setting makes Bun execute those files on its own runtime regardless of
+# the shebang.
+#
+# `bunx` is NOT covered by this setting: `bunx` resolves the package's own
+# shebang instead. Use `bunx --bun <tool>` where a `bunx` call is needed.
+
+[run]
+# Execute `node_modules/.bin/*` scripts on Bun's runtime, not Node's.
+bun = true

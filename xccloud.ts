@@ -10,8 +10,8 @@
  * @module tools/xccloud
  */
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync } from "bun:fs";
+import { join } from "bun:path";
 
 interface AppStoreConnectAuth {
   keyId: string;

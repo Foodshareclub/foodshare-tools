@@ -12,6 +12,9 @@ Cargo.lock
 
 # macOS
 .DS_Store
+# AppleDouble resource forks (macOS writes these beside every file it
+# touches on non-HFS volumes; they are noise, never content).
+._*
 .AppleDouble
 .LSOverride
 

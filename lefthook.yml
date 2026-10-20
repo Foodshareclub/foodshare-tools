@@ -87,7 +87,7 @@ pre-commit:
       priority: 2
       run: |
         if [ -f tsconfig.json ]; then
-          bunx tsc --noEmit
+          bun run tsc --noEmit
         fi
 
     backend-type-check:
@@ -129,10 +129,10 @@ pre-commit:
       priority: 1
       glob: ".github/workflows/*.{yml,yaml}"
       run: |
-        for f in {staged_files}; do bunx js-yaml "$f" > /dev/null || exit 1; done
+        for f in {staged_files}; do bun scripts/check-yaml.ts "$f" > /dev/null || exit 1; done
 
     # -------------------------------------------------------------------------
-    # 3. LINTING & FORMATTING (Priority 3 - Mandated Toolchain: Oxlint, Biome, Prettier)
+    # 3. LINTING & FORMATTING (Priority 3 - Mandated Toolchain: Oxlint, Biome)
     # -------------------------------------------------------------------------
     web-oxlint:
       priority: 3
@@ -144,7 +144,7 @@ pre-commit:
             case "$f" in supabase/*) continue ;; esac
             FILES="$FILES $f"
           done
-          if [ -n "$FILES" ]; then bunx oxlint --fix $FILES; fi
+          if [ -n "$FILES" ]; then bunx --bun oxlint --fix $FILES; fi
         fi
       stage_fixed: true
 
@@ -161,20 +161,23 @@ pre-commit:
             case "$f" in supabase/*) continue ;; esac
             FILES="$FILES $f"
           done
-          [ -n "$FILES" ] && bunx biome check --write $FILES 2>/dev/null || true
+          [ -n "$FILES" ] && bunx --bun biome check --write $FILES 2>/dev/null || true
           true
         fi
       stage_fixed: true
 
     web-format:
       priority: 3
-      glob: "*.{ts,tsx,js,jsx,json,css,scss,md,yaml,yml}"
+      # Biome 1.9 formats TypeScript, JavaScript, JSON and CSS. It does not
+      # format Markdown, YAML or SCSS, so those are not in the glob — Prettier
+      # used to cover them and is no longer part of the toolchain.
+      glob: "*.{ts,tsx,js,jsx,json,css}"
       exclude:
         # vendored backend code must stay byte-identical to foodshare-backend
         - "^supabase/"
       run: |
-        if [ -f bun.lockb ] || [ -f bun.lock ]; then
-          bunx prettier --write --cache --cache-strategy metadata {staged_files}
+        if [ -f bun.lock ] || [ -f bun.lockb ]; then
+          bunx --bun @biomejs/biome@1.9.4 format --write {staged_files} 2>/dev/null || true
         fi
       stage_fixed: true
 
@@ -234,7 +237,7 @@ pre-push:
       run: |
         if [ -f tsconfig.json ]; then
           echo "🔍 Verifying Web TypeScript types before push..."
-          bunx tsc --noEmit
+          bun run tsc --noEmit
         fi
 
     web-oxlint-full:
@@ -242,7 +245,7 @@ pre-push:
       run: |
         if [ -f package.json ] && [ -d src ]; then
           echo "⚡ Verifying Oxlint zero-warning baseline before push..."
-          bunx oxlint src/
+          bunx --bun oxlint src/
         fi
 
     web-biome-full:
@@ -250,15 +253,20 @@ pre-push:
       run: |
         if [ -f package.json ] && [ -d src ]; then
           echo "🎨 Verifying Biome linting and formatting before push..."
-          bunx biome check src/
+          bunx --bun biome check src/
         fi
 
-    i18n-sync-check:
+    # This was `bun run translations:sync || true`, which despite the name was
+    # not a check: translations:sync PUSHES messages/*.json to the production
+    # Supabase `translations` table, so a pre-push hook silently republished
+    # whatever was on a developer's disk — and `|| true` meant it could never
+    # fail anyway. The real completeness gate is a local, read-only script.
+    i18n-check:
       priority: 1
       run: |
-        if [ -f package.json ] && grep -q "translations:sync" package.json; then
-          echo "🌐 Verifying i18n translation keys synchronization..."
-          bun run translations:sync || true
+        if [ -f package.json ] && grep -q "translations:check" package.json; then
+          echo "🌐 Checking translation key completeness (ratcheted budget)..."
+          bun run translations:check
         fi
 
     supabase-secret-check:

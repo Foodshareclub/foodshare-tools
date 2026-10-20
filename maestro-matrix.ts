@@ -10,8 +10,8 @@
  * @module tools/maestro-matrix
  */
 
-import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync } from "bun:fs";
+import { join } from "bun:path";
 import { autoHealDiskSpace } from "./clean-disk.ts";
 
 function resolveAppDir(): string {
