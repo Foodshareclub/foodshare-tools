@@ -8,26 +8,27 @@
  * - Backend: Supabase Edge Functions, pgvector migrations, Deno tests
  * - Infra/Storage: Proactive disk health monitoring and cache auto-healing
  *
+ * The workspace orchestration itself lives in Rust
+ * (`foodshare-orchestrator`); this file is the front-end that dispatches
+ * to it and keeps the per-repository commands that are not Rust yet.
+ *
  * Usage:
  *   bun cli.ts auto [--keep] [--retry N] [--clean] [--quick]  (run-until-green, build, auto-close & clean)
+ *   bun cli.ts orchestrate [serve|run|status]  (the Rust orchestrator)
  *   bun cli.ts mobile [run|smoke|matrix|build|test|clean|syntax|hierarchy]
  *   bun cli.ts web [build|dev|lint|typecheck]
  *   bun cli.ts backend [sync-types|test]
  *   bun cli.ts tui [verify|rust|wasm|web|backend|mobile]
  *   bun cli.ts verify
+ *   bun cli.ts node-check
  *   bun cli.ts disk:heal [--force]
  *   bun cli.ts check
  *
  * @module tools/cli
  */
 
-import { existsSync, rmSync } from "bun:fs";
+import { existsSync } from "bun:fs";
 import { join } from "bun:path";
-import { autoHealDiskSpace } from "./clean-disk.ts";
-import { runSimFlow } from "./sim-runner.ts";
-import { main as runMaestro } from "./maestro-runner.ts";
-import { runMatrix } from "./maestro-matrix.ts";
-import { main as runBuilder } from "./builder.ts";
 
 function resolveWorkspaceRoot(): string {
   if (existsSync(join(process.cwd(), "foodshare-app"))) {
@@ -43,6 +44,51 @@ const ROOT_DIR = resolveWorkspaceRoot();
 const APP_DIR = join(ROOT_DIR, "foodshare-app");
 const WEB_DIR = join(ROOT_DIR, "foodshare-web");
 const BACKEND_DIR = join(ROOT_DIR, "foodshare-backend");
+const TOOLS_DIR = join(ROOT_DIR, "foodshare-tools");
+
+/**
+ * Every repository in the workspace, with the directory its guard lives in.
+ *
+ * The Node.js guard is per-repository — each one knows its own layout, its
+ * own Deno carve-out, and its own container files — but the *policy* is
+ * one: Bun is the only runtime. This runs all four so the policy is
+ * enforced across the workspace, not just inside whichever repository you
+ * happen to be standing in.
+ */
+const NODE_GUARD_REPOS = [
+  { name: "foodshare-web", dir: WEB_DIR },
+  { name: "foodshare-app", dir: APP_DIR },
+  { name: "foodshare-backend", dir: BACKEND_DIR },
+  { name: "foodshare-tools", dir: TOOLS_DIR },
+];
+
+/**
+ * Run the Node.js guard in every repository in the workspace.
+ *
+ * Returns the number of repositories that failed, so the caller can decide
+ * what to do about it.
+ */
+async function runNodeGuards(): Promise<number> {
+  let failed = 0;
+
+  for (const repo of NODE_GUARD_REPOS) {
+    const script = join(repo.dir, "scripts", "check-no-node.ts");
+    if (!existsSync(script)) {
+      console.error(`❌ ${repo.name}: scripts/check-no-node.ts is missing`);
+      failed += 1;
+      continue;
+    }
+
+    console.log(`\n🛡️  [${repo.name}] Node.js guard...`);
+    const code = await runCommand(["bun", "scripts/check-no-node.ts"], repo.dir);
+    if (code !== 0) {
+      console.error(`❌ ${repo.name}: Node.js guard failed.`);
+      failed += 1;
+    }
+  }
+
+  return failed;
+}
 
 async function runCommand(
   cmd: string[],
@@ -63,28 +109,29 @@ async function handleMobile(args: string[]) {
 
   switch (action) {
     case "run":
-      await runSimFlow({});
+      await runRustBin("fs-sim");
       break;
     case "smoke":
-      await runSimFlow({ smoke: true });
+      await runRustBin("fs-sim", ["--smoke"]);
       break;
     case "matrix":
-      await runMatrix(subArgs);
+      await runRustBin("fs-maestro", ["matrix", ...subArgs]);
       break;
     case "build":
-      process.argv = [process.argv[0], process.argv[1], ...subArgs];
-      await runBuilder();
+      await runRustBin("fs-build", subArgs);
       break;
     case "test":
-      await runSimFlow({ test: true });
+      await runRustBin("fs-sim", ["--test"]);
       break;
     case "clean":
-      await runSimFlow({ clean: true });
+      await runRustBin("fs-sim", ["--clean"]);
+      break;
+    case "syntax":
+      await runRustBin("fs-maestro", ["syntax"]);
       break;
     default:
-      // Forward directly to maestro runner
-      process.argv = [process.argv[0], process.argv[1], ...args];
-      await runMaestro();
+      // Forward directly to the Maestro runner
+      await runRustBin("fs-maestro", args);
       break;
   }
 }
@@ -147,297 +194,78 @@ async function handleBackend(args: string[]) {
   }
 }
 
-async function handleTui(args: string[]) {
-  const tuiBin = join(ROOT_DIR, "foodshare-tools", "target", "debug", "fs-tui");
-  const hasBin = existsSync(tuiBin);
-  if (!hasBin) {
-    console.log("🔧 Building fs-tui (Rust TUI)...");
-    await runCommand(
-      ["cargo", "build", "--bin", "fs-tui"],
+/**
+ * Build a Rust binary if it is missing, then run it.
+ *
+ * The Rust binaries own the workspace orchestration. This is the shim that
+ * keeps `bun cli.ts` working while the TypeScript front-ends are retired
+ * one at a time.
+ */
+async function runRustBin(name: string, args: string[] = []) {
+  const bin = join(ROOT_DIR, "foodshare-tools", "target", "debug", name);
+  if (!existsSync(bin)) {
+    console.log(`🔧 Building ${name} (Rust)...`);
+    const code = await runCommand(
+      ["cargo", "build", "--bin", name],
       join(ROOT_DIR, "foodshare-tools"),
     );
+    if (code !== 0) {
+      console.error(`❌ Failed to build ${name}.`);
+      process.exit(code);
+    }
   }
-  // Pass through args: verify/rust/wasm/web/backend/mobile or interactive if no args
-  const tuiArgs = args.length > 0 ? args : [];
-  console.log(`🖥️  Launching TUI: ${tuiBin} ${tuiArgs.join(" ")}`);
-  const proc = Bun.spawn([tuiBin, ...tuiArgs], {
+  console.log(`🦀 ${name} ${args.join(" ")}`);
+  const proc = Bun.spawn([bin, ...args], {
     cwd: ROOT_DIR,
     stdin: "inherit",
     stdout: "inherit",
     stderr: "inherit",
   });
-  await proc.exited;
+  const code = await proc.exited;
+  if (code !== 0) {
+    process.exit(code);
+  }
+}
+
+/**
+ * Prune the caches and report the free space.
+ *
+ * The disk healing lives in Rust, with the rest of the orchestrator.
+ */
+async function runDiskHeal(force: boolean) {
+  const args = ["disk"];
+  if (force) args.push("--force");
+  await runRustBin("fs-orchestrator", args);
+}
+
+async function handleTui(args: string[]) {
+  // Pass through args: verify/rust/wasm/web/backend/mobile or interactive if no args
+  await runRustBin("fs-tui", args);
 }
 
 // ── Auto Orchestrator: run-until-green, build, auto-close & clean ──────────
-const ARTIFACT_DIRS = [
-  "foodshare-tools/target",
-  "foodshare-app/.build",
-  "foodshare-app/Android/app/build",
-  "foodshare-app/Android/.gradle",
-  "foodshare-app/Android/.skip-stub",
-  "foodshare-app/Android/.skip-plugin-marker",
-  "foodshare-web/.next",
-  "foodshare-web/node_modules/.cache",
-  "foodshare-web/.next/cache",
-  "foodshare-backend/supabase/.temp",
-];
+//
+// The orchestration lives in Rust now (`foodshare-orchestrator`), so this
+// file only dispatches to it. The Bun implementation that used to live
+// here duplicated the retry policy, the disk healing and the artefact
+// cleanup that the Rust orchestrator owns.
 
-function cleanArtifacts(root: string = ROOT_DIR) {
-  console.log("\n🧹 Cleaning artifacts...");
-  let cleaned = 0;
-  for (const rel of ARTIFACT_DIRS) {
-    const p = join(root, rel);
-    if (existsSync(p)) {
-      try {
-        rmSync(p, { recursive: true, force: true });
-        console.log(`  ✓ removed ${rel}`);
-        cleaned++;
-      } catch {}
-    }
-  }
-  // Prune Cargo incremental caches via disk healer
-  console.log(`  ✓ cleaned ${cleaned} artifact dirs`);
-}
 
-async function runWithRetry(
-  label: string,
-  cmd: string[],
-  cwd: string,
-  maxRetries = 2,
-): Promise<void> {
-  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-    console.log(
-      `\n▶ [${label}] attempt ${attempt}/${maxRetries + 1}: ${cmd.join(" ")}`,
-    );
-    const code = await runCommand(cmd, cwd);
-    if (code === 0) {
-      console.log(`✅ [${label}] passed`);
-      return;
-    }
-    console.warn(`⚠️  [${label}] failed (exit ${code})`);
-    if (attempt <= maxRetries) {
-      console.log(
-        `↻ healing disk & pruning incremental caches before retry...`,
-      );
-      await autoHealDiskSpace(4.0, true);
-      // Prune incremental for Rust
-      for (const inc of [
-        join(ROOT_DIR, "foodshare-tools/target/debug/incremental"),
-        join(ROOT_DIR, "foodshare-app/.build"),
-      ]) {
-        if (existsSync(inc))
-          try {
-            rmSync(inc, { recursive: true, force: true });
-          } catch {}
-      }
-      await Bun.sleep(1000 * attempt);
-    } else {
-      throw new Error(`${label} failed after ${maxRetries + 1} attempts`);
-    }
-  }
-}
+async function runNodeCheck() {
+  console.log("🛡️ =========================================================");
+  console.log("🛡️  FoodShare Node.js Guard — every repository");
+  console.log("🛡️ =========================================================");
 
-async function runAuto(args: string[]) {
-  if (args.includes("--help") || args.includes("-h")) {
-    console.log(`
-Usage: bun cli.ts auto [--keep] [--retry N] [--clean] [--quick] [--sequential]
-  --keep        Keep artifacts after success (default: clean)
-  --retry N     Max retries per domain (default: 2)
-  --clean       Clean before run
-  --quick       Skip WASM build if cached
-  --sequential  Run Web+Backend sequentially (default: parallel)
-`);
-    return;
-  }
-  const keepArtifacts = args.includes("--keep");
-  const maxRetries = args.includes("--retry")
-    ? Number(args[args.indexOf("--retry") + 1] ?? 2)
-    : 2;
-  const parallel = !args.includes("--sequential");
-  console.log("🤖 =========================================================");
-  console.log("🤖 FoodShare Auto — run-until-green, build, auto-close & clean");
-  console.log("🤖 =========================================================");
-  console.log(
-    `   keepArtifacts=${keepArtifacts}  maxRetries=${maxRetries}  parallel=${parallel}`,
-  );
+  const failed = await runNodeGuards();
 
-  const start = Date.now();
-  let spawned: Bun.Subprocess[] = [];
-  const register = (p: Bun.Subprocess) => spawned.push(p);
-  // Ensure auto-close on SIGINT
-  const onSig = () => {
-    console.log("\n🛑 SIGINT — cleaning & exiting...");
-    for (const p of spawned)
-      try {
-        p.kill();
-      } catch {}
-    if (!keepArtifacts) cleanArtifacts();
-    process.exit(130);
-  };
-  process.on("SIGINT", onSig);
-  process.on("SIGTERM", onSig);
-
-  try {
-    await autoHealDiskSpace(4.0, true);
-    if (args.includes("--clean")) cleanArtifacts();
-
-    // Phase 1: Rust + WASM (WASM needs Rust)
-    console.log("\n🦀 [1/5] Rust workspace tests...");
-    await runWithRetry(
-      "Rust",
-      ["cargo", "test", "--workspace"],
-      join(ROOT_DIR, "foodshare-tools"),
-      maxRetries,
-    );
-
-    console.log("\n📦 [2/5] WASM 5 crates...");
-    // Prefer prebuilt WASM if --quick
-    if (args.includes("--quick")) {
-      console.log("  (quick: skipping wasm-pack, using cached .wasm)");
-    } else {
-      await runWithRetry(
-        "WASM",
-        ["bun", "tools/build-wasm.ts"],
-        join(ROOT_DIR, "foodshare-tools"),
-        maxRetries,
-      );
-    }
-
-    // Phase 2: Web & Backend in parallel if allowed
-    if (parallel) {
-      console.log("\n⚡ [3/5] Web + Backend (parallel)...");
-      await Promise.all([
-        runWithRetry(
-          "Web type-check",
-          ["bun", "run", "type-check"],
-          WEB_DIR,
-          maxRetries,
-        ),
-        runWithRetry(
-          "Backend",
-          [
-            "deno",
-            "test",
-            "--allow-all",
-            "--config",
-            "supabase/functions/deno.json",
-            "supabase/functions/__tests__/",
-          ],
-          BACKEND_DIR,
-          maxRetries,
-        ),
-      ]);
-      console.log("\n📦 [4/5] Web build (Turbopack)...");
-      await runWithRetry(
-        "Web build",
-        ["bun", "run", "build"],
-        WEB_DIR,
-        maxRetries,
-      );
-    } else {
-      console.log("\n⚡ [3/5] Web type-check...");
-      await runWithRetry(
-        "Web type-check",
-        ["bun", "run", "type-check"],
-        WEB_DIR,
-        maxRetries,
-      );
-      console.log("\n📦 [4/5] Web build...");
-      await runWithRetry(
-        "Web build",
-        ["bun", "run", "build"],
-        WEB_DIR,
-        maxRetries,
-      );
-      console.log("\n🛡️  [5/5] Backend Deno tests...");
-      await runWithRetry(
-        "Backend",
-        [
-          "deno",
-          "test",
-          "--allow-all",
-          "--config",
-          "supabase/functions/deno.json",
-          "supabase/functions/__tests__/",
-        ],
-        BACKEND_DIR,
-        maxRetries,
-      );
-    }
-
-    // Phase 3: Mobile (syntax + Gradle) — requires ANDROID_HOME
-    console.log("\n📱 [5/5] Mobile — Maestro syntax + Gradle unit tests...");
-    await runWithRetry(
-      "Maestro syntax",
-      ["bun", "tools/maestro-runner.ts", "syntax"],
-      APP_DIR,
-      maxRetries,
-    );
-    // Gradle test uses resilient settings, set ANDROID_HOME if missing
-    const gradleEnv = {
-      ...process.env,
-      ANDROID_HOME:
-        process.env.ANDROID_HOME ?? "/Users/organic/Library/Android/sdk",
-    };
-    // We run via runCommand which inherits env, but we can spawn manually to set env
-    {
-      const cmd = [
-        "./gradlew",
-        ":app:testDebugUnitTest",
-        "--build-cache",
-        "--parallel",
-        "--no-configuration-cache",
-      ];
-      console.log(`▶ [Gradle] ${cmd.join(" ")}`);
-      const proc = Bun.spawn(cmd, {
-        cwd: join(ROOT_DIR, "foodshare-app/Android"),
-        env: gradleEnv as Record<string, string>,
-        stdout: "inherit",
-        stderr: "inherit",
-      });
-      register(proc);
-      const code = await proc.exited;
-      if (code !== 0) throw new Error(`Gradle failed ${code}`);
-      console.log("✅ [Gradle] passed");
-    }
-
-    // Phase 4: Final builds (only if tests green)
-    console.log("\n🔨 Final builds (release artifacts)...");
-    // Rust release not needed for app, but we do Web already built; Android APK debug already via Gradle test stage would have built intermediates
-    // We ensure at least one artifact exists per domain
-    const webNextExists = existsSync(join(WEB_DIR, ".next"));
-    const wasmExists = existsSync(
-      join(WEB_DIR, "src/wasm/foodshare-search/foodshare_search_bg.wasm"),
-    );
-    console.log(`  • Web .next: ${webNextExists ? "✅" : "❌"}`);
-    console.log(`  • WASM search: ${wasmExists ? "✅" : "❌"}`);
-
-    const dur = ((Date.now() - start) / 1000).toFixed(1);
-    console.log("\n==========================================");
-    console.log(`🎉 AUTO SUCCESS — all green in ${dur}s`);
-    console.log("==========================================\n");
-  } catch (e) {
+  if (failed > 0) {
     console.error(
-      `\n❌ AUTO FAILED: ${e instanceof Error ? e.message : String(e)}`,
+      `\n❌ ${failed} repository/repositories let Node.js back into the toolchain.`,
     );
     process.exit(1);
-  } finally {
-    process.off("SIGINT", onSig);
-    process.off("SIGTERM", onSig);
-    // Auto-close: kill any spawned dev servers (none started in this flow, but ensure)
-    for (const p of spawned)
-      try {
-        if (p.exitCode === null) p.kill();
-      } catch {}
-    if (!keepArtifacts) {
-      cleanArtifacts();
-      await autoHealDiskSpace(4.0, true);
-      console.log("✨ Auto-closed & cleaned — repo neat");
-    } else {
-      console.log("📦 Keeping artifacts (--keep)");
-    }
   }
+
+  console.log("\n✅ Every repository runs on Bun. No Node.js in the toolchain.");
 }
 
 async function runFullVerification() {
@@ -445,11 +273,23 @@ async function runFullVerification() {
   console.log("🌟 FoodShare 10x Full Domain Verification");
   console.log("🌟 =========================================================");
 
+  // 0. The toolchain policy, across every repository in the workspace.
+  //    Bun is the only runtime; this fails the whole verification if any
+  //    repository has let Node.js back in.
+  console.log("\n🛡️  [0/5] Running the Node.js guard in every repository...");
+  const nodeFailures = await runNodeGuards();
+  if (nodeFailures > 0) {
+    console.error(
+      `\n❌ Node.js guard failed in ${nodeFailures} repository/repositories.`,
+    );
+    process.exit(1);
+  }
+
   // 1. Disk Health
-  await autoHealDiskSpace(4.0);
+  await runDiskHeal(false);
 
   // 2. Rust Crates & Test Engine
-  console.log("\n🦀 [1/4] Running Rust 2024 Workspace Test Engine...");
+  console.log("\n🦀 [1/5] Running Rust 2024 Workspace Test Engine...");
   const rustCode = await runCommand(
     ["cargo", "test", "--workspace"],
     join(ROOT_DIR, "foodshare-tools"),
@@ -460,7 +300,7 @@ async function runFullVerification() {
   }
 
   // 3. Web Build & Type Check
-  console.log("\n📦 [2/4] Building Web Application with Next.js Turbopack...");
+  console.log("\n📦 [2/5] Building Web Application with Next.js Turbopack...");
   const webBuildCode = await runCommand(["bun", "run", "build"], WEB_DIR);
   if (webBuildCode !== 0) {
     console.error("❌ Web build failed.");
@@ -468,12 +308,12 @@ async function runFullVerification() {
   }
 
   // 4. Mobile Smoke Test Suite
-  console.log("\n📱 [3/4] Executing Mobile Simulator Runner & Smoke Tests...");
-  await runSimFlow({ smoke: true });
+  console.log("\n📱 [3/5] Executing Mobile Simulator Runner & Smoke Tests...");
+  await runRustBin("fs-sim", ["--smoke"]);
 
   // 5. Backend Edge Function Deno Unit Tests
   console.log(
-    "\n⚡ [4/4] Executing Backend Supabase Edge Function Deno Tests...",
+    "\n⚡ [4/5] Executing Backend Supabase Edge Function Deno Tests...",
   );
   const backendCode = await runCommand(
     [
@@ -500,7 +340,7 @@ async function printStatus() {
   console.log("🌟 =========================================================");
   console.log("🌟 FoodShare 10x Unified Workspace Health");
   console.log("🌟 =========================================================");
-  await autoHealDiskSpace(4.0);
+  await runDiskHeal(false);
 
   console.log("\n📦 Monorepo Workspaces:");
   console.log(
@@ -521,7 +361,11 @@ async function main() {
 
   switch (domain) {
     case "auto":
-      await runAuto(subArgs);
+      await runRustBin("fs-auto", subArgs);
+      break;
+    case "orchestrate":
+      // The HTTP daemon and the orchestrator CLI: serve, run, status.
+      await runRustBin("fs-orchestrator", subArgs);
       break;
     case "mobile":
       await handleMobile(subArgs);
@@ -542,10 +386,7 @@ async function main() {
       );
       break;
     case "wasm":
-      await runCommand(
-        ["bun", "tools/build-wasm.ts", ...subArgs],
-        join(ROOT_DIR, "foodshare-tools"),
-      );
+      await runRustBin("fs-wasm", subArgs);
       break;
     case "bench":
       await runCommand(
@@ -579,8 +420,11 @@ async function main() {
     case "verify":
       await runFullVerification();
       break;
+    case "node-check":
+      await runNodeCheck();
+      break;
     case "disk:heal":
-      await autoHealDiskSpace(4.0, subArgs.includes("--force"));
+      await runDiskHeal(subArgs.includes("--force"));
       break;
     case "check":
     case "status":
@@ -590,12 +434,14 @@ async function main() {
       console.log(`
 Usage:
   bun cli.ts auto [--keep] [--retry N] [--clean] [--quick] [--sequential]  (run-until-green, build, auto-close & clean)
+  bun cli.ts orchestrate [serve|run|status]  (the Rust orchestrator: HTTP daemon, plan runner)
   bun cli.ts mobile [run|smoke|matrix|build|test|clean|syntax|hierarchy]
   bun cli.ts web [build|dev|lint|typecheck|translations]
   bun cli.ts backend [sync-types|test]
   bun cli.ts tui [verify|rust|wasm|web|backend|mobile]  (interactive TUI if no args)
   bun cli.ts translations [--dry-run|--locale=xx|--force]
   bun cli.ts verify
+  bun cli.ts node-check
   bun cli.ts disk:heal [--force]
   bun cli.ts check
 `);
