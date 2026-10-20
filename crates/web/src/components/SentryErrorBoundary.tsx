@@ -1,9 +1,13 @@
-import * as React from 'react';
+'use client';
+
+import type { ReactNode } from 'react';
+import type React from 'react';
+import { Component } from 'react';
 import * as Sentry from '@sentry/react';
-import { ComponentStack } from '@sentry/tracing';
 
 interface SentryErrorBoundaryProps {
-  fallback?: React.ReactNode;
+  children?: ReactNode;
+  fallback?: ReactNode;
   reset?: boolean;
 }
 
@@ -18,7 +22,7 @@ interface SentryErrorState {
  * Sentry Error Boundary - Captures rendering errors and reports them to Sentry
  * while providing a graceful fallback UI
  */
-export class SentryErrorBoundary extends React.Component<
+export class SentryErrorBoundary extends Component<
   SentryErrorBoundaryProps,
   SentryErrorState
 > {
@@ -28,6 +32,7 @@ export class SentryErrorBoundary extends React.Component<
       hasError: false,
       error: null,
       errorInfo: null,
+      resetErrorBoundary: () => {},
     };
   }
 
@@ -43,7 +48,7 @@ export class SentryErrorBoundary extends React.Component<
     return { hasError: true, error, errorInfo: null };
   }
 
-  componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: unknown, _errorInfo: React.ErrorInfo) {
     // Additional context for Sentry
     Sentry.setExtra('error-boundary', 'SentryErrorBoundary');
     Sentry.setTag('component', this.constructor?.name || 'Unknown');
@@ -51,10 +56,6 @@ export class SentryErrorBoundary extends React.Component<
 
     // Capture with full stack trace
     Sentry.captureException(error, {
-      error: {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      },
       tags: {
         boundary: 'SentryErrorBoundary',
         component: this.constructor?.name || 'Unknown',
@@ -79,13 +80,3 @@ export class SentryErrorBoundary extends React.Component<
     return this.props.children;
   }
 }
-
-/**
- * Wrap components with Sentry error boundary
- * Usage: <SentryErrorBoundary>...</SentryErrorBoundary>
- */
-export const withSentryErrorBoundary = <
-  T extends { new (...args: any[]): React.ComponentType<any> }
->(Component: T) => class extends React.Component {
-  // ... can be used as HOC
-};

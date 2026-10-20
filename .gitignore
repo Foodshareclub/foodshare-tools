@@ -29,6 +29,11 @@ coverage/
 *.dll
 *.a
 
+# Next.js build output (crates/web)
+crates/web/.next/
+crates/web/next-env.d.ts
+*.tsbuildinfo
+
 # Local configuration
 .env
 .env.local

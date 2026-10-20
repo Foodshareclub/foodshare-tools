@@ -7,8 +7,9 @@
     "dev": "bun --bun next dev",
     "build": "bun --bun next build",
     "start": "bun --bun next start",
-    "type-check": "bunx --bun tsc --noEmit",
-    "lint": "bunx --bun oxlint",
+    "type-check": "bun run tsrs --noEmit",
+    "type-check:tsc": "bun run tsc --noEmit",
+    "lint": "bunx --bun oxlint --ignore-pattern=.next/** --ignore-pattern=node_modules/**",
     "test": "bun test",
     "sentry:init": "sentry-cli init",
     "sentry:release": "sentry-cli releases",
@@ -18,24 +19,28 @@
     "logs": "supabase functions logs"
   },
   "dependencies": {
-    "next": "^15.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "@sentry/nextjs": "^10.68.0",
-    "@sentry/react": "^10.68.0",
-    "@sentry/browser": "^10.68.0",
-    "@sentry/feedback": "^10.68.0",
-    "@sentry/replay": "^10.68.0",
-    "tailwindcss": "^4.0.0",
-    "autoprefixer": "^10.4.16",
-    "class-variance-authority": "^0.7.0",
-    "clsx": "^2.1.0",
-    "lucide-react": "^0.453.0",
-    "date-fns": "^4.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "next": "16.5.0-canary.19",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "@sentry/nextjs": "10.71.0",
+    "@sentry/react": "10.71.0",
+    "@sentry/browser": "10.71.0",
+    "@sentry/feedback": "10.71.0",
+    "@sentry/replay": "10.71.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "lucide-react": "0.577.0",
+    "date-fns": "4.1.0"
   },
   "devDependencies": {
-    "postcss": "^8.4.38"
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "26.4.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "oxlint": "1.80.0",
+    "postcss": "8.5.26",
+    "tailwindcss": "4.3.3",
+    "tsrs": "0.18.0-ts7.1.0-dev.20260929",
+    "typescript": "7.1.0-beta"
   }
 }

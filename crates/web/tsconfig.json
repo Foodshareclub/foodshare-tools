@@ -12,14 +12,36 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "noEmit": true,
-    "baseUrl": ".",
+    // TypeScript 7 removed `baseUrl`; path mappings are resolved relative to
+    // the tsconfig that declares them, so every target needs a leading "./".
     "paths": {
-      "@/components/*": ["src/components/*"],
-      "@/lib/*": ["src/lib/*"],
-      "@/sentry/*": ["src/sentry/*"],
-      "@/app/*": ["app/*"],
+      "@/*": [
+        "./src/*"
+      ]
     },
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "incremental": true,
+    "resolveJsonModule": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
-  "include": ["next.config.ts", "tsconfig.json", "src", "app"],
-  "exclude": ["node_modules", ".next"],
+  "include": [
+    "next.config.ts",
+    "tsconfig.json",
+    "src",
+    "postcss.config.mjs",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
 }

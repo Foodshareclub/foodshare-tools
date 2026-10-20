@@ -1,12 +1,13 @@
+'use client';
+
 import * as React from 'react';
 import * as Sentry from '@sentry/react';
-import { feedbackIntegration } from '@sentry/feedback';
 
 /**
  * Feedback Widget - Allows users to submit feedback on errors
  * Integrates with Sentry's feedback feature
  */
-export function FeedbackWidget(): JSX.Element {
+export function FeedbackWidget(): React.JSX.Element {
   const [showFeedback, setShowFeedback] = React.useState(false);
   const [name, setName] = React.useState('');
   const [email, setEmail] = React.useState('');
@@ -20,21 +21,20 @@ export function FeedbackWidget(): JSX.Element {
 
     setSending(true);
 
-    Sentry.getCurrentClient()?.showReportDialog({
-      onSubmit: ({ name: submittedName, email: submittedEmail, comment }) => {
-        // Send feedback to Sentry
-        feedbackIntegration?.sendFeedback?.({
-          name: submittedName,
-          email: submittedEmail,
-          comment,
-        });
-        setShowFeedback(false);
-        setName('');
-        setEmail('');
-        setMessage('');
-        setSending(false);
-      },
+    // Sentry 10 removed `showReportDialog` and the integration's own
+    // `sendFeedback` method. `captureFeedback` is the client API, and it
+    // attaches the active session replay on its own.
+    Sentry.captureFeedback({
+      name: name.trim(),
+      email: email.trim(),
+      message: message.trim(),
     });
+
+    setShowFeedback(false);
+    setName('');
+    setEmail('');
+    setMessage('');
+    setSending(false);
   };
 
   return (

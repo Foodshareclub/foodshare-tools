@@ -5,7 +5,7 @@ import * as React from 'react';
  * Ensures static shell commits immediately for instant navigation
  * Critical for PPR (Partial Prerendering) and Cache Components
  */
-export function FirstLoadSuspense<P = {}>({
+export function FirstLoadSuspense({
   children,
   fallback,
 }: {

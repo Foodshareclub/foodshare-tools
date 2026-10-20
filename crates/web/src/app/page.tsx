@@ -1,10 +1,9 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { SentryProfiling } from '@/sentry/server';
 
-export const revalidate = 3600;
-export const dynamic = 'force-static';
-
+// `cacheComponents` replaces the route-segment `revalidate` and `dynamic`
+// exports, which Next 16 rejects outright. This page reads no data and
+// uses no dynamic APIs, so it is prerendered as static content by default.
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-background p-6">

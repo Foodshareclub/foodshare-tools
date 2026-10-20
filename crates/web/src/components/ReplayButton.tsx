@@ -1,3 +1,5 @@
+'use client';
+
 import * as React from 'react';
 import * as Sentry from '@sentry/react';
 
@@ -5,9 +7,15 @@ import * as Sentry from '@sentry/react';
  * Replay Button - Allows users to send a replay to Sentry
  * This helps the team understand frontend issues
  */
-export function ReplayButton(): JSX.Element {
+export function ReplayButton(): React.JSX.Element {
   const handleClick = () => {
-    Sentry.getCurrentClient()?.showReportDialog();
+    // Sentry 10 removed `showReportDialog`. `captureFeedback` is the
+    // supported way to file a user report, and `includeReplay` attaches the
+    // session replay that was buffered by the Replay integration.
+    Sentry.captureFeedback(
+      { message: 'User requested a replay of the last error' },
+      { includeReplay: true },
+    );
   };
 
   return (
