@@ -332,6 +332,163 @@ See [bins/foodshare-i18n/README.md](../bins/foodshare-i18n/README.md) for full d
 
 ---
 
+## Orchestration
+
+Three binaries over one implementation, `foodshare-orchestrator`. See
+[crates/orchestrator.md](./crates/orchestrator.md) for the library.
+
+### fs-auto
+
+Headless run-until-green: verify, build, clean.
+
+```bash
+fs-auto
+fs-auto --quick          # Skip the WASM build
+fs-auto --sequential     # Web and backend one after another
+fs-auto --keep           # Keep the build artefacts
+fs-auto --clean          # Clean before the run
+fs-auto --retry 3        # Extra attempts per failing step
+```
+
+### fs-tui
+
+The live build and test monitor. Interactive with no arguments; one
+domain with a subcommand.
+
+```bash
+fs-tui                   # Interactive
+fs-tui verify            # The whole plan, without the TUI
+fs-tui rust              # One domain
+fs-tui wasm | web | backend | mobile
+```
+
+Keys: `r` run the selected domain, `v` verify everything, `c` clean the
+artefacts, `j`/`k` navigate, `q` quit.
+
+### fs-orchestrator
+
+The HTTP daemon, and the orchestrator from the command line.
+
+```bash
+fs-orchestrator serve --addr 127.0.0.1:7878
+fs-orchestrator run --domain rust
+fs-orchestrator run --domain all --quick --sequential
+fs-orchestrator status
+```
+
+Options:
+
+- `--addr <host:port>` - The address the daemon listens on
+- `--root <path>` - The workspace root
+
+The `run` subcommand takes `--domain <rust|wasm|web|backend|mobile|all>`,
+`--quick` and `--sequential`.
+
+Routes:
+
+| Route                | Method | What it answers                          |
+| -------------------- | ------ | ---------------------------------------- |
+| `/healthz`           | GET    | The environment health of the machine     |
+| `/readyz`            | GET    | Whether the daemon can do work            |
+| `/metrics`           | GET    | The Prometheus exposition format          |
+| `/status`            | GET    | The state of every domain                 |
+| `/run/{domain}`      | POST   | Start a domain, or `all`                  |
+| `/cancel`            | POST   | Stop the run in progress                  |
+
+`POST /run/{domain}` starts the run and answers `202`. Add `?wait=true`
+to wait for the result and get the outcome in the body.
+
+### fs-maestro
+
+The Maestro E2E runner: flows, syntax checks, suites and the device
+matrix.
+
+```bash
+fs-maestro check              # show the device the suite would run on
+fs-maestro syntax             # check every flow in the suite
+fs-maestro smoke              # run the flows tagged `smoke`
+fs-maestro regression         # run the flows tagged `regression`
+fs-maestro critical           # run the flows tagged `critical`
+fs-maestro a11y               # run the flows tagged `a11y`
+fs-maestro test               # run the whole suite
+fs-maestro flow <file>        # run one flow
+fs-maestro report [format]    # run the suite and write a report
+fs-maestro hierarchy          # dump the UI hierarchy
+fs-maestro matrix [tag]       # run the suite on every device at once
+```
+
+Options:
+
+- `--app-dir <path>` - The app repository
+- `--device <id>` - The device to run on
+
+### fs-wasm
+
+The WebAssembly build engine.
+
+```bash
+fs-wasm                       # build every crate
+fs-wasm --only geo            # build one crate
+fs-wasm --json                # machine-readable output
+```
+
+Options:
+
+- `--tools-dir <path>` - The Rust workspace
+- `--web-dir <path>` - The web repository the modules go into
+
+### fs-build
+
+The cross-platform build engine: the Swift core, the iOS app and the
+Android app.
+
+```bash
+fs-build                      # both platforms
+fs-build --ios                # the iOS app
+fs-build --android            # the Android app
+fs-build --all                # both platforms
+fs-build --swift              # the Swift core
+fs-build --release            # a release build
+fs-build --clean              # clean the artefacts first
+fs-build swift                # the Swift unit tests
+fs-build kotlin               # the Kotlin unit tests
+fs-build bridge               # the Skip bridge tests
+fs-build test                 # every test suite
+```
+
+### fs-sim
+
+The simulator runner: boot, build, install, launch, screenshot.
+
+```bash
+fs-sim                        # the whole flow
+fs-sim --smoke                # and the flows tagged `smoke`
+fs-sim --test                 # and the whole Maestro suite
+fs-sim --no-build             # reuse the existing bundle
+fs-sim --clean                # clean the artefacts first
+fs-sim --device=<udid>        # a specific simulator
+```
+
+### fs-xccloud
+
+Xcode Cloud build runs, logs and diagnostics over the App Store Connect
+API.
+
+```bash
+fs-xccloud status             # the recent build runs
+fs-xccloud start [workflowId] # queue a build, and watch it
+fs-xccloud watch [buildId]    # watch a build
+fs-xccloud logs [buildId]     # the actions, issues and artefacts
+fs-xccloud jwt                # print a signed token
+fs-xccloud local              # the local build summaries
+```
+
+Options:
+
+- `--app-dir <path>` - The app repository
+
+---
+
 ## Global Options
 
 All commands support:

@@ -30,13 +30,17 @@ resolves a package's own shebang — so every `bunx` call here passes `--bun`.
 
 ```
 foodshare-tools/
-├── crates/                    # Library crates (15)
+├── crates/                    # Library crates (19)
 │   ├── core/                  # Shared: git, file scanning, process, health
 │   ├── hooks/                 # Git hooks: commit-msg, secrets, migrations
 │   ├── cli/                   # CLI utilities: terminal output, progress
 │   ├── app/                   # Cross-platform app support (iOS + Android)
 │   ├── web/                   # Web: Next.js security, bundle analysis
 │   ├── telemetry/             # Observability: logging, metrics, tracing
+│   ├── orchestrator/          # Workspace build and verification orchestration
+│   ├── maestro/               # Maestro E2E flows, devices, matrix
+│   ├── wasm/                  # WebAssembly builds for the published crates
+│   ├── xccloud/               # Xcode Cloud over the App Store Connect API
 │   ├── geo/                   # Geospatial utilities
 │   ├── crypto/                # HMAC, constant-time comparison
 │   ├── search/                # Search utilities
@@ -46,16 +50,25 @@ foodshare-tools/
 │   ├── api-client/            # API client utilities
 │   ├── migrate/               # Migration tooling
 │   └── motherduck-sync/       # MotherDuck data sync (placeholder submodule)
-├── bins/                      # Binary crates (6)
+├── bins/                      # Binary crates (14)
 │   ├── fs-app/         # Cross-platform CLI
 │   ├── lefthook-rs/           # Web CLI (git hooks)
 │   ├── fs-image/              # Image processing CLI
 │   ├── foodshare-i18n/        # Internationalization CLI
 │   ├── foodshare-swift/       # Swift toolchain CLI
-│   └── foodshare-migrate/     # Migration CLI
+│   ├── foodshare-migrate/     # Migration CLI
+│   ├── fs-auto/               # Headless run-until-green orchestrator
+│   ├── fs-tui/                # Live build and test monitor
+│   ├── fs-orchestrator/       # HTTP daemon over the orchestrator
+│   ├── fs-maestro/            # Maestro E2E runner
+│   ├── fs-wasm/               # WebAssembly build engine
+│   ├── fs-build/              # Cross-platform build engine
+│   ├── fs-sim/                # Simulator runner
+│   └── fs-xccloud/            # Xcode Cloud builds, logs and diagnostics
 ├── scripts/                   # Utility scripts
 ├── tests/                     # Integration tests
 ├── docs/                      # Documentation
+│   └── adr/                   # Architecture decision records
 ├── packages/                  # Additional packages
 ├── .github/workflows/
 │   ├── ci.yml                 # CI: lint, security audit (cargo-audit), test (3 OS), coverage, build (4 targets), docs
@@ -74,16 +87,32 @@ Three workflows:
 
 ## Key Crates
 
-| Crate                 | Purpose                                                   |
-| --------------------- | --------------------------------------------------------- |
-| `foodshare-core`      | Git operations, file scanning, process management         |
-| `foodshare-hooks`     | Commit message validation, secret scanning (15+ patterns) |
-| `foodshare-cli`       | Terminal output, progress bars, colored output            |
-| `fs-app`              | Cross-platform (iOS, Android) CLI and project management  |
-| `foodshare-web`       | Next.js security checks, bundle analysis                  |
-| `foodshare-telemetry` | Structured logging, Prometheus metrics                    |
-| `foodshare-geo`       | Geospatial utilities                                      |
-| `foodshare-crypto`    | HMAC signing, constant-time comparison                    |
+| Crate                    | Purpose                                                   |
+| ------------------------ | --------------------------------------------------------- |
+| `foodshare-core`         | Git operations, file scanning, process management         |
+| `foodshare-hooks`        | Commit message validation, secret scanning (15+ patterns) |
+| `foodshare-cli`          | Terminal output, progress bars, colored output            |
+| `fs-app`                 | Cross-platform (iOS, Android) CLI and project management  |
+| `foodshare-web`          | Next.js security checks, bundle analysis                  |
+| `foodshare-telemetry`    | Structured logging, Prometheus metrics                     |
+| `foodshare-orchestrator` | Workspace build and verification orchestration            |
+| `foodshare-maestro`    | Maestro E2E flows, syntax checks, device matrix            |
+| `foodshare-wasm`       | WebAssembly builds for the published crates                |
+| `foodshare-xccloud`    | Xcode Cloud over the App Store Connect API                 |
+
+## Orchestration
+
+The workspace verification lives in `foodshare-orchestrator`, a library
+with no HTTP dependency. Three front-ends drive it: `fs-auto` (headless),
+`fs-tui` (live monitor) and `fs-orchestrator` (the axum daemon). The
+daemon serves the same probe contract as the backend's `job-worker`.
+
+The daemon is the only crate that depends on axum, tower or tower-http,
+at the same versions the backend resolves. It is built with the
+`release-service` profile, which inherits `release` but unwinds: under
+`panic = "abort"` one panicking handler would take the process down.
+
+The decision record is in `docs/adr/0001-rust-orchestrator-and-axum.md`.
 
 ## Important Rules
 

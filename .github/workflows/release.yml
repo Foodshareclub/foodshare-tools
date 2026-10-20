@@ -57,6 +57,16 @@ jobs:
           fi
           cargo build --release --workspace --target ${{ matrix.target }}
 
+      # The daemon serves HTTP for the life of the process, so it is built
+      # with the unwinding profile: under `panic = "abort"` one bad
+      # request would take the process down.
+      - name: Build the daemon
+        run: |
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          fi
+          cargo build --profile release-service --bin fs-orchestrator --target ${{ matrix.target }}
+
       - name: Package
         run: |
           mkdir -p dist
@@ -66,7 +76,15 @@ jobs:
                      target/${{ matrix.target }}/release/foodshare-migrate \
                      target/${{ matrix.target }}/release/fs-image \
                      target/${{ matrix.target }}/release/foodshare-i18n \
-                     target/${{ matrix.target }}/release/foodshare-swift; do
+                     target/${{ matrix.target }}/release/foodshare-swift \
+                     target/${{ matrix.target }}/release/fs-auto \
+                     target/${{ matrix.target }}/release/fs-tui \
+                     target/${{ matrix.target }}/release/fs-maestro \
+                     target/${{ matrix.target }}/release/fs-wasm \
+                     target/${{ matrix.target }}/release/fs-build \
+                     target/${{ matrix.target }}/release/fs-sim \
+                     target/${{ matrix.target }}/release/fs-xccloud \
+                     target/${{ matrix.target }}/release-service/fs-orchestrator; do
             [ -f "$bin" ] && cp "$bin" dist/ || echo "Warning: $bin not found"
           done
           cp README.md LICENSE dist/

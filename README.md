@@ -36,13 +36,17 @@ cargo install --path bins/lefthook-rs
 
 ```
 foodshare-tools/
-├── crates/                    # Library crates (15)
+├── crates/                    # Library crates (19)
 │   ├── core/                  # Shared: git, file scanning, process, health
 │   ├── hooks/                 # Git hooks: commit-msg, secrets, migrations
 │   ├── cli/                   # CLI utilities: terminal output, progress
 │   ├── app/                   # Cross-platform app support (iOS + Android)
 │   ├── web/                   # Web: Next.js security, bundle analysis
 │   ├── telemetry/             # Observability: logging, metrics, tracing
+│   ├── orchestrator/          # Workspace build and verification orchestration
+│   ├── maestro/               # Maestro E2E flows, devices, matrix
+│   ├── wasm/                  # WebAssembly builds for the published crates
+│   ├── xccloud/               # Xcode Cloud over the App Store Connect API
 │   ├── geo/                   # Geospatial utilities
 │   ├── crypto/                # HMAC, constant-time comparison
 │   ├── search/                # Search utilities
@@ -52,13 +56,21 @@ foodshare-tools/
 │   ├── api-client/            # API client utilities
 │   ├── migrate/               # Migration tooling
 │   └── motherduck-sync/       # MotherDuck data sync (placeholder submodule)
-├── bins/                      # Binary crates (6)
+├── bins/                      # Binary crates (14)
 │   ├── fs-app/         # Cross-platform CLI
 │   ├── lefthook-rs/           # Web CLI (git hooks)
 │   ├── fs-image/              # Image processing CLI
 │   ├── foodshare-i18n/        # Internationalization CLI
 │   ├── foodshare-swift/       # Swift toolchain CLI
-│   └── foodshare-migrate/     # Migration CLI
+│   ├── foodshare-migrate/     # Migration CLI
+│   ├── fs-auto/               # Headless run-until-green orchestrator
+│   ├── fs-tui/                # Live build and test monitor
+│   ├── fs-orchestrator/       # HTTP daemon over the orchestrator
+│   ├── fs-maestro/            # Maestro E2E runner
+│   ├── fs-wasm/               # WebAssembly build engine
+│   ├── fs-build/              # Cross-platform build engine
+│   ├── fs-sim/                # Simulator runner
+│   └── fs-xccloud/            # Xcode Cloud builds, logs and diagnostics
 ├── scripts/                   # Utility scripts
 ├── tests/                     # Integration tests
 ├── docs/                      # Documentation
@@ -116,6 +128,34 @@ lefthook-rs bundle-size --threshold 500kb
 lefthook-rs conventional-commit .git/COMMIT_MSG
 ```
 
+### Orchestration
+
+The workspace verification — Rust, WASM, Web, Backend, Mobile — lives in
+`foodshare-orchestrator`, with three front-ends over it.
+
+```bash
+fs-auto                              # Headless run-until-green, build, clean
+fs-tui                               # Live monitor, interactive
+fs-tui verify                        # The whole plan, without the TUI
+fs-orchestrator run --domain rust    # One domain from the command line
+fs-orchestrator serve                # The HTTP daemon
+```
+
+The daemon serves the same probe contract as the backend's `job-worker`,
+so one Prometheus covers both services.
+
+| Route                | What it answers                                  |
+| -------------------- | ------------------------------------------------ |
+| `GET /healthz`       | The environment health of the machine            |
+| `GET /readyz`        | Whether the daemon can do work                   |
+| `GET /metrics`       | The Prometheus exposition format                 |
+| `GET /status`        | The state of every domain                        |
+| `POST /run/{domain}` | Start a domain, or `all`                         |
+| `POST /cancel`       | Stop the run in progress                         |
+
+The decision record is in
+[docs/adr/0001-rust-orchestrator-and-axum.md](docs/adr/0001-rust-orchestrator-and-axum.md).
+
 ## Related Repositories
 
 | Repository                                                                | Purpose                                               |
@@ -145,6 +185,16 @@ TypeScript 7 compiler, with `tsc` on TypeScript 7.1 kept as a parity gate.
 Node.js is not part of it. `bun scripts/check-no-node.ts` fails the build if
 it creeps back in. `bunx` is the one exception to `[run] bun = true` — it
 resolves a package's own shebang — so every `bunx` call here passes `--bun`.
+
+`crates/web` is a standalone Next.js app with its own lockfile, so it carries
+its own `bunfig.toml`. Bun resolves `bunfig.toml` from the working directory
+only — it does not walk up to the repository root — so a package without one
+runs its `node_modules/.bin/*` binaries through their `#!/usr/bin/env node`
+shebang. The command still succeeds, on the wrong runtime. The guard checks
+every package that declares scripts for exactly this.
+
+`bun cli.ts node-check` runs the guard in all four repositories of the
+workspace, and `bun cli.ts verify` runs it before anything else.
 
 Deno appears only where the Supabase Edge Functions are involved, which
 live in the backend rather than here.

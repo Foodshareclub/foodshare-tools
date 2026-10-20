@@ -13,11 +13,22 @@ foodshare-tools/
 │   ├── app/          # Cross-platform app support (iOS + Android)
 │   ├── web/          # Web-specific functionality
 │   ├── telemetry/    # Observability
+│   ├── orchestrator/ # Workspace build and verification orchestration
+│   ├── maestro/      # Maestro E2E flows, devices, matrix
+│   ├── wasm/         # WebAssembly builds for the published crates
+│   ├── xccloud/      # Xcode Cloud over the App Store Connect API
 │   └── [libs]/       # Published libraries (geo, crypto, search, etc.)
 ├── bins/             # Binary entry points
 │   ├── fs-app/         # Cross-platform CLI
 │   ├── lefthook-rs/
-│   └── fs-image/
+│   ├── fs-image/
+│   ├── fs-auto/        # Headless orchestrator
+│   ├── fs-tui/         # Live monitor
+│   ├── fs-orchestrator/# HTTP daemon
+│   ├── fs-maestro/     # Maestro E2E runner
+│   ├── fs-wasm/        # WebAssembly build engine
+│   ├── fs-build/       # Cross-platform build engine
+│   └── fs-sim/         # Simulator runner
 ├── tests/            # Integration tests
 └── docs/             # Documentation
 ```
@@ -25,30 +36,23 @@ foodshare-tools/
 ## Dependency Graph
 
 ```
-                    ┌─────────────┐
-                    │   bins/*    │  Binary entry points
-                    └──────┬──────┘
-                           │
-         ┌─────────────────┼─────────────────┐
-         │                 │                 │
-    ┌────▼────┐      ┌─────▼─────┐     ┌─────▼─────┐
-    │   app   │      │    web    │     │  libs/*   │  Platform + domain crates
-    └────┬────┘      └─────┬─────┘     └─────┬─────┘
-         │                 │                 │
-         └─────────────────┼─────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │    hooks    │  Git hook logic
-                    └──────┬──────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-         ┌────▼────┐  ┌────▼────┐  ┌────▼────┐
-         │   cli   │  │telemetry│  │  core   │  Foundation
-         └─────────┘  └─────────┘  └─────────┘
+                       bins/*
+                         │
+     ┌───────────────────┼───────────────────┐
+     │                   │                   │
+  fs-app             fs-auto             fs-tui          fs-orchestrator
+     │                   │                   │                   │
+     └───────────────────┴─────────┬─────────┴───────────────────┘
+                                   │
+                          foodshare-orchestrator
+                                   │
+                       foodshare-core  +  foodshare-telemetry
 ```
 
-## Crate Responsibilities
+The orchestrator is a library with no HTTP dependency. The three
+front-ends — the headless runner, the TUI and the HTTP daemon — are
+siblings over it, so the CLI and the TUI do not pull in a web framework
+they never use. The daemon is the only crate that depends on axum.
 
 ### Core (`foodshare-core`)
 
@@ -105,8 +109,47 @@ Terminal output utilities:
 Observability infrastructure:
 
 - Structured logging (tracing)
-- Metrics collection
-- Prometheus export
+- Metrics collection, backed by a Prometheus registry
+- Prometheus text exposition
+- JSON export for the status endpoint
+
+### Orchestrator (`foodshare-orchestrator`)
+
+Workspace build and verification orchestration:
+
+- The five verification domains: Rust, WASM, Web, Backend, Mobile
+- The plan that runs them, with parallel groups and a retry policy
+- Disk health and auto-healing between retries
+- The state of the run, which the TUI renders and the status endpoint serves
+
+The crate has no HTTP dependency. The daemon, the TUI and the headless
+runner are three front-ends over it.
+
+### Maestro (`foodshare-maestro`)
+
+Maestro E2E support:
+
+- Device discovery, for iOS simulators and Android emulators
+- Flow discovery, in a suite and its subflows
+- Syntax checking
+- Single-device suites and the multi-device matrix
+
+### Xcode Cloud (`foodshare-xccloud`)
+
+The App Store Connect integration:
+
+- Credential resolution, from the environment or a `.p8` key file
+- The ES256 token the API authenticates with
+- The CI products, build runs, actions, issues and artefacts
+- The local build summaries CI leaves behind
+
+### WASM (`foodshare-wasm`)
+
+WebAssembly builds for the published crates:
+
+- The five crates that ship to the browser
+- The `wasm-pack` invocation
+- The loader patch, so Next.js can find the `.wasm` files after bundling
 
 ### Published Libraries
 

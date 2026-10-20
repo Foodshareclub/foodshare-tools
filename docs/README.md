@@ -29,6 +29,10 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | [foodshare-hooks](./crates/hooks.md)         | Git hooks (commit-msg, secrets, migrations)         |
 | [foodshare-cli](./crates/cli.md)             | CLI utilities (terminal output, progress bars)      |
 | [foodshare-telemetry](./crates/telemetry.md) | Observability (logging, metrics, tracing)           |
+| [foodshare-orchestrator](./crates/orchestrator.md) | Workspace build and verification orchestration |
+| [foodshare-maestro](./crates/maestro.md) | Maestro E2E flows, syntax checks, device matrix     |
+| [foodshare-wasm](./crates/wasm.md) | WebAssembly builds for the published crates       |
+| [foodshare-xccloud](./crates/xccloud.md) | Xcode Cloud over the App Store Connect API   |
 
 ### Published Libraries
 
@@ -50,3 +54,11 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | `foodshare-i18n`    | Translation management CLI ([docs](../bins/foodshare-i18n/README.md)) |
 | `foodshare-swift`   | Swift toolchain version management CLI                                |
 | `foodshare-migrate` | Secret migration CLI for self-hosted Supabase                         |
+| `fs-auto`           | Headless run-until-green orchestrator                                 |
+| `fs-tui`            | Live build and test monitor                                           |
+| `fs-orchestrator`   | HTTP daemon over the workspace orchestrator                           |
+| `fs-maestro`        | Maestro E2E runner: syntax, suites, device matrix                     |
+| `fs-wasm`           | WebAssembly build engine                                              |
+| `fs-build`          | Cross-platform build engine: Swift core, iOS, Android                 |
+| `fs-sim`            | Simulator runner: boot, build, install, launch, screenshot            |
+| `fs-xccloud`        | Xcode Cloud builds, logs and diagnostics                             |
