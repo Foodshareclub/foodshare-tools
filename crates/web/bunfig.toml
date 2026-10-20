@@ -1,0 +1,40 @@
+# Bun configuration for the FoodShare web crate.
+#
+# This crate is a standalone Next.js app with its own lockfile and its own
+# `node_modules` — it is not a member of the parent workspace, so the
+# parent's `bunfig.toml` does not apply here.
+#
+# Bun looks for `bunfig.toml` in the working directory and does NOT walk up
+# to the repository root. Without this file, `bun run tsrs` and
+# `bun run tsc` execute their binaries through their own
+# `#!/usr/bin/env node` shebang — the process becomes Node.js, which is not
+# part of this project's toolchain. The failure is silent: the command
+# succeeds, on the wrong runtime.
+
+[run]
+# Execute `node_modules/.bin/*` scripts on Bun's runtime, not Node's.
+bun = true
+
+[install]
+# Exact versions for reproducible builds. A caret range is a promise that a
+# future install may pull a different version, which makes "works on my
+# machine" a question rather than an answer.
+exact = true
+# Faster installs
+concurrentScripts = 16
+# Refuse to install a package published less than an hour ago. The dependency
+# tree is pinned to exact versions, so this only ever blocks a *new* version
+# — the window in which a compromised publish would otherwise be picked up.
+minimumReleaseAge = 3600
+#
+# The linker is deliberately left at Bun's default ("hoisted"). Bun's
+# "isolated" linker is faster and stops phantom dependencies, but it is not
+# compatible with Next.js 16 + Turbopack: Turbopack fails to resolve even
+# direct dependencies such as `tailwindcss` from a symlinked node_modules
+# tree, and the build dies with module-resolution errors. Stay on the hoisted
+# linker until Turbopack supports the isolated layout.
+
+[install.lockfile]
+# Keep the lockfile in sync with package.json on every install. A lockfile
+# that only CI regenerates is a lockfile nobody reviews.
+save = true
