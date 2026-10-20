@@ -34,6 +34,9 @@ crates/web/.next/
 crates/web/next-env.d.ts
 *.tsbuildinfo
 
+# Compiled CLI binaries (`bun build --compile`)
+dist/
+
 # Local configuration
 .env
 .env.local

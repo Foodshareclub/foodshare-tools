@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run build:wasm",
+    "build": "bun run build:wasm && bun run build:cli",
     "dev": "bun run dev:web",
     "test": "bun test --pass-with-no-tests",
     "lint": "bun run lint:oxlint",
@@ -33,7 +33,9 @@
     "auto:quick": "bun cli.ts auto --quick",
     "auto:keep": "bun cli.ts auto --keep",
     "check:no-node": "bun scripts/check-no-node.ts",
-    "auto:headless": "cargo run --bin fs-auto -- --quick"
+    "verify": "bun run check:no-node && bun run lint && bun run type-check && bun run test",
+    "auto:headless": "cargo run --bin fs-auto -- --quick",
+    "build:cli": "bun build --compile --outfile dist/foodshare-cli cli.ts"
   },
   "devDependencies": {
     "@types/bun": "1.4.0",
