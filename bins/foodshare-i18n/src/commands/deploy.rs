@@ -231,7 +231,14 @@ fn deploy_edge_functions() -> Result<()> {
         println!("  Deploying {}...", func.cyan());
 
         let output = Command::new("bunx")
-            .args(["--bun", "supabase", "functions", "deploy", func, "--no-verify-jwt"])
+            .args([
+                "--bun",
+                "supabase",
+                "functions",
+                "deploy",
+                func,
+                "--no-verify-jwt",
+            ])
             .current_dir(&supabase_dir)
             .output()
             .with_context(|| format!("Failed to deploy {}", func))?;

@@ -48,13 +48,21 @@ pub struct Error {
 
 impl Error {
     pub fn new(code: ErrorCode, message: String, suggestion: String) -> Self {
-        Error { code, message, suggestion }
+        Error {
+            code,
+            message,
+            suggestion,
+        }
     }
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{:?}] {} (suggestion: {})", self.code, self.message, self.suggestion)
+        write!(
+            f,
+            "[{:?}] {} (suggestion: {})",
+            self.code, self.message, self.suggestion
+        )
     }
 }
 
@@ -85,7 +93,13 @@ fn check_container_file(path: &Path) -> QuadletResult<()> {
             if let Some(eq_pos) = trimmed.find('=') {
                 let after_eq = &trimmed[eq_pos + 1..];
                 if after_eq.starts_with("/Users/") || after_eq.contains("/Users/") {
-                    issues.push(format!("{} : absolute /Users/ Volume directive (laptop-only)", path.display()).to_string());
+                    issues.push(
+                        format!(
+                            "{} : absolute /Users/ Volume directive (laptop-only)",
+                            path.display()
+                        )
+                        .to_string(),
+                    );
                     break;
                 }
             }
@@ -98,7 +112,8 @@ fn check_container_file(path: &Path) -> QuadletResult<()> {
         let lower = line.to_lowercase();
         for pattern in &transcript_patterns {
             if lower.contains(pattern) {
-                issues.push(format!("{} : transcript leakage detected", path.display()).to_string());
+                issues
+                    .push(format!("{} : transcript leakage detected", path.display()).to_string());
                 break;
             }
         }
