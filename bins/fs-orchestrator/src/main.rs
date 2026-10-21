@@ -107,7 +107,8 @@ async fn main() -> Result<()> {
             sequential,
         } => {
             let orchestrator =
-                Orchestrator::from_workspace(workspace, Options { quick, sequential })?;
+                Orchestrator::from_workspace(workspace, Options { quick, sequential })?
+                    .with_history(history);
             run(&orchestrator, &domain).await
         }
         Command::Status => {

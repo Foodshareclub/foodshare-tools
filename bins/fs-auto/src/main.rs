@@ -32,6 +32,10 @@ struct Cli {
     /// Run the web and backend domains one after another.
     #[arg(long)]
     sequential: bool,
+
+    /// Where the run history is kept. Defaults to the state directory.
+    #[arg(long)]
+    state: Option<std::path::PathBuf>,
 }
 
 #[tokio::main]
@@ -61,13 +65,19 @@ async fn main() -> Result<()> {
         println!("🧹 cleaned {} artefact director(ies)", removed.len());
     }
 
+    let history = foodshare_orchestrator::history::History::load(
+        cli.state
+            .or_else(foodshare_orchestrator::history::default_path),
+        foodshare_orchestrator::history::DEFAULT_LIMIT,
+    )?;
     let orchestrator = Orchestrator::from_workspace(
         workspace,
         Options {
             quick: cli.quick,
             sequential: cli.sequential,
         },
-    )?;
+    )?
+    .with_history(std::sync::Arc::new(history));
 
     let outcome = orchestrator.run_plan().await?;
 

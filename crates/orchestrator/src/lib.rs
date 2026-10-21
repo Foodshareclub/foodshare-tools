@@ -32,7 +32,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use foodshare_core::error::{Error, Result};
@@ -72,7 +72,7 @@ impl Default for RetryPolicy {
 }
 
 /// How a domain's run ended.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DomainOutcome {
     /// Which domain ran.
     pub kind: DomainKind,
@@ -85,7 +85,7 @@ pub struct DomainOutcome {
 }
 
 /// How a whole plan's run ended.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanOutcome {
     /// Whether every domain passed.
     pub success: bool,

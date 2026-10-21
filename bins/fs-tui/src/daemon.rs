@@ -44,6 +44,37 @@ impl DaemonClient {
         self.post(&format!("/run/{}", domain.name())).await
     }
 
+    /// Ask the daemon to run a domain, and wait for the result.
+    pub async fn run_and_wait(
+        &self,
+        domain: DomainKind,
+    ) -> Option<foodshare_orchestrator::DomainOutcome> {
+        let response = self
+            .http
+            .post(format!("{}/run/{}?wait=true", self.base_url, domain.name()))
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        response.json().await.ok()
+    }
+
+    /// Ask the daemon to run the whole plan, and wait for the result.
+    pub async fn run_all_and_wait(&self) -> Option<foodshare_orchestrator::PlanOutcome> {
+        let response = self
+            .http
+            .post(format!("{}/run/all?wait=true", self.base_url))
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        response.json().await.ok()
+    }
+
     /// Ask the daemon to start the whole plan.
     pub async fn run_all(&self) -> bool {
         self.post("/run/all").await

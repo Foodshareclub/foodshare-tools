@@ -348,6 +348,7 @@ fs-auto --sequential     # Web and backend one after another
 fs-auto --keep           # Keep the build artefacts
 fs-auto --clean          # Clean before the run
 fs-auto --retry 3        # Extra attempts per failing step
+fs-auto --state <path>   # Where the run history is kept
 ```
 
 ### fs-tui
@@ -366,7 +367,10 @@ Options:
 
 - `--daemon <url>` - Watch a daemon that is already running, rather than
   starting an orchestrator of its own. Also read from
-  `FOODSHARE_ORCHESTRATOR_URL`.
+  `FOODSHARE_ORCHESTRATOR_URL`. With a daemon, a subcommand asks the
+  daemon to run the domain and waits for the result.
+- `--state <path>` - Where the run history is kept. Defaults to the
+  state directory.
 
 Keys: `r` run the selected domain, `v` verify everything, `x` cancel the
 run, `c` clean the artefacts, `j`/`k` navigate, `PageUp`/`PageDown`

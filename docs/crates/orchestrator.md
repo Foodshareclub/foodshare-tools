@@ -81,6 +81,10 @@ A verification lands in the same history as a plan's run. The parts of
 a run are the domains of a plan, or the stages of a verification, so
 both read the same way.
 
+Every front-end records: the daemon, the headless runner, the TUI and
+the verification. The history is a record of what ran on the machine,
+not of what one of them ran.
+
 ## The plan configuration
 
 The plan has five domains, and a file at the workspace root may change

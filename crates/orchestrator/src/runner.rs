@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use foodshare_core::error::{Error, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -17,7 +17,7 @@ use crate::domain::Step;
 pub use crate::state::{LogLine, Stream};
 
 /// How a step ended.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StepOutcome {
     /// The domain the step belonged to.
     pub domain: crate::domain::DomainKind,
@@ -430,11 +430,13 @@ mod tests {
         let (tx, _rx) = unbounded_channel();
         let cancelled = std::sync::Arc::new(AtomicBool::new(false));
         // The step starts a child of its own, the way `cargo test` does.
+        // The marker is its own, so this test does not count the
+        // processes of the test above it: they run in parallel.
         let step = Step::new(
             DomainKind::Rust,
             "parent",
             "sh",
-            &["-c", "sleep 30 & sleep 30"],
+            &["-c", "sleep 37 & sleep 37"],
             ".",
         );
 
@@ -446,12 +448,12 @@ mod tests {
 
         let _ = run_step(&step, &tx, &cancelled).await;
         // Give the group a moment to be signalled.
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(800)).await;
 
         // Nothing of the step is left running.
         let leftover = std::process::Command::new("sh")
             .arg("-c")
-            .arg("pgrep -f 'sleep 30' | wc -l")
+            .arg("pgrep -f 'sleep 37' | wc -l")
             .output();
         if let Ok(output) = leftover {
             let count = String::from_utf8_lossy(&output.stdout)

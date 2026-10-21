@@ -54,6 +54,10 @@ struct Cli {
     /// `FOODSHARE_ORCHESTRATOR_URL`.
     #[arg(long, global = true, env = "FOODSHARE_ORCHESTRATOR_URL")]
     daemon: Option<String>,
+
+    /// Where the run history is kept. Defaults to the state directory.
+    #[arg(long, global = true)]
+    state: Option<std::path::PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -489,12 +493,38 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let workspace = Workspace::discover()?;
-    let orchestrator = Orchestrator::from_workspace(workspace.clone(), Options::default())?;
+    let history = foodshare_orchestrator::history::History::load(
+        cli.state
+            .or_else(foodshare_orchestrator::history::default_path),
+        foodshare_orchestrator::history::DEFAULT_LIMIT,
+    )?;
+    let orchestrator = Orchestrator::from_workspace(workspace.clone(), Options::default())?
+        .with_history(std::sync::Arc::new(history));
 
-    // Non-interactive mode: run one domain, or the whole plan.
+    // Non-interactive mode: run one domain, or the whole plan. With a
+    // daemon, the daemon runs it — the same run, in the same place.
     if let Some(command) = cli.command {
-        match command.domain() {
-            Some(kind) => {
+        let client = cli.daemon.as_ref().map(DaemonClient::new);
+        let code = match (command.domain(), client) {
+            (Some(kind), Some(client)) => {
+                println!("fs-tui: asking the daemon to run {}", kind.label());
+                match client.run_and_wait(kind).await {
+                    Some(outcome) => {
+                        println!(
+                            "{} {} ({}ms)",
+                            outcome.kind.label(),
+                            if outcome.success { "PASS" } else { "FAIL" },
+                            outcome.duration_ms
+                        );
+                        i32::from(!outcome.success)
+                    }
+                    None => {
+                        println!("❌ the daemon did not answer");
+                        1
+                    }
+                }
+            }
+            (Some(kind), None) => {
                 println!("fs-tui: running {}", kind.label());
                 let outcome = orchestrator.run_domain(kind).await?;
                 println!(
@@ -503,15 +533,29 @@ async fn main() -> Result<()> {
                     if outcome.success { "PASS" } else { "FAIL" },
                     outcome.duration_ms
                 );
-                std::process::exit(if outcome.success { 0 } else { 1 });
+                i32::from(!outcome.success)
             }
-            None => {
+            (None, Some(client)) => {
+                println!("fs-tui: asking the daemon to verify every domain");
+                match client.run_all_and_wait().await {
+                    Some(outcome) => {
+                        print_outcome(&outcome);
+                        i32::from(!outcome.success)
+                    }
+                    None => {
+                        println!("❌ the daemon did not answer");
+                        1
+                    }
+                }
+            }
+            (None, None) => {
                 println!("fs-tui: verifying every domain");
                 let outcome = orchestrator.run_plan().await?;
                 print_outcome(&outcome);
-                std::process::exit(if outcome.success { 0 } else { 1 });
+                i32::from(!outcome.success)
             }
-        }
+        };
+        std::process::exit(code);
     }
 
     // Interactive TUI
