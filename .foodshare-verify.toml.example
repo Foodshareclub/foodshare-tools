@@ -9,6 +9,10 @@
 #
 # A step's `cwd` is relative to the workspace root, so the file is the
 # same on every machine.
+#
+# It also configures the full verification (`fs-verify`), whose stages run
+# in order after the toolchain policy check and the disk healing. The
+# stages below replace the built-in ones.
 
 # Leave a domain out. The domains are `rust`, `wasm`, `web`, `backend`
 # and `mobile`.
@@ -32,3 +36,21 @@
 # program = "bun"
 # args = ["run", "lint"]
 # cwd = "foodshare-web"
+#
+# The stages of the full verification.
+#
+# [[verify]]
+# label = "Rust workspace tests"
+# program = "cargo"
+# args = ["test", "--workspace"]
+# cwd = "foodshare-tools"
+#
+# [[verify]]
+# label = "Web build"
+# program = "bun"
+# args = ["run", "build"]
+# cwd = "foodshare-web"
+#
+# The built-in stages to leave out: `node-guard` and `disk`.
+#
+# verify_skip = ["node-guard"]

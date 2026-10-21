@@ -40,6 +40,17 @@ pub struct PlanConfig {
     /// The domains whose steps the file replaces.
     #[serde(default)]
     pub domain: Vec<DomainConfig>,
+    /// The stages of the full verification, when the file gives them.
+    ///
+    /// The built-in stages — the toolchain policy check and the disk
+    /// healing — come first and are not replaced; these are the stages
+    /// after them.
+    #[serde(default, rename = "verify")]
+    pub verify: Vec<StepConfig>,
+    /// The built-in verification stages to leave out: `node-guard` and
+    /// `disk`.
+    #[serde(default, rename = "verify_skip")]
+    pub verify_skip: Vec<String>,
 }
 
 /// A domain whose steps a configuration file replaces.
@@ -493,7 +504,7 @@ mod tests {
     fn test_a_configuration_file_can_skip_a_domain() {
         let config = PlanConfig {
             skip: vec!["wasm".to_string()],
-            domain: Vec::new(),
+            ..PlanConfig::default()
         };
         let plan = Plan::build_with(&workspace(), Options::default(), &config);
         assert!(
@@ -515,7 +526,6 @@ mod tests {
     #[test]
     fn test_a_configuration_file_can_replace_a_domain() {
         let config = PlanConfig {
-            skip: Vec::new(),
             domain: vec![DomainConfig {
                 name: "web".to_string(),
                 steps: vec![StepConfig {
@@ -526,6 +536,7 @@ mod tests {
                     env: Vec::new(),
                 }],
             }],
+            ..PlanConfig::default()
         };
         let plan = Plan::build_with(&workspace(), Options::default(), &config);
 

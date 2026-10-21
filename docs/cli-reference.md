@@ -519,6 +519,10 @@ The stages, in order: the Node.js guard in every repository, the disk,
 the Rust workspace tests, the web build, the mobile smoke tests, and the
 backend edge function tests. It stops at the first failure.
 
+The stages after the first two are configurable, in the same file that
+configures the plan — see
+[the orchestrator's documentation](./crates/orchestrator.md).
+
 ---
 
 ## Global Options

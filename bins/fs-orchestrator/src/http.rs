@@ -454,13 +454,14 @@ mod tests {
     async fn test_the_server_answers_over_a_socket() {
         let workspace = Workspace::with_root("/tmp/foodshare-orchestrator-test");
         let orchestrator = Orchestrator::new(workspace);
+        let app = router(AppState::new(orchestrator));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind");
         let address = listener.local_addr().expect("address");
 
         let server = tokio::spawn(async move {
-            let _ = axum::serve(listener, app()).await;
+            let _ = axum::serve(listener, app).await;
         });
 
         let body = reqwest::get(format!("http://{address}/healthz"))

@@ -31,7 +31,7 @@ pub enum Stage {
     /// Run a command in a directory.
     Command {
         /// What the stage is called.
-        label: &'static str,
+        label: String,
         /// The program to run.
         program: String,
         /// The arguments to pass.
@@ -87,6 +87,21 @@ impl Verifier {
     /// Build the verification for a workspace.
     #[must_use]
     pub fn new(workspace: &Workspace) -> Self {
+        Self::build(workspace, &crate::plan::PlanConfig::default())
+    }
+
+    /// Build the verification, with a configuration file's changes
+    /// applied.
+    ///
+    /// The toolchain policy check and the disk healing are the stages
+    /// that come first, and they can be left out. The stages after them
+    /// are the ones the file replaces.
+    #[must_use]
+    pub fn with_config(workspace: &Workspace, config: &crate::plan::PlanConfig) -> Self {
+        Self::build(workspace, config)
+    }
+
+    fn build(workspace: &Workspace, config: &crate::plan::PlanConfig) -> Self {
         let tools = workspace.tools();
         let web = workspace.web();
         let backend = workspace.backend();
@@ -97,44 +112,78 @@ impl Verifier {
         let (program, args) = sim.into_parts();
         let sim_args: Vec<String> = args.into_iter().chain(["--smoke".to_string()]).collect();
 
-        Self {
-            stages: vec![
-                Stage::NodeGuard {
-                    repos: vec![tools.clone(), app.clone(), web.clone(), backend.clone()],
-                },
-                Stage::DiskHeal,
-                Stage::Command {
-                    label: "Rust workspace tests",
-                    program: "cargo".to_string(),
-                    args: vec!["test".to_string(), "--workspace".to_string()],
-                    cwd: tools,
-                },
-                Stage::Command {
-                    label: "Web build (Turbopack)",
-                    program: "bun".to_string(),
-                    args: vec!["run".to_string(), "build".to_string()],
-                    cwd: web,
-                },
-                Stage::Command {
-                    label: "Mobile smoke tests",
-                    program,
-                    args: sim_args,
-                    cwd: app,
-                },
-                Stage::Command {
-                    label: "Backend edge function tests",
-                    program: "deno".to_string(),
-                    args: vec![
-                        "test".to_string(),
-                        "--allow-all".to_string(),
-                        "--config".to_string(),
-                        "supabase/functions/deno.json".to_string(),
-                        "supabase/functions/__tests__/".to_string(),
-                    ],
-                    cwd: backend,
-                },
-            ],
+        let mut stages = vec![
+            Stage::NodeGuard {
+                repos: vec![tools.clone(), app.clone(), web.clone(), backend.clone()],
+            },
+            Stage::DiskHeal,
+            Stage::Command {
+                label: "Rust workspace tests".to_string(),
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--workspace".to_string()],
+                cwd: tools,
+            },
+            Stage::Command {
+                label: "Web build (Turbopack)".to_string(),
+                program: "bun".to_string(),
+                args: vec!["run".to_string(), "build".to_string()],
+                cwd: web,
+            },
+            Stage::Command {
+                label: "Mobile smoke tests".to_string(),
+                program,
+                args: sim_args,
+                cwd: app,
+            },
+            Stage::Command {
+                label: "Backend edge function tests".to_string(),
+                program: "deno".to_string(),
+                args: vec![
+                    "test".to_string(),
+                    "--allow-all".to_string(),
+                    "--config".to_string(),
+                    "supabase/functions/deno.json".to_string(),
+                    "supabase/functions/__tests__/".to_string(),
+                ],
+                cwd: backend,
+            },
+        ];
+
+        // The built-in stages the file leaves out.
+        for name in &config.verify_skip {
+            match name.as_str() {
+                "node-guard" => {
+                    stages.retain(|stage| !matches!(stage, Stage::NodeGuard { .. }));
+                }
+                "disk" => {
+                    stages.retain(|stage| !matches!(stage, Stage::DiskHeal));
+                }
+                _ => tracing::warn!(stage = name, "unknown verification stage to skip"),
+            }
         }
+
+        // The stages the file replaces.
+        if !config.verify.is_empty() {
+            let first_command = stages
+                .iter()
+                .position(|stage| matches!(stage, Stage::Command { .. }))
+                .unwrap_or(stages.len());
+            stages.retain(|stage| !matches!(stage, Stage::Command { .. }));
+            let configured: Vec<Stage> = config
+                .verify
+                .iter()
+                .map(|step| Stage::Command {
+                    label: step.label.clone(),
+                    program: step.program.clone(),
+                    args: step.args.clone(),
+                    cwd: workspace.root().join(&step.cwd),
+                })
+                .collect();
+            let at = first_command.min(stages.len());
+            stages.splice(at..at, configured);
+        }
+
+        Self { stages }
     }
 
     /// Leave out the toolchain policy check.
@@ -158,9 +207,9 @@ impl Verifier {
     /// They need a booted simulator, so they do not run everywhere.
     #[must_use]
     pub fn without_mobile(mut self) -> Self {
-        self.stages.retain(|stage| {
-            !matches!(stage, Stage::Command { label, .. } if *label == "Mobile smoke tests")
-        });
+        self.stages.retain(
+            |stage| !matches!(stage, Stage::Command { label, .. } if label == "Mobile smoke tests"),
+        );
         self
     }
 
@@ -340,6 +389,68 @@ mod tests {
             !verifier.stages().iter().any(
                 |s| matches!(s, Stage::Command { label, .. } if *label == "Mobile smoke tests")
             )
+        );
+    }
+
+    #[test]
+    fn test_a_configuration_file_can_replace_the_stages() {
+        let config = crate::plan::PlanConfig {
+            verify: vec![crate::plan::StepConfig {
+                label: "Only the Rust tests".to_string(),
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--workspace".to_string()],
+                cwd: "foodshare-tools".to_string(),
+                env: Vec::new(),
+            }],
+            ..crate::plan::PlanConfig::default()
+        };
+        let verifier = Verifier::with_config(&workspace(), &config);
+
+        let commands: Vec<&Stage> = verifier
+            .stages()
+            .iter()
+            .filter(|s| matches!(s, Stage::Command { .. }))
+            .collect();
+        assert_eq!(commands.len(), 1);
+        let Stage::Command {
+            label,
+            program,
+            cwd,
+            ..
+        } = commands[0]
+        else {
+            panic!("it is a command");
+        };
+        assert_eq!(label, "Only the Rust tests");
+        assert_eq!(program, "cargo");
+        assert!(cwd.ends_with("foodshare-tools"));
+    }
+
+    #[test]
+    fn test_a_configuration_file_can_leave_out_a_built_in_stage() {
+        let config = crate::plan::PlanConfig {
+            verify_skip: vec!["node-guard".to_string(), "disk".to_string()],
+            ..crate::plan::PlanConfig::default()
+        };
+        let verifier = Verifier::with_config(&workspace(), &config);
+        assert!(
+            !verifier
+                .stages()
+                .iter()
+                .any(|s| matches!(s, Stage::NodeGuard { .. }))
+        );
+        assert!(
+            !verifier
+                .stages()
+                .iter()
+                .any(|s| matches!(s, Stage::DiskHeal))
+        );
+        // The command stages are still there.
+        assert!(
+            verifier
+                .stages()
+                .iter()
+                .any(|s| matches!(s, Stage::Command { .. }))
         );
     }
 

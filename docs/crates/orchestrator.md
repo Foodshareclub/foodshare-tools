@@ -97,6 +97,20 @@ same on every machine. The file is optional: without it, the built-in
 plan is the plan. `foodshare-verify.toml.example` in the repository root
 is a starting point.
 
+The same file configures the full verification. Its stages run in order
+after the toolchain policy check and the disk healing, and the file
+replaces the ones after those:
+
+```toml
+verify_skip = ["node-guard"]
+
+[[verify]]
+label = "Rust workspace tests"
+program = "cargo"
+args = ["test", "--workspace"]
+cwd = "foodshare-tools"
+```
+
 ## Cancellation
 
 A cancellation reaches the process that is running, not only the steps

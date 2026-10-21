@@ -78,7 +78,8 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let mut verifier = Verifier::new(&workspace);
+    let config = foodshare_orchestrator::plan::PlanConfig::load(workspace.root())?;
+    let mut verifier = Verifier::with_config(&workspace, &config);
     if cli.skip_mobile {
         verifier = verifier.without_mobile();
     }
