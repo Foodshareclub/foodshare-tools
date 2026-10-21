@@ -203,6 +203,13 @@ workspace, and `bun cli.ts verify` runs it before anything else.
 Deno appears only where the Supabase Edge Functions are involved, which
 live in the backend rather than here.
 
+No container runtime is part of it either. Nothing here builds an image,
+runs a container, or talks to a container socket, and nothing needs one:
+the toolchain is Rust, Bun, and Deno for the edge functions. A tool that
+wanted a container would have to find a runtime at run time and say
+which one it found, rather than assume one — assuming is how a tool ends
+up working on one machine and failing on the next.
+
 ## Error Codes
 
 | Code Range | Category      | Example                 |
