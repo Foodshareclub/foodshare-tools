@@ -391,11 +391,9 @@ fn main() -> anyhow::Result<()> {
             preset,
             output,
             recursive,
-            quality: _,
+            quality,
             dry_run,
         } => {
-            use image::imageops::FilterType;
-
             // Determine target dimensions
             let (target_width, target_height) = if let Some(preset_name) = preset {
                 match preset_name.as_str() {
@@ -482,23 +480,21 @@ fn main() -> anyhow::Result<()> {
                     let output_path = output.join(file_name);
 
                     let result = (|| -> anyhow::Result<()> {
-                        let img = image::open(file_path)?;
-                        let (current_w, current_h) = img.dimensions();
-
-                        // Determine if we need to fit or fill
-                        // For App Store screenshots, we want to fit within dimensions
-                        let aspect_ratio = current_w as f32 / current_h as f32;
-                        let target_aspect = target_width as f32 / target_height as f32;
-
-                        let resized = if (aspect_ratio - target_aspect).abs() < 0.01 {
-                            // Same aspect ratio - just resize
-                            img.resize_exact(target_width, target_height, FilterType::Lanczos3)
-                        } else {
-                            // Different aspect ratio - fit within bounds
-                            img.resize(target_width, target_height, FilterType::Lanczos3)
-                        };
-
-                        resized.save(&output_path)?;
+                        // The resize lives in the crate, so the binary and
+                        // anything else that resizes an image do it the
+                        // same way. The quality the caller asked for is
+                        // the quality the file gets.
+                        let data = std::fs::read(file_path)?;
+                        let resized = foodshare_image::fit_within(
+                            &data,
+                            &foodshare_image::FitOptions {
+                                max_width: target_width,
+                                max_height: target_height,
+                                quality,
+                                format: None,
+                            },
+                        )?;
+                        std::fs::write(&output_path, resized)?;
                         Ok(())
                     })();
 

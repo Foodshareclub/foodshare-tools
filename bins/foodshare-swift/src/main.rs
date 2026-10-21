@@ -6,8 +6,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use foodshare_swift_toolchain::{
-    detect::SwiftToolchain, migrate::SwiftMigrator, verify::VerificationReport,
-    REQUIRED_SWIFT_VERSION,
+    REQUIRED_SWIFT_VERSION, detect::SwiftToolchain, migrate::SwiftMigrator,
+    verify::VerificationReport,
 };
 use owo_colors::OwoColorize;
 use std::path::PathBuf;

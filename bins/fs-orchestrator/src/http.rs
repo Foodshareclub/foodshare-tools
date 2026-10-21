@@ -183,15 +183,11 @@ fn unauthorized() -> Response {
 }
 
 /// Compare two byte strings in constant time.
+///
+/// The comparison is the one the crypto crate has: a hand-written copy of
+/// it is a copy that can drift from the one that was reviewed.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
+    foodshare_crypto::constant_time_compare(a, b)
 }
 
 /// Turn a panic into a 500 rather than a dead process.

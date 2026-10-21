@@ -57,6 +57,71 @@ pub fn resize_image(data: &[u8], options: &ResizeOptions) -> Result<Vec<u8>> {
     encode_image(&resized, output_format, options.quality)
 }
 
+/// Options for resizing an image to fit inside a set of bounds.
+#[derive(Debug, Clone)]
+pub struct FitOptions {
+    /// The widest the result may be
+    pub max_width: u32,
+    /// The tallest the result may be
+    pub max_height: u32,
+    /// JPEG quality (1-100)
+    pub quality: u8,
+    /// Output format (None = same as input)
+    pub format: Option<ImageFormat>,
+}
+
+impl Default for FitOptions {
+    fn default() -> Self {
+        Self {
+            max_width: 800,
+            max_height: 800,
+            quality: 85,
+            format: None,
+        }
+    }
+}
+
+/// Resize an image to fit inside the given bounds.
+///
+/// The image keeps its aspect ratio: it is scaled until it fits inside
+/// the bounds, and no further. An image whose aspect ratio already
+/// matches the bounds is scaled to them exactly, so a screenshot that is
+/// already the right shape is not letterboxed.
+pub fn fit_within(data: &[u8], options: &FitOptions) -> Result<Vec<u8>> {
+    let input_format = detect_format(data)?;
+    let img = image::load_from_memory(data)?;
+
+    let current_width = img.width();
+    let current_height = img.height();
+    if current_width == 0 || current_height == 0 {
+        return Err(ImageError::ResizeError(
+            "the image has no pixels to resize".to_string(),
+        ));
+    }
+
+    let aspect_ratio = current_width as f32 / current_height as f32;
+    let target_aspect = options.max_width as f32 / options.max_height as f32;
+
+    let resized = if (aspect_ratio - target_aspect).abs() < 0.01 {
+        // The same shape: scale it to the bounds exactly.
+        img.resize_exact(
+            options.max_width,
+            options.max_height,
+            image::imageops::FilterType::Lanczos3,
+        )
+    } else {
+        // A different shape: fit inside the bounds and keep the shape.
+        img.resize(
+            options.max_width,
+            options.max_height,
+            image::imageops::FilterType::Lanczos3,
+        )
+    };
+
+    let output_format = options.format.unwrap_or(input_format);
+    encode_image(&resized, output_format, options.quality)
+}
+
 /// Encode a DynamicImage to bytes.
 fn encode_image(img: &DynamicImage, format: ImageFormat, quality: u8) -> Result<Vec<u8>> {
     let mut buffer = Cursor::new(Vec::new());

@@ -36,6 +36,22 @@ pub struct TestOutcome {
     pub error: Option<String>,
 }
 
+/// Dump the UI hierarchy of a device.
+///
+/// The hierarchy is written by Maestro itself, so this is the one place
+/// that knows how to ask for it: the arguments, the device flag and the
+/// exit code all live here rather than in a caller.
+pub async fn hierarchy(device_id: Option<&str>) -> std::io::Result<i32> {
+    let mut command = Command::new("maestro");
+    command.arg("hierarchy").stdin(Stdio::null());
+    if let Some(id) = device_id {
+        command.arg("--device").arg(id);
+    }
+
+    let status = command.status().await?;
+    Ok(status.code().unwrap_or(1))
+}
+
 /// Check the syntax of every flow.
 ///
 /// The flows are checked one at a time: `maestro check-syntax` is a

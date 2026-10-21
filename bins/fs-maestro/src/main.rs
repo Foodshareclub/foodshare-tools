@@ -15,11 +15,9 @@
 //!   fs-maestro check             # show the target device
 
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use tokio::process::Command as Process;
 
 use foodshare_core::workspace::Workspace;
 use foodshare_maestro::{device, flows, runner};
@@ -233,14 +231,8 @@ async fn report(maestro_dir: &Path, format: &str, device_id: Option<&str>) -> i3
 
 /// Dump the UI hierarchy.
 async fn hierarchy(device_id: Option<&str>) -> i32 {
-    let mut command = Process::new("maestro");
-    command.arg("hierarchy").stdin(Stdio::null());
-    if let Some(id) = device_id {
-        command.arg("--device").arg(id);
-    }
-    let status = command.status().await;
-    match status {
-        Ok(status) => status.code().unwrap_or(1),
+    match runner::hierarchy(device_id).await {
+        Ok(code) => code,
         Err(e) => {
             println!("❌ could not run maestro: {e}");
             1

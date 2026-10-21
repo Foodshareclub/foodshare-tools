@@ -8,4 +8,3 @@
 #![warn(missing_docs)]
 
 pub mod output;
-pub mod progress;

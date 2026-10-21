@@ -21,7 +21,6 @@
 
 pub mod commit_msg;
 pub mod migrations;
-pub mod pre_push;
 pub mod secrets;
 
 pub use foodshare_core::error::{Result, exit_codes};

@@ -21,7 +21,3 @@ pub use verify::VerificationReport;
 pub const REQUIRED_SWIFT_VERSION: &str = "6.3";
 /// Default Swift tools version for Package.swift files
 pub const SWIFT_TOOLS_VERSION: &str = "6.3";
-
-/// Default toolchain path on macOS for development
-pub const DEFAULT_TOOLCHAIN_PATH: &str =
-    "/Users/organic/Library/Developer/Toolchains/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-16-a.xctoolchain";

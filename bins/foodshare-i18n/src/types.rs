@@ -1,156 +1,28 @@
 //! Type definitions for API responses
+//!
+//! The responses the API returns are described once, in the API client.
+//! This module re-exports the ones the translation commands use and
+//! declares the ones the commands shape themselves.
 
 #![allow(dead_code)]
+// The re-exports below are the module's surface: the commands use some of
+// them and the rest are there for the ones that will.
+#![allow(unused_imports)]
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Health check response
-#[derive(Debug, Deserialize)]
-pub struct HealthResponse {
-    pub status: String,
-    pub version: String,
-    pub timestamp: String,
-    pub features: Option<HealthFeatures>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct HealthFeatures {
-    #[serde(rename = "deltaSync")]
-    pub delta_sync: Option<bool>,
-    pub prefetch: Option<bool>,
-}
-
-/// Locales list response
-#[derive(Debug, Deserialize)]
-pub struct LocalesResponse {
-    pub success: bool,
-    pub locales: Vec<String>,
-    pub default: String,
-}
-
-/// BFF info response
-#[derive(Debug, Deserialize)]
-pub struct BffInfoResponse {
-    pub success: bool,
-    pub service: String,
-    pub version: String,
-    pub endpoints: Vec<BffEndpoint>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct BffEndpoint {
-    pub path: String,
-    pub method: String,
-    pub description: String,
-}
-
-/// Translation response
-#[derive(Debug, Deserialize)]
-pub struct TranslationResponse {
-    pub success: bool,
-    pub data: Option<TranslationData>,
-    #[serde(rename = "userContext")]
-    pub user_context: Option<UserContext>,
-    pub delta: Option<DeltaData>,
-    pub stats: Option<DeltaStats>,
-    pub meta: Option<ResponseMeta>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct TranslationData {
-    pub messages: serde_json::Value,
-    pub locale: Option<String>,
-    pub version: Option<String>,
-    #[serde(alias = "updated_at", alias = "updatedAt")]
-    pub updated_at: Option<String>,
-    pub fallback: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UserContext {
-    #[serde(rename = "preferredLocale")]
-    pub preferred_locale: Option<String>,
-    #[serde(rename = "featureFlags")]
-    pub feature_flags: Option<Vec<String>>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DeltaData {
-    pub added: HashMap<String, String>,
-    pub updated: HashMap<String, DeltaChange>,
-    pub deleted: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DeltaChange {
-    pub old: Option<String>,
-    pub new: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DeltaStats {
-    pub added: usize,
-    pub updated: usize,
-    pub deleted: usize,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ResponseMeta {
-    pub cached: bool,
-    pub compressed: bool,
-    #[serde(rename = "deltaSync")]
-    pub delta_sync: bool,
-    #[serde(rename = "responseTimeMs")]
-    pub response_time_ms: u64,
-}
-
-/// Delta sync response
-#[derive(Debug, Deserialize)]
-pub struct DeltaSyncResponse {
-    pub success: bool,
-    #[serde(rename = "hasChanges")]
-    pub has_changes: Option<bool>,
-    pub locale: String,
-    #[serde(rename = "currentVersion")]
-    pub current_version: Option<String>,
-    #[serde(rename = "sinceVersion")]
-    pub since_version: Option<String>,
-    pub delta: Option<DeltaData>,
-    pub stats: Option<DeltaStats>,
-}
-
-/// Audit response
-#[derive(Debug, Deserialize)]
-pub struct AuditResponse {
-    pub success: Option<bool>,
-    #[serde(rename = "totalKeys")]
-    pub total_keys: Option<usize>,
-    #[serde(rename = "untranslatedCount")]
-    pub untranslated_count: Option<usize>,
-    pub untranslated: Option<Vec<UntranslatedKey>>,
-    #[serde(rename = "byCategory")]
-    pub by_category: Option<HashMap<String, usize>>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UntranslatedKey {
-    pub key: String,
-    #[serde(rename = "englishValue")]
-    pub english_value: Option<String>,
-}
-
-/// Translate batch response
-#[derive(Debug, Deserialize)]
-pub struct TranslateBatchResponse {
-    pub success: bool,
-    pub translated: Option<usize>,
-    pub translations: Option<HashMap<String, String>>,
-    #[serde(rename = "newVersion")]
-    pub new_version: Option<String>,
-    pub message: Option<String>,
-    pub error: Option<String>,
-}
+// The API responses. A second copy of a type is a second thing to keep
+// in step with the first: the API client already describes these, field
+// for field, and the commands used to convert between the two copies
+// field by field.
+pub use foodshare_api_client::endpoints::bff::{BffEndpoint, BffInfoResponse};
+pub use foodshare_api_client::endpoints::health::{HealthFeatures, HealthResponse};
+pub use foodshare_api_client::endpoints::translations::{
+    AuditResponse, DeltaChange, DeltaData, DeltaStats, DeltaSyncResponse, LocalesResponse,
+    ResponseMeta, TranslateBatchResponse, TranslationData, TranslationResponse, UntranslatedKey,
+    UserContext,
+};
 
 /// JSON output types
 #[derive(Debug, Serialize)]

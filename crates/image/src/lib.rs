@@ -26,7 +26,7 @@ pub use metadata::{ImageMetadata, extract_metadata};
 pub use smart_width::{SizeTier, calculate_target_width};
 
 #[cfg(feature = "processing")]
-pub use resize::{ResizeOptions, resize_image};
+pub use resize::{FitOptions, ResizeOptions, fit_within, resize_image};
 
 #[cfg(feature = "processing")]
 pub use alpha::{AlphaRemovalOptions, has_alpha_channel, process_image_file, remove_alpha_channel};

@@ -52,19 +52,7 @@ impl ApiClient {
             .await
             .context("Failed to check health")?;
 
-        // Convert from api-client types to local types
-        Ok((
-            HealthResponse {
-                status: health.status,
-                version: health.version,
-                timestamp: health.timestamp,
-                features: health.features.map(|f| HealthFeatures {
-                    delta_sync: f.delta_sync,
-                    prefetch: f.prefetch,
-                }),
-            },
-            elapsed,
-        ))
+        Ok((health, elapsed))
     }
 
     /// Get BFF info
@@ -76,23 +64,7 @@ impl ApiClient {
             .await
             .context("Failed to get BFF info")?;
 
-        Ok((
-            BffInfoResponse {
-                success: info.success,
-                service: info.service,
-                version: info.version,
-                endpoints: info
-                    .endpoints
-                    .into_iter()
-                    .map(|e| BffEndpoint {
-                        path: e.path,
-                        method: e.method,
-                        description: e.description,
-                    })
-                    .collect(),
-            },
-            elapsed,
-        ))
+        Ok((info, elapsed))
     }
 
     /// Get supported locales
@@ -104,11 +76,7 @@ impl ApiClient {
             .await
             .context("Failed to fetch locales")?;
 
-        Ok(LocalesResponse {
-            success: locales.success,
-            locales: locales.locales,
-            default: locales.default,
-        })
+        Ok(locales)
     }
 
     /// Fetch translations from BFF endpoint
@@ -124,7 +92,7 @@ impl ApiClient {
             .await
             .context("Failed to fetch BFF translations")?;
 
-        Ok((convert_translation_response(translations), elapsed))
+        Ok((translations, elapsed))
     }
 
     /// Fetch translations from direct endpoint
@@ -139,7 +107,7 @@ impl ApiClient {
             .await
             .context("Failed to fetch direct translations")?;
 
-        Ok((convert_translation_response(translations), elapsed))
+        Ok((translations, elapsed))
     }
 
     /// Test ETag caching
@@ -164,35 +132,7 @@ impl ApiClient {
             .await
             .context("Failed to test delta sync")?;
 
-        Ok(DeltaSyncResponse {
-            success: delta.success,
-            has_changes: delta.has_changes,
-            locale: delta.locale,
-            current_version: delta.current_version,
-            since_version: delta.since_version,
-            delta: delta.delta.map(|d| DeltaData {
-                added: d.added,
-                updated: d
-                    .updated
-                    .into_iter()
-                    .map(|(k, v)| {
-                        (
-                            k,
-                            DeltaChange {
-                                old: v.old,
-                                new: v.new,
-                            },
-                        )
-                    })
-                    .collect(),
-                deleted: d.deleted,
-            }),
-            stats: delta.stats.map(|s| DeltaStats {
-                added: s.added,
-                updated: s.updated,
-                deleted: s.deleted,
-            }),
-        })
+        Ok(delta)
     }
 
     /// Audit translation coverage
@@ -204,20 +144,7 @@ impl ApiClient {
             .await
             .context("Failed to audit locale")?;
 
-        Ok(AuditResponse {
-            success: audit.success,
-            total_keys: audit.total_keys,
-            untranslated_count: audit.untranslated_count,
-            untranslated: audit.untranslated.map(|keys| {
-                keys.into_iter()
-                    .map(|k| UntranslatedKey {
-                        key: k.key,
-                        english_value: k.english_value,
-                    })
-                    .collect()
-            }),
-            by_category: audit.by_category,
-        })
+        Ok(audit)
     }
 
     /// Translate missing keys
@@ -234,14 +161,7 @@ impl ApiClient {
             .await
             .context("Failed to translate batch")?;
 
-        Ok(TranslateBatchResponse {
-            success: result.success,
-            translated: result.translated,
-            translations: result.translations,
-            new_version: result.new_version,
-            message: result.message,
-            error: result.error,
-        })
+        Ok(result)
     }
 
     /// Check endpoint availability
@@ -298,53 +218,5 @@ impl ApiClient {
 impl Default for ApiClient {
     fn default() -> Self {
         Self::new().expect("Failed to create default API client")
-    }
-}
-
-/// Convert from api-client TranslationResponse to local type
-fn convert_translation_response(
-    resp: foodshare_api_client::endpoints::translations::TranslationResponse,
-) -> TranslationResponse {
-    TranslationResponse {
-        success: resp.success,
-        data: resp.data.map(|d| TranslationData {
-            messages: d.messages,
-            locale: d.locale,
-            version: d.version,
-            updated_at: d.updated_at,
-            fallback: d.fallback,
-        }),
-        user_context: resp.user_context.map(|c| UserContext {
-            preferred_locale: c.preferred_locale,
-            feature_flags: c.feature_flags,
-        }),
-        delta: resp.delta.map(|d| DeltaData {
-            added: d.added,
-            updated: d
-                .updated
-                .into_iter()
-                .map(|(k, v)| {
-                    (
-                        k,
-                        DeltaChange {
-                            old: v.old,
-                            new: v.new,
-                        },
-                    )
-                })
-                .collect(),
-            deleted: d.deleted,
-        }),
-        stats: resp.stats.map(|s| DeltaStats {
-            added: s.added,
-            updated: s.updated,
-            deleted: s.deleted,
-        }),
-        meta: resp.meta.map(|m| ResponseMeta {
-            cached: m.cached,
-            compressed: m.compressed,
-            delta_sync: m.delta_sync,
-            response_time_ms: m.response_time_ms,
-        }),
     }
 }

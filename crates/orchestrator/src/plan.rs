@@ -306,7 +306,8 @@ impl Plan {
         .with_env(
             "ANDROID_HOME",
             std::env::var("ANDROID_HOME")
-                .unwrap_or_else(|_| "/Users/organic/Library/Android/sdk".to_string()),
+                .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
+                .unwrap_or_default(),
         );
 
         phases.push(Phase {

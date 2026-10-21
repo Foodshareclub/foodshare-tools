@@ -14,9 +14,7 @@ categories = ["multimedia::images", "command-line-utilities"]
 [dependencies]
 thiserror = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 image = { workspace = true, optional = true }
-rayon = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
 serde-wasm-bindgen = { workspace = true, optional = true }
 
@@ -26,7 +24,6 @@ criterion = { workspace = true }
 [features]
 default = ["processing"]
 processing = ["image"]
-parallel = ["rayon"]
 wasm = ["wasm-bindgen", "serde-wasm-bindgen"]
 
 [[bench]]
