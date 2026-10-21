@@ -487,6 +487,21 @@ Options:
 
 - `--app-dir <path>` - The app repository
 
+### fs-verify
+
+The full cross-repository verification.
+
+```bash
+fs-verify                      # every stage
+fs-verify --skip-mobile        # without the simulator smoke tests
+fs-verify --skip-node-guard    # without the toolchain policy check
+fs-verify --json               # machine-readable output
+```
+
+The stages, in order: the Node.js guard in every repository, the disk,
+the Rust workspace tests, the web build, the mobile smoke tests, and the
+backend edge function tests. It stops at the first failure.
+
 ---
 
 ## Global Options

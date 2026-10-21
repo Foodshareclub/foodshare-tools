@@ -84,6 +84,7 @@ jobs:
                      target/${{ matrix.target }}/release/fs-build \
                      target/${{ matrix.target }}/release/fs-sim \
                      target/${{ matrix.target }}/release/fs-xccloud \
+                     target/${{ matrix.target }}/release/fs-verify \
                      target/${{ matrix.target }}/release-service/fs-orchestrator; do
             [ -f "$bin" ] && cp "$bin" dist/ || echo "Warning: $bin not found"
           done

@@ -72,6 +72,30 @@ for action in &report.actions {
 # }
 ```
 
+## The full verification
+
+`fs-verify` runs the cross-repository check: the toolchain policy in
+every repository, the disk, the Rust workspace, the web build, the
+mobile smoke tests and the backend edge function tests. It is a plan of
+its own — it reaches into every repository, and it runs the mobile
+*smoke* suite rather than the mobile domain.
+
+```rust,no_run
+use foodshare_orchestrator::{Verifier, Workspace};
+
+let workspace = Workspace::discover()?;
+let verifier = Verifier::new(&workspace);
+let report = verifier.run(workspace.root()).await;
+
+for stage in &report.stages {
+    println!("{}: {}", stage.label, stage.success);
+}
+```
+
+The stages can be left out, for the places where they do not apply: the
+mobile smoke tests need a booted simulator, and the toolchain policy
+check is a separate command of its own.
+
 ## Workspace discovery
 
 The workspace root is the directory that holds `foodshare-app`. It is

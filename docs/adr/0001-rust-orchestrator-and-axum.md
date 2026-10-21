@@ -99,7 +99,8 @@ binary behind it:
 | TypeScript          | Rust replacement                                |
 | ------------------- | ----------------------------------------------- |
 | `cli.ts auto`       | `foodshare-orchestrator`, driven by `fs-auto`     |
-| `cli.ts verify`     | `foodshare-orchestrator`, driven by `fs-tui`      |
+| `cli.ts verify`     | `foodshare-orchestrator::verify`, driven by `fs-verify` |
+| `cli.ts node-check` | `foodshare-orchestrator::verify`                 |
 | `cli.ts wasm`       | `foodshare-wasm`                                 |
 | `clean-disk.ts`     | `foodshare-orchestrator::disk`                    |
 | `maestro-runner.ts` | `foodshare-maestro`                              |

@@ -121,6 +121,9 @@ Workspace build and verification orchestration:
 - The plan that runs them, with parallel groups and a retry policy
 - Disk health and auto-healing between retries
 - The state of the run, which the TUI renders and the status endpoint serves
+- The full cross-repository verification: the toolchain policy in every
+  repository, the disk, the Rust workspace, the web build, the mobile
+  smoke tests and the backend edge function tests
 
 The crate has no HTTP dependency. The daemon, the TUI and the headless
 runner are three front-ends over it.

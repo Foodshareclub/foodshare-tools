@@ -50,7 +50,7 @@ foodshare-tools/
 │   ├── api-client/            # API client utilities
 │   ├── migrate/               # Migration tooling
 │   └── motherduck-sync/       # MotherDuck data sync (placeholder submodule)
-├── bins/                      # Binary crates (14)
+├── bins/                      # Binary crates (15)
 │   ├── fs-app/         # Cross-platform CLI
 │   ├── lefthook-rs/           # Web CLI (git hooks)
 │   ├── fs-image/              # Image processing CLI
@@ -64,7 +64,8 @@ foodshare-tools/
 │   ├── fs-wasm/               # WebAssembly build engine
 │   ├── fs-build/              # Cross-platform build engine
 │   ├── fs-sim/                # Simulator runner
-│   └── fs-xccloud/            # Xcode Cloud builds, logs and diagnostics
+│   ├── fs-xccloud/            # Xcode Cloud builds, logs and diagnostics
+│   └── fs-verify/             # Full cross-repository verification
 ├── scripts/                   # Utility scripts
 ├── tests/                     # Integration tests
 ├── docs/                      # Documentation
