@@ -9,19 +9,24 @@
 # is Deno. `Deno.serve`, `Deno.env` and `Deno.test` are load-bearing there
 # and cannot be ported. Everything this repo itself runs is on Bun.
 #
-# The *exact* build is pinned in three places, and all three have to
-# name the same one:
+# The *exact* build is pinned in two places, and both have to name the
+# same one:
 #
 #   mise.toml                 ->  "npm:bun" = "<version>"
 #   package.json              ->  "packageManager": "bun@<version>"
-#   .github/workflows/*.yml   ->  BUN_VERSION: "<version>"
 #
-# The version is the newest canary published to npm, which is the newest
-# build `oven-sh/setup-bun` can install in CI — a canary that exists only
-# on one developer's machine cannot be installed there, and pinning to it
-# makes local and CI run different binaries.
+# The version is the newest canary published to npm. It is what a developer
+# runs, so it is pinned exactly.
 #
-# Keep all three in step when the canary is refreshed.
+# CI cannot pin it. `oven-sh/setup-bun` downloads from the GitHub releases,
+# and the canary builds are published to npm — there is no
+# `bun-v1.4.3-canary.20261019.1` release to download, so asking for that
+# exact version is a 404. The only canary the action can install is the
+# rolling `canary` release, which is where the npm canary comes from, so
+# the workflow names `canary` and checks that what it installed really is a
+# canary build.
+#
+# Keep the two in step when the canary is refreshed.
 [tools]
 "npm:bun" = "1.4.3-canary.20261019.1"
 deno = "2.9.6"
