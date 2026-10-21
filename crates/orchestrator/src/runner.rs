@@ -248,36 +248,23 @@ async fn wait_for(
 /// The child leads its own process group, so the whole tree goes with it.
 /// `cargo test` leaves the test binaries running otherwise, and they
 /// would keep the build directory locked.
+///
+/// The group is signalled with `kill(2)` rather than with the `kill`
+/// utility. The utility takes a process group as a *negative* argument
+/// and has to tell that apart from a signal name, and on Linux it does
+/// not always: `kill -KILL -<pgid>` was reported as a success that
+/// signalled only the group leader, and left everything the leader had
+/// started running. The system call has no such ambiguity.
 async fn stop_process(child: &mut tokio::process::Child) {
     #[cfg(unix)]
     if let Some(pid) = child.id() {
-        // TEMPORARY DIAGNOSTIC
-        let before = std::process::Command::new("ps")
-            .arg("-o")
-            .arg("pid=,ppid=,pgid=,stat=,args=")
-            .arg("-p")
-            .arg(pid.to_string())
-            .output();
-        eprintln!(
-            "DIAG before kill: {before:?}",
-            before = before.map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-        );
-        let outcome = tokio::process::Command::new("kill")
-            .arg("-KILL")
-            .arg(format!("-{pid}"))
-            .stdin(Stdio::null())
-            .output()
-            .await;
-        eprintln!(
-            "DIAG kill -{pid}: {outcome:?}",
-            outcome = outcome.map(|o| {
-                (
-                    o.status.code(),
-                    String::from_utf8_lossy(&o.stdout).to_string(),
-                    String::from_utf8_lossy(&o.stderr).to_string(),
-                )
-            })
-        );
+        // SAFETY: `kill` takes a process id and a signal, reads no memory
+        // and touches no Rust state. A negative id names a process group.
+        // The id comes from a child this process started, so the group is
+        // its own and no other process can be in it.
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
+        }
     }
     let _ = child.start_kill();
     let _ = child.wait().await;
@@ -506,26 +493,73 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(800)).await;
 
         // Nothing of the step is left running.
-        // TEMPORARY DIAGNOSTIC
-        let listing = std::process::Command::new("ps")
-            .arg("-A")
-            .arg("-o")
-            .arg("pid=,ppid=,pgid=,stat=,args=")
-            .output();
-        eprintln!(
-            "DIAG survivors: {survivors:?}",
-            survivors = listing.map(|o| {
-                String::from_utf8_lossy(&o.stdout)
-                    .lines()
-                    .filter(|l| l.contains("sleep 37"))
-                    .map(|l| l.to_string())
-                    .collect::<Vec<String>>()
-            })
-        );
         let leftover = still_running("sleep 37");
         assert!(
             leftover.is_empty(),
             "the step left processes behind: {leftover:?}"
         );
+    }
+
+    /// TEMPORARY DIAGNOSTIC — compares the `kill` utility with kill(2).
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn diag_the_kill_utility_against_the_system_call() {
+        use std::os::unix::process::CommandExt;
+
+        let survivors = |marker: &str| {
+            let listing = std::process::Command::new("ps")
+                .arg("-A")
+                .arg("-o")
+                .arg("pid=,ppid=,pgid=,stat=,args=")
+                .output();
+            listing
+                .map(|o| {
+                    String::from_utf8_lossy(&o.stdout)
+                        .lines()
+                        .filter(|l| l.contains(marker))
+                        .map(|l| l.to_string())
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default()
+        };
+
+        // The utility, in the form the runner used.
+        let mut child = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("sleep 41 & sleep 41")
+            .process_group(0)
+            .spawn()
+            .expect("the step starts");
+        let pid = child.id();
+        std::thread::sleep(Duration::from_millis(400));
+        let outcome = std::process::Command::new("kill")
+            .arg("-KILL")
+            .arg(format!("-{pid}"))
+            .output()
+            .expect("the kill utility runs");
+        eprintln!(
+            "DIAG utility kill -{pid}: status={:?} stderr={:?} survivors={:?}",
+            outcome.status.code(),
+            String::from_utf8_lossy(&outcome.stderr),
+            survivors("sleep 41")
+        );
+        let _ = child.wait();
+
+        // The system call.
+        let mut child = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("sleep 42 & sleep 42")
+            .process_group(0)
+            .spawn()
+            .expect("the step starts");
+        let pid = child.id();
+        std::thread::sleep(Duration::from_millis(400));
+        // SAFETY: as in `stop_process`.
+        let sent = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+        eprintln!(
+            "DIAG kill(2) -{pid}: sent={sent} survivors={:?}",
+            survivors("sleep 42")
+        );
+        let _ = child.wait();
     }
 }
