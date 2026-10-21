@@ -319,9 +319,12 @@ foodshare-swift --project-root . --format text <subcommand>
 
 Secret migration for self-hosted Supabase — syncs secrets between `.env.functions` and the Supabase Vault, and verifies required variables are present.
 
+The Supabase database runs in a container, so the tool talks to it through a container runtime. The runtime is found by itself: the one that has the database container running. It is never a guess — if two runtimes have the container, or none does, the tool stops and says so. `--runtime` names the runtime to use, and the `CONTAINER_RUNTIME` environment variable does the same thing.
+
 ```bash
 foodshare-migrate --help
 foodshare-migrate --env-file .env.functions <subcommand>
+foodshare-migrate --runtime podman --env-file .env.functions <subcommand>
 ```
 
 ### foodshare-i18n
