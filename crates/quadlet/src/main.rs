@@ -190,27 +190,27 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
 
-    let default_paths: Vec<PathBuf> = vec![
-        PathBuf::from("quadlet/foodshare-runner-p01.container"),
-        PathBuf::from("quadlet/foodshare-runner-p02.container"),
-        PathBuf::from("quadlet/foodshare-runner-p03.container"),
-        PathBuf::from("quadlet/foodshare-runner-p04.container"),
-        PathBuf::from("quadlet/foodshare-runner-p05.container"),
-        PathBuf::from("quadlet/foodshare-runner-p06.container"),
-        PathBuf::from("quadlet/foodshare-runner-p07.container"),
-        PathBuf::from("quadlet/foodshare-runner-p08.container"),
-        PathBuf::from("quadlet/foodshare-org.container"),
-        PathBuf::from("quadlet/foodshare-network.service"),
-        PathBuf::from("quadlet/foodshare-web.container"),
-        PathBuf::from("quadlet/foodshare-cloudflared.container"),
-        PathBuf::from("quadlet/foodshare-runner-base.container"),
-    ];
-
+    // The files to check are the ones the caller named, or every
+    // `.container` file below the current directory. A hardcoded list of
+    // names was here, and it named files this repository does not have,
+    // so the command failed on every machine but the one it was written
+    // on.
     let paths_to_check = if cli.files.is_empty() {
-        default_paths.clone()
+        match find_container_files(Path::new(".")) {
+            Ok(paths) => paths,
+            Err(e) => {
+                eprintln!("quadlet hygiene FAILED: {}", e);
+                std::process::exit(1);
+            }
+        }
     } else {
         cli.files.clone()
     };
+
+    if paths_to_check.is_empty() {
+        println!("No .container files found below the current directory.");
+        return;
+    }
 
     match check_files(&paths_to_check) {
         Ok(()) => {
@@ -221,6 +221,27 @@ fn main() {
             std::process::exit(1);
         }
     }
+}
+
+/// Every `.container` file below a directory, in a stable order.
+fn find_container_files(root: &Path) -> QuadletResult<Vec<PathBuf>> {
+    let mut found = Vec::new();
+
+    for entry in walkdir::WalkDir::new(root)
+        .into_iter()
+        .filter_entry(|e| e.file_name() != ".git" && e.file_name() != "node_modules")
+        .filter_map(std::result::Result::ok)
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if entry.path().extension().is_some_and(|e| e == "container") {
+            found.push(entry.path().to_path_buf());
+        }
+    }
+
+    found.sort();
+    Ok(found)
 }
 
 #[cfg(test)]
@@ -306,5 +327,34 @@ Volume=/home/runner/work:/home/runner/work
     fn no_files_at_all_is_an_error() {
         let error = check_files(&[]).expect_err("the check should fail");
         assert_eq!(error.code, ErrorCode::ValidationError);
+    }
+
+    #[test]
+    fn the_tree_is_walked_for_container_files() {
+        // The command used to check a hardcoded list of thirteen names,
+        // so it failed on every machine but the one it was written on.
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let nested = dir.path().join("quadlet");
+        std::fs::create_dir_all(&nested).expect("the directory should be created");
+        std::fs::write(nested.join("one.container"), GOOD).expect("the file should be written");
+        std::fs::write(nested.join("two.container"), GOOD).expect("the file should be written");
+        std::fs::write(nested.join("notes.md"), "not a unit").expect("the file should be written");
+        std::fs::write(nested.join("other.service"), "[Service]")
+            .expect("the file should be written");
+
+        let found = find_container_files(dir.path()).expect("the tree should be walked");
+        assert_eq!(found.len(), 2, "only the .container files: {found:?}");
+        assert!(
+            found
+                .iter()
+                .all(|p| p.extension().is_some_and(|e| e == "container"))
+        );
+    }
+
+    #[test]
+    fn a_directory_with_no_container_files_finds_none() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let found = find_container_files(dir.path()).expect("the tree should be walked");
+        assert!(found.is_empty());
     }
 }

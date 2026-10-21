@@ -109,7 +109,7 @@ enum Commands {
         locale: String,
 
         /// Path to JSON file with translations (if not specified, uses preset translations)
-        #[arg(short, long)]
+        #[arg(long)]
         file: Option<String>,
     },
 
@@ -143,7 +143,7 @@ enum Commands {
         skip_cache: bool,
 
         /// Path to JSON file with custom strings (defaults to built-in permissions)
-        #[arg(short, long)]
+        #[arg(long)]
         file: Option<String>,
     },
 }

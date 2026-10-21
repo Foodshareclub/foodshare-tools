@@ -13,6 +13,7 @@ categories = ["command-line-utilities"]
 [dependencies]
 clap.workspace = true
 indicatif.workspace = true
+walkdir.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

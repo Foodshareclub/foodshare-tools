@@ -1459,6 +1459,8 @@ fn run_pre_push(
             .collect(),
         scheme: config.schema.general.scheme.clone(),
         destination: config.schema.general.destination.clone(),
+        lint_paths: config.schema.lint.paths.clone(),
+        lint_strict: config.schema.lint.strict,
     };
 
     if detailed {

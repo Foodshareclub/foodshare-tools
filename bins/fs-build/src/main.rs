@@ -19,8 +19,9 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
+use foodshare_core::error::exit_codes;
 use foodshare_core::workspace::Workspace;
 use fs_app::build::{self, Configuration, Layout, Variant};
 
@@ -36,29 +37,90 @@ struct Cli {
     #[arg(long, global = true)]
     app_dir: Option<PathBuf>,
 
-    /// The arguments, in the order the Bun builder took them.
-    #[arg(trailing_var_arg = true)]
-    args: Vec<String>,
+    /// Build the Android app.
+    #[arg(long)]
+    android: bool,
+
+    /// Build the iOS app.
+    #[arg(long)]
+    ios: bool,
+
+    /// Build both platforms. This is the default.
+    #[arg(long)]
+    all: bool,
+
+    /// Build the Swift package core.
+    #[arg(long)]
+    swift: bool,
+
+    /// Build the Release configuration instead of Debug.
+    #[arg(long)]
+    release: bool,
+
+    /// Clean the build artefacts before building.
+    #[arg(long)]
+    clean: bool,
+
+    /// Run every test suite.
+    #[arg(long)]
+    test: bool,
+
+    /// The test suite to run.
+    #[command(subcommand)]
+    suite: Option<Suite>,
+}
+
+/// The test suites the engine can run.
+#[derive(Subcommand, Debug)]
+enum Suite {
+    /// The Swift unit tests.
+    Swift,
+    /// The Kotlin unit tests.
+    Kotlin,
+    /// The Skip cross-platform bridge tests.
+    Bridge,
+    /// Every test suite.
+    Test,
+}
+
+/// What the engine was asked to do.
+#[derive(Debug, PartialEq, Eq)]
+enum Action {
+    /// Build the Swift package core.
+    SwiftCore,
+    /// Run the Swift unit tests.
+    SwiftTests,
+    /// Run the Kotlin unit tests.
+    KotlinTests,
+    /// Run the Skip cross-platform bridge tests.
+    BridgeTests,
+    /// Run every test suite.
+    AllTests,
+    /// Build the app.
+    Build,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let args = &cli.args;
     let workspace = match cli.app_dir.as_deref() {
         Some(app) => Workspace::with_app_dir(app),
         None => Workspace::discover()?,
     };
     let layout = Layout::new(workspace.app());
 
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        print_help();
-        return Ok(());
-    }
+    let action = match cli.suite {
+        Some(Suite::Swift) => Action::SwiftTests,
+        Some(Suite::Kotlin) => Action::KotlinTests,
+        Some(Suite::Bridge) => Action::BridgeTests,
+        Some(Suite::Test) => Action::AllTests,
+        None if cli.test => Action::AllTests,
+        None if cli.swift => Action::SwiftCore,
+        None => Action::Build,
+    };
 
-    let has = |flag: &str| args.iter().any(|a| a == flag);
-    let is_release = has("--release");
-    let clean = has("--clean");
+    let is_release = cli.release;
+    let clean = cli.clean;
     let configuration = if is_release {
         Configuration::Release
     } else {
@@ -86,57 +148,59 @@ async fn main() -> Result<()> {
     }
 
     // The test suites.
-    if has("swift") && !has("--swift") {
-        return report("Swift tests", build::run_swift_tests(&layout).await);
-    }
-    if has("kotlin") && !has("--kotlin") {
-        return report("Kotlin tests", build::run_kotlin_tests(&layout).await);
-    }
-    if has("bridge") && !has("--bridge") {
-        let outcomes = build::run_bridge_tests(&layout).await;
-        for outcome in &outcomes {
-            let icon = if outcome.success { "✓" } else { "⚠" };
-            println!("  {icon} {}", outcome.target);
+    match action {
+        Action::SwiftTests => {
+            return report("Swift tests", build::run_swift_tests(&layout).await);
         }
-        return Ok(());
-    }
-    if has("test") || has("--test") || (has("all") && !has("--all")) {
-        println!("🧪 Running the full cross-platform test suite...");
-        let swift = build::run_swift_tests(&layout).await;
-        let kotlin = build::run_kotlin_tests(&layout).await;
-        let bridges = build::run_bridge_tests(&layout).await;
-        let all_ok = swift.success && kotlin.success;
-        println!(
-            "\n{} Test Summary: Swift ({}), Kotlin ({})",
-            if all_ok { "✅" } else { "❌" },
-            if swift.success { "PASSED" } else { "FAILED" },
-            if kotlin.success { "PASSED" } else { "FAILED" }
-        );
-        for outcome in &bridges {
-            let icon = if outcome.success { "✓" } else { "⚠" };
-            println!("  {icon} {}", outcome.target);
+        Action::KotlinTests => {
+            return report("Kotlin tests", build::run_kotlin_tests(&layout).await);
         }
-        if !all_ok {
-            std::process::exit(1);
+        Action::BridgeTests => {
+            let outcomes = build::run_bridge_tests(&layout).await;
+            let mut all_ok = true;
+            for outcome in &outcomes {
+                let icon = if outcome.success { "✓" } else { "⚠" };
+                println!("  {icon} {}", outcome.target);
+                all_ok &= outcome.success;
+            }
+            if !all_ok {
+                std::process::exit(exit_codes::VALIDATION_ERROR);
+            }
+            return Ok(());
         }
-        return Ok(());
+        Action::AllTests => {
+            println!("🧪 Running the full cross-platform test suite...");
+            let swift = build::run_swift_tests(&layout).await;
+            let kotlin = build::run_kotlin_tests(&layout).await;
+            let bridges = build::run_bridge_tests(&layout).await;
+            let all_ok = swift.success && kotlin.success;
+            println!(
+                "\n{} Test Summary: Swift ({}), Kotlin ({})",
+                if all_ok { "✅" } else { "❌" },
+                if swift.success { "PASSED" } else { "FAILED" },
+                if kotlin.success { "PASSED" } else { "FAILED" }
+            );
+            for outcome in &bridges {
+                let icon = if outcome.success { "✓" } else { "⚠" };
+                println!("  {icon} {}", outcome.target);
+            }
+            if !all_ok {
+                std::process::exit(exit_codes::VALIDATION_ERROR);
+            }
+            return Ok(());
+        }
+        Action::SwiftCore => {
+            return report("Swift core", build::build_swift_core(&layout).await);
+        }
+        Action::Build => {}
     }
 
     // The builds.
-    let android_only =
-        (has("--android") || has("android")) && !has("--ios") && !has("ios") && !has("--all");
-    let ios_only =
-        (has("--ios") || has("ios")) && !has("--android") && !has("android") && !has("--all");
-    let explicit_swift = has("--swift") || has("swift");
+    let android_only = cli.android && !cli.ios && !cli.all;
+    let ios_only = cli.ios && !cli.android && !cli.all;
+    let both = cli.all || (!android_only && !ios_only);
 
-    let build_ios = ios_only || (!android_only && !explicit_swift);
-    let build_android = android_only || (!ios_only && !explicit_swift);
-
-    if explicit_swift {
-        return report("Swift core", build::build_swift_core(&layout).await);
-    }
-
-    if build_ios {
+    if ios_only || both {
         let outcome = build::build_ios(
             &layout,
             configuration,
@@ -147,7 +211,7 @@ async fn main() -> Result<()> {
         report("iOS build", outcome)?;
     }
 
-    if build_android {
+    if android_only || both {
         report(
             "Android build",
             build::build_android(&layout, variant).await,
@@ -175,26 +239,4 @@ fn report(label: &str, outcome: build::BuildOutcome) -> Result<()> {
             outcome.error.unwrap_or_else(|| "unknown error".to_string())
         )
     }
-}
-
-fn print_help() {
-    println!(
-        "
-Usage: fs-build [options]
-
-Build Modes:
-  --android              Build Android debug APK (assembleDebug)
-  --ios                  Build iOS simulator app
-  --all                  Build both iOS and Android
-  --swift                Build Swift SPM core
-  --release              Build Release configuration instead of Debug
-  --clean                Clean build artifacts before building
-
-Test Modes:
-  --test, test, all      Run full cross-platform test suite (Swift + Kotlin + Bridges)
-  swift                  Run Swift unit tests
-  kotlin                 Run Kotlin unit tests
-  bridge                 Run Skip cross-platform bridge tests
-"
-    );
 }

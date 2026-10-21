@@ -765,7 +765,7 @@ Arguments:
   <LOCALE>  Target locale
 
 Options:
-  -f, --file <FILE>      Path to JSON file with translations (if not specified, uses preset
+      --file <FILE>      Path to JSON file with translations (if not specified, uses preset
                          translations)
   -v, --verbose          Enable verbose output
   -f, --format <FORMAT>  Output format (text, json) [default: text]
@@ -803,7 +803,7 @@ Options:
   -v, --verbose          Enable verbose output
   -f, --format <FORMAT>  Output format (text, json) [default: text]
       --skip-cache       Skip cache and force re-translation
-  -f, --file <FILE>      Path to JSON file with custom strings (defaults to built-in permissions)
+      --file <FILE>      Path to JSON file with custom strings (defaults to built-in permissions)
   -h, --help             Print help
   -V, --version          Print version
 ```
@@ -1600,15 +1600,84 @@ The cross-platform build engine.
 ```
 FoodShare cross-platform build engine
 
-Usage: fs-build [OPTIONS] [ARGS]...
+Usage: fs-build [OPTIONS] [COMMAND]
 
-Arguments:
-  [ARGS]...  The arguments, in the order the Bun builder took them
+Commands:
+  swift   The Swift unit tests
+  kotlin  The Kotlin unit tests
+  bridge  The Skip cross-platform bridge tests
+  test    Every test suite
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --app-dir <APP_DIR>  The app repository. Defaults to the directory that holds `foodshare-app`
+      --android            Build the Android app
+      --ios                Build the iOS app
+      --all                Build both platforms. This is the default
+      --swift              Build the Swift package core
+      --release            Build the Release configuration instead of Debug
+      --clean              Clean the build artefacts before building
+      --test               Run every test suite
+  -h, --help               Print help
+  -V, --version            Print version
+```
+
+### fs-build swift
+
+```
+The Swift unit tests
+
+Usage: fs-build swift [OPTIONS]
 
 Options:
       --app-dir <APP_DIR>  The app repository. Defaults to the directory that holds `foodshare-app`
   -h, --help               Print help
-  -V, --version            Print version
+```
+
+### fs-build kotlin
+
+```
+The Kotlin unit tests
+
+Usage: fs-build kotlin [OPTIONS]
+
+Options:
+      --app-dir <APP_DIR>  The app repository. Defaults to the directory that holds `foodshare-app`
+  -h, --help               Print help
+```
+
+### fs-build bridge
+
+```
+The Skip cross-platform bridge tests
+
+Usage: fs-build bridge [OPTIONS]
+
+Options:
+      --app-dir <APP_DIR>  The app repository. Defaults to the directory that holds `foodshare-app`
+  -h, --help               Print help
+```
+
+### fs-build test
+
+```
+Every test suite
+
+Usage: fs-build test [OPTIONS]
+
+Options:
+      --app-dir <APP_DIR>  The app repository. Defaults to the directory that holds `foodshare-app`
+  -h, --help               Print help
+```
+
+### fs-build help
+
+```
+error: unrecognized subcommand '--help'
+
+Usage: fs-build [OPTIONS] [COMMAND]
+
+For more information, try '--help'.
 ```
 
 ## fs-sim

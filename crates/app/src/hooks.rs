@@ -564,6 +564,10 @@ pub struct PrePushConfig {
     pub scheme: Option<String>,
     /// The Xcode destination to build for, when the configuration names one
     pub destination: Option<String>,
+    /// The paths the lint check looks at
+    pub lint_paths: Vec<String>,
+    /// Whether the lint check treats warnings as failures
+    pub lint_strict: bool,
 }
 
 impl Default for PrePushConfig {
@@ -577,6 +581,8 @@ impl Default for PrePushConfig {
             timeouts: BTreeMap::new(),
             scheme: None,
             destination: None,
+            lint_paths: Vec::new(),
+            lint_strict: false,
         }
     }
 }
@@ -702,61 +708,87 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
             "lint" => check_lint(config),
             "build" => check_build(config),
             "test" => check_tests(config),
-            _ => Ok(()),
+            _ => Ok(CheckOutcome::Passed),
         };
         let duration = start.elapsed();
-        let success = check_result.is_ok();
-        let output = check_result.err();
 
-        results.push(PrePushCheckResult {
-            name: check.name.to_string(),
-            success,
-            duration,
-            output: output.clone(),
-            skipped: false,
-            required: check.required,
-        });
-
-        // Clear line and print result
-        print!("\r");
-        if success {
-            println!(
-                "  {} {} {}",
-                "✓".green(),
-                check.description,
-                format!("({:.1}s)", duration.as_secs_f32()).dimmed()
-            );
-        } else if !check.required {
-            println!(
-                "  {} {} {} {}",
-                "⚠".yellow(),
-                check.description.yellow(),
-                format!("({:.1}s)", duration.as_secs_f32()).dimmed(),
-                "(non-blocking)".dimmed()
-            );
-
-            if let Some(ref err) = output {
-                for line in err.lines().take(3) {
-                    println!("    {}", line.dimmed());
-                }
+        match check_result {
+            // The check could not run. A check that did not run is not a
+            // check that passed, and the difference is the difference
+            // between "there was nothing to find" and "we could not look".
+            Ok(CheckOutcome::Skipped(reason)) => {
+                results.push(PrePushCheckResult {
+                    name: check.name.to_string(),
+                    success: true,
+                    duration,
+                    output: Some(reason.clone()),
+                    skipped: true,
+                    required: check.required,
+                });
+                print!("\r");
+                println!(
+                    "  {} {} {}",
+                    "⊘".dimmed(),
+                    check.description.dimmed(),
+                    format!("({reason})").dimmed()
+                );
             }
-        } else {
-            println!(
-                "  {} {} {}",
-                "✗".red(),
-                check.description.red(),
-                format!("({:.1}s)", duration.as_secs_f32()).dimmed()
-            );
-
-            if let Some(ref err) = output {
-                // Show first few lines of error
-                for line in err.lines().take(5) {
-                    println!("    {}", line.dimmed());
-                }
+            Ok(CheckOutcome::Passed) => {
+                results.push(PrePushCheckResult {
+                    name: check.name.to_string(),
+                    success: true,
+                    duration,
+                    output: None,
+                    skipped: false,
+                    required: check.required,
+                });
+                print!("\r");
+                println!(
+                    "  {} {} {}",
+                    "✓".green(),
+                    check.description,
+                    format!("({:.1}s)", duration.as_secs_f32()).dimmed()
+                );
             }
+            Err(output) => {
+                results.push(PrePushCheckResult {
+                    name: check.name.to_string(),
+                    success: false,
+                    duration,
+                    output: Some(output.clone()),
+                    skipped: false,
+                    required: check.required,
+                });
+                print!("\r");
+                if !check.required {
+                    println!(
+                        "  {} {} {} {}",
+                        "⚠".yellow(),
+                        check.description.yellow(),
+                        format!("({:.1}s)", duration.as_secs_f32()).dimmed(),
+                        "(non-blocking)".dimmed()
+                    );
 
-            if config.fail_fast {
-                break;
+                    for line in output.lines().take(3) {
+                        println!("    {}", line.dimmed());
+                    }
+                } else {
+                    println!(
+                        "  {} {} {}",
+                        "✗".red(),
+                        check.description.red(),
+                        format!("({:.1}s)", duration.as_secs_f32()).dimmed()
+                    );
+
+                    // Show first few lines of error
+                    for line in output.lines().take(5) {
+                        println!("    {}", line.dimmed());
+                    }
+
+                    if config.fail_fast {
+                        break;
+                    }
+                }
             }
         }
     }
@@ -764,23 +796,63 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
     results
 }
 
-fn check_lint(config: &PrePushConfig) -> std::result::Result<(), String> {
-    if !swift_tools::has_swiftlint() {
-        return Ok(()); // Skip if not installed
+/// What one pre-push check ended up doing.
+#[derive(Debug)]
+enum CheckOutcome {
+    /// The check ran and passed.
+    Passed,
+    /// The check could not run, and why.
+    Skipped(String),
+}
+
+fn check_lint(config: &PrePushConfig) -> std::result::Result<CheckOutcome, String> {
+    check_lint_with(config, swift_tools::has_swiftlint())
+}
+
+/// The lint check, with the answer to "is the linter there" given to it.
+///
+/// The answer is a parameter so the two cases can both be tested: a
+/// machine with the linter and a machine without it are two different
+/// machines, and the check has to be honest on both.
+fn check_lint_with(
+    config: &PrePushConfig,
+    installed: bool,
+) -> std::result::Result<CheckOutcome, String> {
+    if !installed {
+        // The linter is not installed, so the check did not run. Saying
+        // it passed would be a check that reports and does nothing.
+        return Ok(CheckOutcome::Skipped(
+            "swiftlint is not installed".to_string(),
+        ));
     }
 
-    let result =
-        swift_tools::lint_with_timeout(&["FoodShare"], false, false, config.timeout_for("lint"))
-            .map_err(|e| e.to_string())?;
+    let paths = lint_paths(config);
+    let path_refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+    let result = swift_tools::lint_with_timeout(
+        &path_refs,
+        config.lint_strict,
+        false,
+        config.timeout_for("lint"),
+    )
+    .map_err(|e| e.to_string())?;
 
     if result.success {
-        Ok(())
+        Ok(CheckOutcome::Passed)
     } else {
         Err(result.stderr)
     }
 }
 
-fn check_build(config: &PrePushConfig) -> std::result::Result<(), String> {
+/// The paths the lint check looks at.
+fn lint_paths(config: &PrePushConfig) -> Vec<String> {
+    if config.lint_paths.is_empty() {
+        vec![DEFAULT_LINT_PATH.to_string()]
+    } else {
+        config.lint_paths.clone()
+    }
+}
+
+fn check_build(config: &PrePushConfig) -> std::result::Result<CheckOutcome, String> {
     let configuration = if config.release { "Release" } else { "Debug" };
 
     let result = crate::xcode::build_with_timeout(
@@ -793,13 +865,13 @@ fn check_build(config: &PrePushConfig) -> std::result::Result<(), String> {
     .map_err(|e| e.to_string())?;
 
     if result.success {
-        Ok(())
+        Ok(CheckOutcome::Passed)
     } else {
         Err(result.stderr)
     }
 }
 
-fn check_tests(config: &PrePushConfig) -> std::result::Result<(), String> {
+fn check_tests(config: &PrePushConfig) -> std::result::Result<CheckOutcome, String> {
     let result = crate::xcode::test_with_timeout(
         &scheme_of(config),
         &destination_of(config),
@@ -809,7 +881,7 @@ fn check_tests(config: &PrePushConfig) -> std::result::Result<(), String> {
     .map_err(|e| e.to_string())?;
 
     if result.success {
-        Ok(())
+        Ok(CheckOutcome::Passed)
     } else {
         Err(result.stderr)
     }
@@ -836,6 +908,9 @@ const DEFAULT_SCHEME: &str = "FoodShare";
 
 /// The destination used when the configuration names none.
 const DEFAULT_DESTINATION: &str = "platform=iOS Simulator,name=iPhone 17 Pro Max";
+
+/// The path the lint check looks at when the configuration names none.
+const DEFAULT_LINT_PATH: &str = "FoodShare";
 
 /// Print pre-push summary
 pub fn print_pre_push_summary(results: &[PrePushCheckResult]) -> i32 {
@@ -930,5 +1005,35 @@ mod tests {
         assert!(config.fail_fast);
         assert!(!config.release);
         assert!(!config.quick_mode);
+    }
+
+    #[test]
+    fn test_a_lint_check_without_the_linter_is_skipped_not_passed() {
+        // A check that did not run is not a check that passed. The
+        // difference is the difference between "there was nothing to
+        // find" and "we could not look".
+        let config = PrePushConfig::default();
+        let outcome = check_lint_with(&config, false).expect("the check should not fail");
+        assert!(
+            matches!(outcome, CheckOutcome::Skipped(ref reason) if reason.contains("swiftlint")),
+            "the check should be skipped: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn test_a_lint_check_with_the_linter_looks_at_the_configured_paths() {
+        // The paths come from the configuration, so a repository that
+        // names them gets them.
+        let config = PrePushConfig {
+            lint_paths: vec!["Sources/Thing".to_string()],
+            ..PrePushConfig::default()
+        };
+        assert_eq!(lint_paths(&config), vec!["Sources/Thing".to_string()]);
+    }
+
+    #[test]
+    fn test_a_lint_check_without_configured_paths_uses_the_default() {
+        let config = PrePushConfig::default();
+        assert_eq!(lint_paths(&config), vec![DEFAULT_LINT_PATH.to_string()]);
     }
 }

@@ -1,9 +1,10 @@
-//! The binaries have to start.
+//! The build engine has to accept the flags it documents.
 //!
-//! Twelve of the fourteen binaries had no tests at all, so a binary that
-//! could not print its own help would have been found by a user rather
-//! than by the build. These tests are the floor: the binary starts, it
-//! says its version, and it refuses a command it does not have.
+//! It used to declare them as trailing arguments and read them by hand,
+//! so every flag it advertised — `--release`, `--ios`, `--android`,
+//! `--all`, `--swift`, `--clean`, `--test` — was rejected by the
+//! argument parser before it reached the code. `fs-build --release`
+//! exited 2 with "unexpected argument".
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -28,6 +29,53 @@ fn the_binary_prints_its_version() {
         .assert()
         .success()
         .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
+}
+
+/// Every flag the engine documents has to be accepted.
+///
+/// The engine's help is the list of what it can do, and a flag that is
+/// in the help and not in the parser is a flag that does not work.
+#[test]
+fn every_documented_flag_is_accepted() {
+    for flag in [
+        "--android",
+        "--ios",
+        "--all",
+        "--swift",
+        "--release",
+        "--clean",
+        "--test",
+    ] {
+        let output = binary("fs-build")
+            .arg(flag)
+            .arg("--help")
+            .output()
+            .expect("the command should run");
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("unexpected argument"),
+            "the flag {flag} was rejected: {stderr}"
+        );
+    }
+}
+
+/// Every suite the engine documents has to be a subcommand.
+#[test]
+fn every_documented_suite_is_a_subcommand() {
+    for suite in ["swift", "kotlin", "bridge", "test"] {
+        let output = binary("fs-build")
+            .arg(suite)
+            .arg("--help")
+            .output()
+            .expect("the command should run");
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("unexpected argument"),
+            "the suite {suite} was rejected: {stderr}"
+        );
+    }
 }
 
 #[test]
