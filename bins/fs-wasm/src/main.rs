@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
-use foodshare_orchestrator::Workspace;
+use foodshare_core::workspace::Workspace;
 use foodshare_wasm::{Layout, build, loader};
 
 #[derive(Parser, Debug)]

@@ -197,8 +197,12 @@ Every binary in this repository uses this one answer. The tools are run
 from all sorts of directories, and five copies of the same lookup gave
 five different answers.
 
+It lives in `foodshare-core` rather than here: it is shared
+infrastructure, and the binaries that only need a path should not have to
+depend on the orchestration to get one.
+
 ```rust,no_run
-use foodshare_orchestrator::Workspace;
+use foodshare_core::workspace::Workspace;
 
 # fn run() {
 let workspace = Workspace::discover().expect("workspace");

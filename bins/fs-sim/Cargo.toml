@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 fs-app.workspace = true
-foodshare-orchestrator.workspace = true
+foodshare-core.workspace = true
 foodshare-maestro.workspace = true
 anyhow.workspace = true
 clap.workspace = true

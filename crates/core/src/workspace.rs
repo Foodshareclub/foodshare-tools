@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-use foodshare_core::error::{Error, Result};
+use crate::error::{Error, Result};
 
 /// Environment variable that overrides workspace discovery.
 pub const ROOT_ENV: &str = "FOODSHARE_WORKSPACE_ROOT";

@@ -17,7 +17,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use foodshare_device::{DeviceState, Emulator, Simulator};
+use foodshare_device::DeviceState;
 
 /// The platform a device runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,20 +104,6 @@ pub fn discover_android() -> Vec<TargetDevice> {
             name: emulator.model.unwrap_or_default(),
         })
         .collect()
-}
-
-/// The simulators, for callers that need the whole device rather than a
-/// target.
-#[must_use]
-pub fn simulators() -> Vec<Simulator> {
-    foodshare_device::simulators().unwrap_or_default()
-}
-
-/// The emulators, for callers that need the whole device rather than a
-/// target.
-#[must_use]
-pub fn emulators() -> Vec<Emulator> {
-    foodshare_device::emulators().unwrap_or_default()
 }
 
 /// The single device to target, preferring an explicitly requested one.

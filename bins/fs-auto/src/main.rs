@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
 
     // The disk is checked before the run, not after a failure: a build
     // that runs out of space halfway through wastes the whole run.
-    match disk::workspace_stats(&root).await {
+    match disk::workspace_stats(&root) {
         Ok(stats) => println!("💾 {} GB free ({}%)", stats.avail_gb, stats.avail_percent),
         Err(e) => tracing::warn!(error = %e, "could not read the disk statistics"),
     }

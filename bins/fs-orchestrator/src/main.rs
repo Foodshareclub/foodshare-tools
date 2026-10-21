@@ -124,13 +124,13 @@ async fn main() -> Result<()> {
 /// Prune the caches and report the free space.
 async fn heal_disk(workspace: &Workspace, min_free_gb: f64, force: bool) -> Result<()> {
     let root = workspace.root();
-    let before = foodshare_orchestrator::disk::workspace_stats(root).await?;
+    let before = foodshare_orchestrator::disk::workspace_stats(root)?;
     println!(
         "💾 Current free disk space: {} GB ({}% free)",
         before.avail_gb, before.avail_percent
     );
 
-    let report = foodshare_orchestrator::disk::heal(root, min_free_gb, force).await?;
+    let report = foodshare_orchestrator::disk::heal(root, min_free_gb, force)?;
     if !report.performed {
         println!("✨ Nothing to clean.");
         return Ok(());

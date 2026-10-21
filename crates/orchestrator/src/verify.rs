@@ -16,7 +16,7 @@ use tokio::sync::mpsc;
 
 use serde::Serialize;
 
-use crate::workspace::Workspace;
+use foodshare_core::workspace::Workspace;
 
 /// One stage of the verification.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -307,7 +307,6 @@ impl Verifier {
             Stage::NodeGuard { repos } => run_node_guard(repos, &self.cancelled).await,
             Stage::DiskHeal => {
                 let report = crate::disk::heal(root, crate::disk::MIN_FREE_GB, false)
-                    .await
                     .map_err(|e| e.to_string())?;
                 for action in &report.actions {
                     println!("  ✓ {action}");

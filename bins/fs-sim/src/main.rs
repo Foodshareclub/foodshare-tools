@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
-use foodshare_orchestrator::Workspace;
+use foodshare_core::workspace::Workspace;
 use fs_app::build::{Configuration, Layout};
 use fs_app::sim_flow::{self, SimulatorDevice};
 
@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
     println!("📱 FoodShare Native iOS Programmatic Runner");
     println!("📱 =========================================================");
 
-    if let Ok(stats) = foodshare_orchestrator::disk::workspace_stats(&layout.app_dir).await {
+    if let Ok(stats) = foodshare_core::disk::workspace_stats(&layout.app_dir) {
         println!("💾 {} GB free ({}%)", stats.avail_gb, stats.avail_percent);
     }
 

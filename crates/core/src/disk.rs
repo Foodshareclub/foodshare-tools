@@ -6,8 +6,10 @@
 
 use std::path::{Path, PathBuf};
 
-use foodshare_core::error::{Error, Result};
 use serde::Serialize;
+
+use crate::error::{Error, Result};
+use crate::process::run_command;
 
 /// The directories that are pruned when a run is asked to clean up.
 ///
@@ -53,16 +55,9 @@ pub struct HealReport {
 }
 
 /// Read the free space of the volume holding `path`.
-pub async fn stats(path: &Path) -> Result<DiskStats> {
-    let output = tokio::process::Command::new("df")
-        .arg("-k")
-        .arg(path)
-        .output()
-        .await
-        .map_err(|e| Error::process(format!("Failed to run df: {e}")))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_df(&stdout).ok_or_else(|| {
+pub fn stats(path: &Path) -> Result<DiskStats> {
+    let output = run_command("df", &["-k", &path.to_string_lossy()])?;
+    parse_df(&output.stdout).ok_or_else(|| {
         Error::process(format!(
             "Could not read disk statistics for {}",
             path.display()
@@ -105,8 +100,8 @@ fn parse_df(output: &str) -> Option<DiskStats> {
 }
 
 /// Free space on the volume holding the workspace root.
-pub async fn workspace_stats(root: &Path) -> Result<DiskStats> {
-    stats(root).await
+pub fn workspace_stats(root: &Path) -> Result<DiskStats> {
+    stats(root)
 }
 
 /// Prune caches until there is enough free space.
@@ -114,8 +109,8 @@ pub async fn workspace_stats(root: &Path) -> Result<DiskStats> {
 /// The pass is skipped when there is already enough room, unless `force`
 /// is set. Whatever it prunes is reported, so the caller can say what
 /// happened.
-pub async fn heal(root: &Path, min_free_gb: f64, force: bool) -> Result<HealReport> {
-    let before = stats(root).await?;
+pub fn heal(root: &Path, min_free_gb: f64, force: bool) -> Result<HealReport> {
+    let before = stats(root)?;
     if !force && before.avail_gb >= min_free_gb {
         return Ok(HealReport {
             performed: false,
@@ -199,7 +194,7 @@ pub async fn heal(root: &Path, min_free_gb: f64, force: bool) -> Result<HealRepo
         actions.push("Pruned the Cargo incremental cache".to_string());
     }
 
-    let after = stats(root).await?;
+    let after = stats(root)?;
     let freed_gb = ((after.avail_gb - before.avail_gb) * 10.0).round() / 10.0;
 
     Ok(HealReport {
@@ -286,10 +281,10 @@ mod tests {
         assert!(clean_artifacts(dir.path()).is_empty());
     }
 
-    #[tokio::test]
-    async fn test_heal_is_skipped_when_there_is_room() {
+    #[test]
+    fn test_heal_is_skipped_when_there_is_room() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let report = heal(dir.path(), 0.0, false).await.expect("heal");
+        let report = heal(dir.path(), 0.0, false).expect("heal");
         assert!(!report.performed);
         assert!(report.actions.is_empty());
     }

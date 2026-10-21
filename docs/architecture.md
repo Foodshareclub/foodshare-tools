@@ -140,9 +140,15 @@ Maestro E2E support:
 
 ### The workspace
 
-`foodshare-orchestrator::workspace::Workspace` is the one answer to
-"where am I?". Every binary uses it, so the tools find the same
-repositories however they are run.
+`foodshare-core::workspace::Workspace` is the one answer to "where am
+I?". Every binary uses it, so the tools find the same repositories
+however they are run.
+
+It lives in core rather than in the orchestrator, because it is shared
+infrastructure: the binaries that only need a path should not have to
+depend on the orchestration to get one. The disk healing lives beside it
+for the same reason — five binaries use it, and none of them is the
+orchestrator.
 
 ### Devices (`foodshare-device`)
 

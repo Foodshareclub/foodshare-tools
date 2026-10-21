@@ -21,8 +21,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tokio::process::Command as Process;
 
+use foodshare_core::workspace::Workspace;
 use foodshare_maestro::{device, flows, runner};
-use foodshare_orchestrator::Workspace;
 
 #[derive(Parser, Debug)]
 #[command(name = "fs-maestro", version, about = "FoodShare Maestro E2E runner")]
@@ -92,7 +92,7 @@ async fn main() -> Result<()> {
 
     // The disk is checked before a suite: a full volume fails the run in
     // a way that looks like a test failure.
-    if let Ok(stats) = foodshare_orchestrator::disk::workspace_stats(&workspace.app()).await {
+    if let Ok(stats) = foodshare_core::disk::workspace_stats(&workspace.app()) {
         tracing::info!(avail_gb = stats.avail_gb, "disk space checked");
     }
 

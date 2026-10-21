@@ -14,7 +14,7 @@ name = "fs-xccloud"
 path = "src/main.rs"
 
 [dependencies]
-foodshare-orchestrator.workspace = true
+foodshare-core.workspace = true
 foodshare-xccloud.workspace = true
 anyhow.workspace = true
 chrono.workspace = true

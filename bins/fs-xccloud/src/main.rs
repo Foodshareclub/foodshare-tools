@@ -16,7 +16,7 @@ use std::time::Duration;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use foodshare_orchestrator::Workspace;
+use foodshare_core::workspace::Workspace;
 use foodshare_xccloud::{api, auth, diagnostics};
 
 /// How long to wait between polls when watching a build.

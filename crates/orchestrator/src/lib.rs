@@ -38,7 +38,6 @@ use tokio::sync::mpsc;
 use foodshare_core::error::{Error, Result};
 
 pub mod bin;
-pub mod disk;
 pub mod domain;
 pub mod history;
 pub mod plan;
@@ -46,17 +45,17 @@ pub mod runner;
 pub mod state;
 pub mod status;
 pub mod verify;
-pub mod workspace;
 
 pub use disk::{DiskStats, HealReport};
 pub use domain::{DomainKind, Step};
+pub use foodshare_core::disk;
+pub use foodshare_core::workspace::{Repo, Workspace};
 pub use history::{History, RunPart, RunRecord};
 pub use plan::{Options, Phase, Plan};
 pub use runner::{LogLine, StepOutcome, Stream};
 pub use state::{DomainState, State, Status};
 pub use status::StatusResponse;
 pub use verify::{Stage, StageOutcome, Verifier, VerifyReport};
-pub use workspace::{Repo, Workspace};
 
 /// How a failed step is retried.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -582,7 +581,7 @@ async fn run_with_retry(
                         policy.max_retries + 1
                     ),
                 });
-                let _ = disk::heal(&heal_root, disk::MIN_FREE_GB, false).await;
+                let _ = disk::heal(&heal_root, disk::MIN_FREE_GB, false);
                 tokio::time::sleep(runner::backoff(attempt)).await;
             }
             Err(error) => return StepResult::Failed { domain, error },

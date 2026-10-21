@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{DomainKind, Step};
-use crate::workspace::Workspace;
+use foodshare_core::workspace::Workspace;
 
 /// The configuration file that may change the plan.
 pub const CONFIG_FILE: &str = ".foodshare-verify.toml";

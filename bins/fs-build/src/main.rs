@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
-use foodshare_orchestrator::Workspace;
+use foodshare_core::workspace::Workspace;
 use fs_app::build::{self, Configuration, Layout, Variant};
 
 #[derive(Parser, Debug)]
@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
 
     // The disk is checked before a large compilation, not after a
     // failure.
-    if let Ok(stats) = foodshare_orchestrator::disk::workspace_stats(&layout.app_dir).await {
+    if let Ok(stats) = foodshare_core::disk::workspace_stats(&layout.app_dir) {
         println!("💾 {} GB free ({}%)", stats.avail_gb, stats.avail_percent);
     }
 
