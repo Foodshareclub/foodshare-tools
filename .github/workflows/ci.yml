@@ -27,7 +27,18 @@ env:
   # Lint enforcement lives in the Lint job's scoped clippy deny-list.
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # The event name is in the group because Dependabot's own
+  # `dependabot-updates` workflow re-runs this definition on the base
+  # branch. With the group keyed only on the workflow and the ref, that
+  # housekeeping run and a real push of the same commit shared a group,
+  # and `cancel-in-progress` made one of them cancel the other — the
+  # push run died with a cancelled job, with no steps run at all, and
+  # the failure said nothing about the code.
+  #
+  # The push run is the authoritative one for a commit, so the two must
+  # not share a group. Two pushes to the same branch still cancel each
+  # other, which is the point of `cancel-in-progress`.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
