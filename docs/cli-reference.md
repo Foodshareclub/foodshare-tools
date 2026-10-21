@@ -362,8 +362,15 @@ fs-tui rust              # One domain
 fs-tui wasm | web | backend | mobile
 ```
 
-Keys: `r` run the selected domain, `v` verify everything, `c` clean the
-artefacts, `j`/`k` navigate, `q` quit.
+Options:
+
+- `--daemon <url>` - Watch a daemon that is already running, rather than
+  starting an orchestrator of its own. Also read from
+  `FOODSHARE_ORCHESTRATOR_URL`.
+
+Keys: `r` run the selected domain, `v` verify everything, `x` cancel the
+run, `c` clean the artefacts, `j`/`k` navigate, `PageUp`/`PageDown`
+scroll the log, `q` quit.
 
 ### fs-orchestrator
 

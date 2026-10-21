@@ -292,18 +292,15 @@ async fn plan(State(state): State<AppState>) -> Response {
 /// The state of every domain.
 async fn status(State(state): State<AppState>) -> Response {
     let snapshot = state.orchestrator.snapshot();
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "service": SERVICE_NAME,
-            "version": env!("CARGO_PKG_VERSION"),
-            "uptime_seconds": state.uptime_seconds(),
-            "running": snapshot.running,
-            "domains": snapshot.domains,
-            "metrics": foodshare_telemetry::metrics().export_json(),
-        })),
-    )
-        .into_response()
+    let body = foodshare_orchestrator::StatusResponse {
+        service: SERVICE_NAME.to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        uptime_seconds: state.uptime_seconds(),
+        running: snapshot.running,
+        domains: snapshot.domains,
+        metrics: foodshare_telemetry::metrics().export_json(),
+    };
+    (StatusCode::OK, Json(body)).into_response()
 }
 
 /// Whether the caller wants the result of the run.

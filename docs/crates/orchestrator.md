@@ -54,6 +54,12 @@ if let Some(domain) = snapshot.domain(DomainKind::Web) {
 # }
 ```
 
+## The status
+
+The daemon's `/status` serves one type, `StatusResponse`, and the TUI
+reads the same one when it watches a daemon. A run started in one place
+is then visible in the other, rather than each keeping its own state.
+
 ## The run history
 
 A daemon that only knows about the run in progress cannot say what

@@ -44,6 +44,7 @@ pub mod history;
 pub mod plan;
 pub mod runner;
 pub mod state;
+pub mod status;
 pub mod verify;
 pub mod workspace;
 
@@ -53,6 +54,7 @@ pub use history::{DomainRecord, History, RunRecord};
 pub use plan::{Options, Phase, Plan};
 pub use runner::{LogLine, StepOutcome, Stream};
 pub use state::{DomainState, State, Status};
+pub use status::StatusResponse;
 pub use verify::{Stage, StageOutcome, Verifier, VerifyReport};
 pub use workspace::{Repo, Workspace};
 

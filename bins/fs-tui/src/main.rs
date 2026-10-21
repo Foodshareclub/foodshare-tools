@@ -28,7 +28,11 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
 };
 
-use foodshare_orchestrator::{DomainKind, Options, Orchestrator, Status, Workspace, disk};
+use foodshare_orchestrator::{DomainKind, Options, Orchestrator, State, Status, Workspace, disk};
+
+mod daemon;
+
+use daemon::DaemonClient;
 
 /// How often the screen is redrawn.
 const TICK: Duration = Duration::from_millis(200);
@@ -44,6 +48,12 @@ const POLL: Duration = Duration::from_millis(50);
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+
+    /// Watch a daemon that is already running, rather than starting an
+    /// orchestrator of its own. Also read from
+    /// `FOODSHARE_ORCHESTRATOR_URL`.
+    #[arg(long, global = true, env = "FOODSHARE_ORCHESTRATOR_URL")]
+    daemon: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -76,9 +86,32 @@ impl Commands {
     }
 }
 
+/// Where the TUI reads its state from.
+#[derive(Debug, Clone)]
+enum Source {
+    /// The TUI owns the orchestrator.
+    Local(Orchestrator),
+    /// The TUI watches a daemon that is already running.
+    Remote(DaemonClient),
+}
+
+impl Source {
+    /// The state of the run in progress.
+    async fn snapshot(&self) -> State {
+        match self {
+            Self::Local(orchestrator) => orchestrator.snapshot(),
+            Self::Remote(client) => client.status().await.unwrap_or_else(State::idle),
+        }
+    }
+}
+
 /// The TUI's own state.
 struct App {
-    orchestrator: Orchestrator,
+    source: Source,
+    /// The workspace the tools are run in.
+    workspace: Workspace,
+    /// The latest state, refreshed on the tick.
+    state: State,
     selected: usize,
     started: Option<Instant>,
     message: String,
@@ -90,9 +123,11 @@ struct App {
 }
 
 impl App {
-    fn new(orchestrator: Orchestrator) -> Self {
+    fn new(source: Source, workspace: Workspace) -> Self {
         Self {
-            orchestrator,
+            source,
+            workspace,
+            state: State::idle(),
             selected: 0,
             started: None,
             message: "q:quit  r:run domain  v:verify all  c:clean disk  PgUp/PgDn:scroll  h:help"
@@ -115,17 +150,20 @@ impl App {
         match code {
             KeyCode::Char('q') | KeyCode::Esc => {
                 // The run belongs to this process, so it goes with it.
-                self.orchestrator.cancel();
+                if let Source::Local(orchestrator) = &self.source {
+                    orchestrator.cancel();
+                }
                 self.should_quit = true;
             }
             KeyCode::Char('h') => {
                 self.message =
-                    "h:help  q:quit  r:run selected  v:verify all  c:clean disk  j/k:nav  PgUp/PgDn:scroll"
+                    "h:help  q:quit  r:run selected  v:verify all  x:cancel  c:clean disk  j/k:nav  PgUp/PgDn:scroll"
                         .into()
             }
             KeyCode::Char('r') => self.start_domain(self.selected_domain()),
             KeyCode::Char('v') => self.start_plan(),
             KeyCode::Char('c') => self.clean_disk(),
+            KeyCode::Char('x') => self.cancel_run(),
             KeyCode::PageUp => self.scroll_log_up(PAGE),
             KeyCode::PageDown => self.scroll_log_down(PAGE),
             KeyCode::Home => self.scroll_log_to_top(),
@@ -141,6 +179,22 @@ impl App {
                 };
             }
             _ => {}
+        }
+    }
+
+    /// Stop the run in progress.
+    fn cancel_run(&mut self) {
+        match self.source.clone() {
+            Source::Local(orchestrator) => {
+                orchestrator.cancel();
+                self.message = "⏹ cancelling the run...".into();
+            }
+            Source::Remote(client) => {
+                tokio::spawn(async move {
+                    client.cancel().await;
+                });
+                self.message = "⏹ asked the daemon to stop the run".into();
+            }
         }
     }
 
@@ -174,19 +228,31 @@ impl App {
         self.started = Some(Instant::now());
         self.message = format!("▶ running {}...", kind.label());
 
-        let orchestrator = self.orchestrator.clone();
-        tokio::spawn(async move {
-            let outcome = orchestrator.run_domain(kind).await;
-            match outcome {
-                Ok(outcome) => tracing::info!(
-                    domain = kind.name(),
-                    success = outcome.success,
-                    duration_ms = outcome.duration_ms,
-                    "domain finished"
-                ),
-                Err(e) => tracing::error!(domain = kind.name(), error = %e, "domain failed"),
+        match self.source.clone() {
+            Source::Local(orchestrator) => {
+                tokio::spawn(async move {
+                    let outcome = orchestrator.run_domain(kind).await;
+                    match outcome {
+                        Ok(outcome) => tracing::info!(
+                            domain = kind.name(),
+                            success = outcome.success,
+                            duration_ms = outcome.duration_ms,
+                            "domain finished"
+                        ),
+                        Err(e) => {
+                            tracing::error!(domain = kind.name(), error = %e, "domain failed")
+                        }
+                    }
+                });
             }
-        });
+            Source::Remote(client) => {
+                tokio::spawn(async move {
+                    if !client.run(kind).await {
+                        tracing::error!(domain = kind.name(), "the daemon did not accept the run");
+                    }
+                });
+            }
+        }
     }
 
     /// Start the whole plan.
@@ -199,23 +265,33 @@ impl App {
         self.started = Some(Instant::now());
         self.message = "Running full verify — Rust→WASM→Web→Backend→Mobile".into();
 
-        let orchestrator = self.orchestrator.clone();
-        tokio::spawn(async move {
-            let outcome = orchestrator.run_plan().await;
-            match outcome {
-                Ok(outcome) => tracing::info!(
-                    success = outcome.success,
-                    duration_ms = outcome.duration_ms,
-                    "plan finished"
-                ),
-                Err(e) => tracing::error!(error = %e, "plan failed"),
+        match self.source.clone() {
+            Source::Local(orchestrator) => {
+                tokio::spawn(async move {
+                    let outcome = orchestrator.run_plan().await;
+                    match outcome {
+                        Ok(outcome) => tracing::info!(
+                            success = outcome.success,
+                            duration_ms = outcome.duration_ms,
+                            "plan finished"
+                        ),
+                        Err(e) => tracing::error!(error = %e, "plan failed"),
+                    }
+                });
             }
-        });
+            Source::Remote(client) => {
+                tokio::spawn(async move {
+                    if !client.run_all().await {
+                        tracing::error!("the daemon did not accept the run");
+                    }
+                });
+            }
+        }
     }
 
     /// Prune the build artefacts.
     fn clean_disk(&mut self) {
-        let root = self.orchestrator.workspace().root().to_path_buf();
+        let root = self.workspace.root().to_path_buf();
         let removed = disk::clean_artifacts(&root);
         self.message = if removed.is_empty() {
             "🧹 nothing to clean".into()
@@ -224,13 +300,14 @@ impl App {
         };
     }
 
-    /// Refresh the running flag from the orchestrator's state.
-    fn on_tick(&mut self) {
-        let snapshot = self.orchestrator.snapshot();
+    /// Refresh the state from the source.
+    async fn on_tick(&mut self) {
+        let snapshot = self.source.snapshot().await;
         if !snapshot.running && self.running {
             self.running = false;
             self.message = "✓ run finished".into();
         }
+        self.state = snapshot;
     }
 }
 
@@ -280,7 +357,7 @@ fn ui(f: &mut Frame, app: &App) {
     )
     .height(1);
 
-    let snapshot = app.orchestrator.snapshot();
+    let snapshot = app.state.clone();
     let rows = App::domains().into_iter().enumerate().map(|(index, kind)| {
         let domain = snapshot.domain(kind);
         let status = domain.map(|d| d.status).unwrap_or(Status::Idle);
@@ -388,7 +465,7 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
 
         tokio::select! {
             _ = tick.tick() => {
-                app.on_tick();
+                app.on_tick().await;
             }
             maybe_event = async {
                 if event::poll(POLL).unwrap_or(false) {
@@ -412,7 +489,7 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let workspace = Workspace::discover()?;
-    let orchestrator = Orchestrator::from_workspace(workspace, Options::default())?;
+    let orchestrator = Orchestrator::from_workspace(workspace.clone(), Options::default())?;
 
     // Non-interactive mode: run one domain, or the whole plan.
     if let Some(command) = cli.command {
@@ -444,7 +521,15 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let app = App::new(orchestrator);
+    let source = match cli.daemon {
+        Some(url) => {
+            println!("fs-tui: watching the daemon at {url}");
+            Source::Remote(DaemonClient::new(url))
+        }
+        None => Source::Local(orchestrator),
+    };
+
+    let app = App::new(source, workspace);
     let res = run_app(&mut terminal, app).await;
 
     disable_raw_mode()?;
