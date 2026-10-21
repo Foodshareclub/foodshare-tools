@@ -1,14 +1,16 @@
-//! Supabase vault operations via `docker exec psql`
+//! Supabase vault operations via the container runtime's `exec`
 //!
 //! Uses `process::run_command()` from `foodshare-core` to execute
 //! SQL against the Supabase DB container. No direct Postgres driver needed.
 
 use crate::error::{MigrateError, Result};
+use crate::runtime::Runtime;
 use foodshare_core::process;
 use tracing::{debug, warn};
 
-/// Client for interacting with the Supabase vault via Docker exec.
+/// Client for interacting with the Supabase vault through a container.
 pub struct VaultClient {
+    runtime: Runtime,
     container: String,
     db_user: String,
     db_name: String,
@@ -17,23 +19,31 @@ pub struct VaultClient {
 impl VaultClient {
     /// Create a new vault client.
     ///
-    /// - `container`: Docker container name (e.g. `supabase-db`)
+    /// - `runtime`: the container runtime that owns the database
+    /// - `container`: container name (e.g. `supabase-db`)
     /// - `db_user`: Postgres user (e.g. `supabase_admin`)
     /// - `db_name`: Database name (e.g. `postgres`)
-    pub fn new(container: &str, db_user: &str, db_name: &str) -> Self {
+    pub fn new(runtime: Runtime, container: &str, db_user: &str, db_name: &str) -> Self {
         Self {
+            runtime,
             container: container.to_string(),
             db_user: db_user.to_string(),
             db_name: db_name.to_string(),
         }
     }
 
-    /// Run a SQL query via `docker exec psql -tAc` and return stdout.
+    /// The runtime this client drives.
+    #[must_use]
+    pub fn runtime(&self) -> Runtime {
+        self.runtime
+    }
+
+    /// Run a SQL query through the container's `psql` and return stdout.
     fn run_sql(&self, sql: &str) -> Result<String> {
-        debug!(sql, "executing SQL via docker exec");
+        debug!(sql, runtime = %self.runtime, "executing SQL in the container");
 
         let result = process::run_command(
-            "docker",
+            self.runtime.as_str(),
             &[
                 "exec",
                 &self.container,
@@ -46,7 +56,9 @@ impl VaultClient {
                 sql,
             ],
         )
-        .map_err(|e| MigrateError::docker(format!("failed to run docker exec: {e}")))?;
+        .map_err(|e| {
+            MigrateError::container(format!("failed to run {} exec: {e}", self.runtime))
+        })?;
 
         if !result.success {
             let msg = if result.stderr.is_empty() {
@@ -60,16 +72,17 @@ impl VaultClient {
         Ok(result.stdout.trim().to_string())
     }
 
-    /// Check that Docker is available and the container is running.
+    /// Check that the runtime is available and the container is running.
     pub fn check_connection(&self) -> Result<()> {
-        if !process::command_exists("docker") {
-            return Err(MigrateError::docker(
-                "docker is not installed or not in PATH",
-            ));
+        if !process::command_exists(self.runtime.as_str()) {
+            return Err(MigrateError::container(format!(
+                "{} is not installed or not in PATH",
+                self.runtime
+            )));
         }
 
         let result = process::run_command(
-            "docker",
+            self.runtime.as_str(),
             &[
                 "ps",
                 "--format",
@@ -78,12 +91,12 @@ impl VaultClient {
                 &format!("name=^{}$", self.container),
             ],
         )
-        .map_err(|e| MigrateError::docker(format!("failed to check container: {e}")))?;
+        .map_err(|e| MigrateError::container(format!("failed to check container: {e}")))?;
 
         if !result.stdout.trim().contains(&self.container) {
-            return Err(MigrateError::docker(format!(
-                "container '{}' is not running",
-                self.container
+            return Err(MigrateError::container(format!(
+                "container '{}' is not running under {}",
+                self.container, self.runtime
             )));
         }
 
@@ -211,7 +224,7 @@ mod tests {
 
     #[test]
     fn verify_function_rejects_bad_names() {
-        let client = VaultClient::new("test", "user", "db");
+        let client = VaultClient::new(Runtime::Docker, "test", "user", "db");
         let result = client.verify_function("drop table; --");
         assert!(result.is_err());
     }

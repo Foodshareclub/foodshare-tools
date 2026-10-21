@@ -6,10 +6,42 @@
 use clap::{Parser, Subcommand};
 use foodshare_cli::output::Status;
 use foodshare_cli::progress;
-use foodshare_migrate::{env_file, secrets, vault::VaultClient};
+use foodshare_migrate::{Runtime, env_file, runtime, secrets, vault::VaultClient};
 use owo_colors::OwoColorize;
 use std::path::PathBuf;
 use std::process::ExitCode;
+
+/// The runtime to use, as given on the command line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeArg {
+    /// Find the runtime the container is actually running under.
+    Auto,
+    /// A named runtime.
+    Named(Runtime),
+}
+
+/// Parse the `--runtime` value.
+fn parse_runtime(value: &str) -> Result<RuntimeArg, String> {
+    if value.trim().eq_ignore_ascii_case("auto") {
+        return Ok(RuntimeArg::Auto);
+    }
+    Runtime::parse(value)
+        .map(RuntimeArg::Named)
+        .ok_or_else(|| format!("`{value}` is not a container runtime; use auto, docker or podman"))
+}
+
+/// The runtime the user asked for, if any.
+///
+/// The flag wins over the environment, and the environment wins over
+/// finding the runtime on the machine.
+fn requested_runtime(cli: &Cli) -> Option<Runtime> {
+    match cli.runtime {
+        RuntimeArg::Named(runtime) => Some(runtime),
+        RuntimeArg::Auto => std::env::var("CONTAINER_RUNTIME")
+            .ok()
+            .and_then(|value| Runtime::parse(&value)),
+    }
+}
 
 /// Secret migration tool for self-hosted Supabase
 #[derive(Parser)]
@@ -21,9 +53,15 @@ struct Cli {
     #[arg(long, global = true, default_value = ".env.functions")]
     env_file: PathBuf,
 
-    /// Docker container name for the Supabase database
+    /// Container name for the Supabase database
     #[arg(long, global = true, default_value = "supabase-db")]
     container: String,
+
+    /// Container runtime that owns the database
+    ///
+    /// `auto` picks the runtime the container is actually running under.
+    #[arg(long, global = true, default_value = "auto", value_parser = parse_runtime)]
+    runtime: RuntimeArg,
 
     /// Postgres user inside the container
     #[arg(long, global = true, default_value = "supabase_admin")]
@@ -635,7 +673,7 @@ fn cmd_run(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Error>> {
     cmd_vault_verify(cli)?;
 
     println!();
-    Status::success("Migration complete. Run `docker compose restart functions` to apply.");
+    Status::success("Migration complete. Restart the functions service to apply.");
 
     Ok(())
 }
@@ -687,7 +725,8 @@ fn cmd_env_dump(cli: &Cli) -> std::result::Result<(), Box<dyn std::error::Error>
 // ---------------------------------------------------------------------------
 
 fn make_vault_client(cli: &Cli) -> std::result::Result<VaultClient, Box<dyn std::error::Error>> {
-    let client = VaultClient::new(&cli.container, &cli.db_user, "postgres");
+    let runtime = runtime::resolve(requested_runtime(cli), &cli.container)?;
+    let client = VaultClient::new(runtime, &cli.container, &cli.db_user, "postgres");
     client.check_connection()?;
     Ok(client)
 }

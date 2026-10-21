@@ -18,9 +18,9 @@ pub enum MigrateError {
     #[error("vault error: {0}")]
     Vault(String),
 
-    /// Docker is not available or container not running
-    #[error("docker error: {0}")]
-    Docker(String),
+    /// The container runtime is not available, or the container is not running
+    #[error("container runtime error: {0}")]
+    Container(String),
 
     /// Verification of a PG function failed
     #[error("verification failed: {0}")]
@@ -49,9 +49,9 @@ impl MigrateError {
         Self::Vault(message.into())
     }
 
-    /// Create a docker error
-    pub fn docker(message: impl Into<String>) -> Self {
-        Self::Docker(message.into())
+    /// Create a container runtime error
+    pub fn container(message: impl Into<String>) -> Self {
+        Self::Container(message.into())
     }
 
     /// Create a verification error
