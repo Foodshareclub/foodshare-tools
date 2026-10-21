@@ -23,6 +23,7 @@ use super::schema::ConfigSchema;
 const ALIASES: &[(&str, &str, &str)] = &[
     // (section, the name in the file, the name in the schema)
     ("secrets", "patterns", "additional_patterns"),
+    ("analyze", "threshold_force_unwraps", "threshold_force"),
 ];
 
 /// A subtree whose keys cannot be enumerated.
@@ -150,6 +151,14 @@ mod tests {
     fn test_the_canonical_name_is_not_reported_either() {
         let unknown = keys("[secrets]\nadditional_patterns = [\"a-secret-shape\"]\n");
         assert!(unknown.is_empty(), "the key was reported: {unknown:?}");
+    }
+
+    #[test]
+    fn test_the_second_alias_is_not_reported() {
+        // The repositories call it `threshold_force_unwraps`; the schema
+        // calls it `threshold_force`. Both are the same key.
+        let unknown = keys("[analyze]\nthreshold_force_unwraps = 20\n");
+        assert!(unknown.is_empty(), "the alias was reported: {unknown:?}");
     }
 
     #[test]

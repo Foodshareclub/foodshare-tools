@@ -184,7 +184,12 @@ pub struct AnalyzeConfig {
     pub threshold_fixmes: usize,
 
     /// Maximum force unwraps (Swift) or nullable bangs (Kotlin) before warning
-    #[serde(default = "default_threshold_force")]
+    ///
+    /// The alias is the name the estate writes. The schema called it
+    /// `threshold_force` and the repositories call it
+    /// `threshold_force_unwraps`, so the key they wrote was dropped and
+    /// the threshold they set was the default.
+    #[serde(default = "default_threshold_force", alias = "threshold_force_unwraps")]
     pub threshold_force: usize,
 
     /// Paths to analyze
