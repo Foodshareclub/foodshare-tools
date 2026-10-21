@@ -102,23 +102,40 @@ pub fn resolve(requested: Option<Runtime>, container: &str) -> Result<Runtime> {
     choose(requested, &owners)
 }
 
+/// The arguments that ask a runtime for the containers it has.
+///
+/// The filter is anchored, so the answer is the container's own name and
+/// nothing else.
+#[must_use]
+pub fn probe_args(container: &str) -> Vec<String> {
+    vec![
+        "ps".to_string(),
+        "--format".to_string(),
+        "{{.Names}}".to_string(),
+        "--filter".to_string(),
+        format!("name=^{container}$"),
+    ]
+}
+
+/// Whether a listing of container names names `container`.
+///
+/// The listing is the runtime's answer to [`probe_args`]. One name per
+/// line. A name that merely starts the same is a different container.
+#[must_use]
+pub fn listing_names(stdout: &str, container: &str) -> bool {
+    stdout.lines().any(|line| line.trim() == container)
+}
+
 /// Whether `runtime` has the container running.
 fn owns_container(runtime: Runtime, container: &str) -> bool {
     if !foodshare_core::process::command_exists(runtime.as_str()) {
         return false;
     }
-    let result = foodshare_core::process::run_command(
-        runtime.as_str(),
-        &[
-            "ps",
-            "--format",
-            "{{.Names}}",
-            "--filter",
-            &format!("name=^{container}$"),
-        ],
-    );
+    let args = probe_args(container);
+    let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+    let result = foodshare_core::process::run_command(runtime.as_str(), &borrowed);
     match result {
-        Ok(result) => result.stdout.trim() == container,
+        Ok(result) => listing_names(&result.stdout, container),
         Err(_) => false,
     }
 }
@@ -178,5 +195,30 @@ mod tests {
         assert_eq!(Runtime::parse(" containerd "), None);
         assert_eq!(Runtime::Docker.as_str(), "docker");
         assert_eq!(Runtime::Podman.as_str(), "podman");
+    }
+
+    #[test]
+    fn the_probe_asks_for_the_container_by_name() {
+        assert_eq!(
+            probe_args("supabase-db"),
+            [
+                "ps",
+                "--format",
+                "{{.Names}}",
+                "--filter",
+                "name=^supabase-db$",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_listing_names_the_container_only_when_it_is_the_one() {
+        assert!(listing_names("supabase-db\n", "supabase-db"));
+        assert!(listing_names("  supabase-db  ", "supabase-db"));
+        // A container that merely starts the same is a different one.
+        assert!(!listing_names("supabase-db-2\n", "supabase-db"));
+        assert!(!listing_names("", "supabase-db"));
+        // Another container in the listing does not hide the one asked for.
+        assert!(listing_names("other-db\nsupabase-db\n", "supabase-db"));
     }
 }

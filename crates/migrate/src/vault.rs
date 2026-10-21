@@ -38,25 +38,39 @@ impl VaultClient {
         self.runtime
     }
 
+    /// The command that runs `sql` inside the container.
+    fn exec_command(&self, sql: &str) -> (String, Vec<String>) {
+        (
+            self.runtime.as_str().to_string(),
+            vec![
+                "exec".to_string(),
+                self.container.clone(),
+                "psql".to_string(),
+                "-U".to_string(),
+                self.db_user.clone(),
+                "-d".to_string(),
+                self.db_name.clone(),
+                "-tAc".to_string(),
+                sql.to_string(),
+            ],
+        )
+    }
+
+    /// The command that asks the runtime whether the container is running.
+    fn check_command(&self) -> (String, Vec<String>) {
+        (
+            self.runtime.as_str().to_string(),
+            crate::runtime::probe_args(&self.container),
+        )
+    }
+
     /// Run a SQL query through the container's `psql` and return stdout.
     fn run_sql(&self, sql: &str) -> Result<String> {
         debug!(sql, runtime = %self.runtime, "executing SQL in the container");
 
-        let result = process::run_command(
-            self.runtime.as_str(),
-            &[
-                "exec",
-                &self.container,
-                "psql",
-                "-U",
-                &self.db_user,
-                "-d",
-                &self.db_name,
-                "-tAc",
-                sql,
-            ],
-        )
-        .map_err(|e| {
+        let (program, args) = self.exec_command(sql);
+        let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+        let result = process::run_command(&program, &borrowed).map_err(|e| {
             MigrateError::container(format!("failed to run {} exec: {e}", self.runtime))
         })?;
 
@@ -81,19 +95,12 @@ impl VaultClient {
             )));
         }
 
-        let result = process::run_command(
-            self.runtime.as_str(),
-            &[
-                "ps",
-                "--format",
-                "{{.Names}}",
-                "--filter",
-                &format!("name=^{}$", self.container),
-            ],
-        )
-        .map_err(|e| MigrateError::container(format!("failed to check container: {e}")))?;
+        let (program, args) = self.check_command();
+        let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+        let result = process::run_command(&program, &borrowed)
+            .map_err(|e| MigrateError::container(format!("failed to check container: {e}")))?;
 
-        if !result.stdout.trim().contains(&self.container) {
+        if !crate::runtime::listing_names(&result.stdout, &self.container) {
             return Err(MigrateError::container(format!(
                 "container '{}' is not running under {}",
                 self.container, self.runtime
@@ -227,5 +234,43 @@ mod tests {
         let client = VaultClient::new(Runtime::Docker, "test", "user", "db");
         let result = client.verify_function("drop table; --");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn the_client_drives_the_runtime_it_was_given() {
+        let client = VaultClient::new(Runtime::Podman, "supabase-db", "supabase_admin", "postgres");
+        let (program, args) = client.exec_command("SELECT 1;");
+        assert_eq!(program, "podman");
+        assert_eq!(
+            args,
+            [
+                "exec",
+                "supabase-db",
+                "psql",
+                "-U",
+                "supabase_admin",
+                "-d",
+                "postgres",
+                "-tAc",
+                "SELECT 1;",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_check_asks_the_same_runtime() {
+        let client = VaultClient::new(Runtime::Docker, "supabase-db", "supabase_admin", "postgres");
+        let (program, args) = client.check_command();
+        assert_eq!(program, "docker");
+        assert_eq!(
+            args,
+            [
+                "ps",
+                "--format",
+                "{{.Names}}",
+                "--filter",
+                "name=^supabase-db$",
+            ]
+        );
     }
 }
