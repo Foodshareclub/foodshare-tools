@@ -157,7 +157,7 @@ job routes do.
 | `GET /plan`          | The plan that will run                            |
 | `GET /runs`          | The runs that have finished                       |
 | `POST /run/{domain}` | Start a domain, or `all`                         |
-| `POST /cancel`       | Stop the run in progress                         |
+| `POST /cancel`       | Stop the run in progress, and what it started   |
 
 The decision record is in
 [docs/adr/0001-rust-orchestrator-and-axum.md](docs/adr/0001-rust-orchestrator-and-axum.md).

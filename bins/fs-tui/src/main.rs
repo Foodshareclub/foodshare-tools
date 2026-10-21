@@ -113,7 +113,11 @@ impl App {
 
     fn on_key(&mut self, code: KeyCode) {
         match code {
-            KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
+            KeyCode::Char('q') | KeyCode::Esc => {
+                // The run belongs to this process, so it goes with it.
+                self.orchestrator.cancel();
+                self.should_quit = true;
+            }
             KeyCode::Char('h') => {
                 self.message =
                     "h:help  q:quit  r:run selected  v:verify all  c:clean disk  j/k:nav  PgUp/PgDn:scroll"

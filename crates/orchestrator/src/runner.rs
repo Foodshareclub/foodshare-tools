@@ -4,6 +4,7 @@
 //! stdout and stderr line by line to a channel, and reports how it ended.
 
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use foodshare_core::error::{Error, Result};
@@ -62,9 +63,14 @@ pub fn parse_step_timeout(value: Option<&str>) -> Duration {
 /// Run a step, streaming its output to `tx`.
 ///
 /// The step is not retried here; retrying belongs to the caller, which
-/// also owns the disk healing that goes with it.
-pub async fn run_step(step: &Step, tx: &UnboundedSender<LogLine>) -> Result<StepOutcome> {
-    run_step_with_timeout(step, tx, step_timeout()).await
+/// also owns the disk healing that goes with it. A step that is
+/// cancelled is stopped, along with everything it started.
+pub async fn run_step(
+    step: &Step,
+    tx: &UnboundedSender<LogLine>,
+    cancelled: &AtomicBool,
+) -> Result<StepOutcome> {
+    run_step_with_timeout(step, tx, step_timeout(), cancelled).await
 }
 
 /// Run a step, with an explicit timeout.
@@ -72,6 +78,7 @@ pub async fn run_step_with_timeout(
     step: &Step,
     tx: &UnboundedSender<LogLine>,
     timeout: Duration,
+    cancelled: &AtomicBool,
 ) -> Result<StepOutcome> {
     let started = Instant::now();
 
@@ -82,6 +89,12 @@ pub async fn run_step_with_timeout(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    // The child leads its own process group, so stopping it stops
+    // everything it started. `cargo test` leaves the test binaries
+    // running otherwise, and they keep the build directory locked.
+    #[cfg(unix)]
+    command.process_group(0);
     for entry in &step.env {
         if let Some((key, value)) = entry.split_once('=') {
             command.env(key, value);
@@ -104,19 +117,13 @@ pub async fn run_step_with_timeout(
     let stdout_task = stdout.map(|out| pump(out, tx.clone(), Stream::Stdout));
     let stderr_task = stderr.map(|err| pump(err, tx.clone(), Stream::Stderr));
 
-    let status = match tokio::time::timeout(timeout, child.wait()).await {
+    let status = match tokio::time::timeout(timeout, wait_for(step, &mut child, cancelled)).await {
         Ok(Ok(status)) => status,
-        Ok(Err(e)) => {
-            return Err(Error::process(format!(
-                "Failed to wait for `{}`: {e}",
-                step.program
-            )));
-        }
+        Ok(Err(e)) => return Err(e),
         Err(_) => {
             // The step is still running, so it is stopped rather than
             // left behind.
-            let _ = child.start_kill();
-            let _ = child.wait().await;
+            stop_process(&mut child).await;
             return Err(Error::process(format!(
                 "`{}` did not finish within {}s and was stopped",
                 step.label,
@@ -156,6 +163,55 @@ where
     }
 }
 
+/// Wait for a process, watching for a cancellation.
+async fn wait_for(
+    step: &Step,
+    child: &mut tokio::process::Child,
+    cancelled: &AtomicBool,
+) -> Result<std::process::ExitStatus> {
+    loop {
+        if cancelled.load(Ordering::SeqCst) {
+            stop_process(child).await;
+            return Err(Error::process(format!("`{}` was cancelled", step.label)));
+        }
+        match tokio::time::timeout(CANCEL_POLL, child.wait()).await {
+            Ok(Ok(status)) => return Ok(status),
+            Ok(Err(e)) => {
+                return Err(Error::process(format!(
+                    "Failed to wait for `{}`: {e}",
+                    step.program
+                )));
+            }
+            // Still running: look again.
+            Err(_) => continue,
+        }
+    }
+}
+
+/// Stop a process and everything it started.
+///
+/// The child leads its own process group, so the whole tree goes with it.
+/// `cargo test` leaves the test binaries running otherwise, and they
+/// would keep the build directory locked.
+async fn stop_process(child: &mut tokio::process::Child) {
+    #[cfg(unix)]
+    if let Some(pid) = child.id() {
+        let _ = tokio::process::Command::new("kill")
+            .arg("-KILL")
+            .arg(format!("-{pid}"))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await;
+    }
+    let _ = child.start_kill();
+    let _ = child.wait().await;
+}
+
+/// How often a running step is checked for cancellation.
+const CANCEL_POLL: Duration = Duration::from_millis(200);
+
 /// How long to wait between retry attempts.
 #[must_use]
 pub fn backoff(attempt: u32) -> Duration {
@@ -172,10 +228,15 @@ mod tests {
         Step::new(DomainKind::Rust, "test", program, args, ".")
     }
 
+    /// A flag that is never set.
+    fn not_cancelled() -> AtomicBool {
+        AtomicBool::new(false)
+    }
+
     #[tokio::test]
     async fn test_successful_step_reports_success() {
         let (tx, mut rx) = unbounded_channel();
-        let outcome = run_step(&step("echo", &["hello"]), &tx)
+        let outcome = run_step(&step("echo", &["hello"]), &tx, &not_cancelled())
             .await
             .expect("step runs");
         assert!(outcome.success);
@@ -191,7 +252,9 @@ mod tests {
     #[tokio::test]
     async fn test_failing_step_reports_failure() {
         let (tx, _rx) = unbounded_channel();
-        let outcome = run_step(&step("false", &[]), &tx).await.expect("step runs");
+        let outcome = run_step(&step("false", &[]), &tx, &not_cancelled())
+            .await
+            .expect("step runs");
         assert!(!outcome.success);
         assert_eq!(outcome.exit_code, 1);
     }
@@ -199,9 +262,13 @@ mod tests {
     #[tokio::test]
     async fn test_stderr_is_streamed_separately() {
         let (tx, mut rx) = unbounded_channel();
-        let outcome = run_step(&step("sh", &["-c", "echo out; echo err 1>&2"]), &tx)
-            .await
-            .expect("step runs");
+        let outcome = run_step(
+            &step("sh", &["-c", "echo out; echo err 1>&2"]),
+            &tx,
+            &not_cancelled(),
+        )
+        .await
+        .expect("step runs");
         assert!(outcome.success);
 
         let mut stdout = Vec::new();
@@ -219,9 +286,13 @@ mod tests {
     #[tokio::test]
     async fn test_missing_program_is_a_command_not_found_error() {
         let (tx, _rx) = unbounded_channel();
-        let error = run_step(&step("definitely-not-a-real-program-xyz", &[]), &tx)
-            .await
-            .expect_err("spawn fails");
+        let error = run_step(
+            &step("definitely-not-a-real-program-xyz", &[]),
+            &tx,
+            &not_cancelled(),
+        )
+        .await
+        .expect_err("spawn fails");
         assert_eq!(
             error.code,
             foodshare_core::error::ErrorCode::CommandNotFound
@@ -233,7 +304,9 @@ mod tests {
         let (tx, mut rx) = unbounded_channel();
         let step =
             step("sh", &["-c", "echo $FOODSHARE_TEST_VAR"]).with_env("FOODSHARE_TEST_VAR", "42");
-        run_step(&step, &tx).await.expect("step runs");
+        run_step(&step, &tx, &not_cancelled())
+            .await
+            .expect("step runs");
         let mut lines = Vec::new();
         while let Ok(line) = rx.try_recv() {
             lines.push(line.text);
@@ -265,12 +338,72 @@ mod tests {
     async fn test_a_step_that_overruns_its_timeout_is_stopped() {
         let (tx, _rx) = unbounded_channel();
         let step = Step::new(DomainKind::Rust, "sleeper", "sh", &["-c", "sleep 30"], ".");
-        let error = run_step_with_timeout(&step, &tx, Duration::from_millis(200))
+        let error = run_step_with_timeout(&step, &tx, Duration::from_millis(200), &not_cancelled())
             .await
             .expect_err("the step times out");
         assert!(
             error.to_string().contains("did not finish within"),
             "got: {error}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_a_cancelled_step_is_stopped() {
+        let (tx, _rx) = unbounded_channel();
+        let cancelled = std::sync::Arc::new(AtomicBool::new(false));
+        let step = Step::new(DomainKind::Rust, "sleeper", "sh", &["-c", "sleep 30"], ".");
+
+        // Set the flag once the step is under way.
+        let flag = cancelled.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            flag.store(true, Ordering::SeqCst);
+        });
+
+        let started = Instant::now();
+        let error = run_step(&step, &tx, &cancelled)
+            .await
+            .expect_err("the step is cancelled");
+        assert!(error.to_string().contains("cancelled"), "got: {error}");
+        // It did not wait for the sleep to finish.
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_a_cancelled_step_stops_what_it_started() {
+        let (tx, _rx) = unbounded_channel();
+        let cancelled = std::sync::Arc::new(AtomicBool::new(false));
+        // The step starts a child of its own, the way `cargo test` does.
+        let step = Step::new(
+            DomainKind::Rust,
+            "parent",
+            "sh",
+            &["-c", "sleep 30 & sleep 30"],
+            ".",
+        );
+
+        let flag = cancelled.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            flag.store(true, Ordering::SeqCst);
+        });
+
+        let _ = run_step(&step, &tx, &cancelled).await;
+        // Give the group a moment to be signalled.
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Nothing of the step is left running.
+        let leftover = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("pgrep -f 'sleep 30' | wc -l")
+            .output();
+        if let Ok(output) = leftover {
+            let count = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse::<u32>()
+                .unwrap_or(0);
+            assert_eq!(count, 0, "the step left processes behind");
+        }
     }
 }

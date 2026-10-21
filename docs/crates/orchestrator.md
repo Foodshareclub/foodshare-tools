@@ -97,6 +97,13 @@ same on every machine. The file is optional: without it, the built-in
 plan is the plan. `foodshare-verify.toml.example` in the repository root
 is a starting point.
 
+## Cancellation
+
+A cancellation reaches the process that is running, not only the steps
+after it. The step leads its own process group, so stopping it stops
+everything it started: `cargo test` leaves the test binaries running
+otherwise, and they keep the build directory locked.
+
 ## Timeouts
 
 A step that overruns its timeout is stopped, so a hung process fails the

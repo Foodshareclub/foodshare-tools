@@ -401,7 +401,7 @@ Routes:
 | `/plan`              | GET    | The plan that will run                   |
 | `/runs`              | GET    | The runs that have finished              |
 | `/run/{domain}`      | POST   | Start a domain, or `all`                  |
-| `/cancel`            | POST   | Stop the run in progress                  |
+| `/cancel`            | POST   | Stop the run, and what it started        |
 
 `POST /run/{domain}` starts the run and answers `202`. Add `?wait=true`
 to wait for the result and get the outcome in the body.
@@ -411,6 +411,9 @@ them open: a health check or a Prometheus scrape has no secret to
 present. The control routes start builds, so they take a token when one
 is configured — `Authorization: Bearer <token>`, compared in constant
 time.
+
+A cancellation stops the step that is running, not only the steps after
+it: the process and everything it started are stopped.
 
 ### fs-maestro
 

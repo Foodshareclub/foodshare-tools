@@ -110,7 +110,9 @@ enum StepResult {
 #[derive(Debug)]
 struct Inner {
     state: RwLock<State>,
-    cancelled: AtomicBool,
+    /// Shared with the running steps, so a cancellation reaches the
+    /// process that is running rather than only the next step.
+    cancelled: Arc<AtomicBool>,
 }
 
 /// Runs the workspace's verification domains and tracks their state.
@@ -147,7 +149,7 @@ impl Orchestrator {
             history: Arc::new(History::default()),
             inner: Arc::new(Inner {
                 state: RwLock::new(State::idle()),
-                cancelled: AtomicBool::new(false),
+                cancelled: Arc::new(AtomicBool::new(false)),
             }),
         }
     }
@@ -418,6 +420,7 @@ impl Orchestrator {
             let policy = self.policy;
             let heal_root: PathBuf = self.workspace.root().to_path_buf();
             let inner = Arc::clone(&self.inner);
+            let cancelled = Arc::clone(&self.inner.cancelled);
             set.spawn(async move {
                 let (tx, mut rx) = mpsc::unbounded_channel::<LogLine>();
                 let domain = step.domain;
@@ -429,7 +432,7 @@ impl Orchestrator {
                         }
                     }
                 });
-                let result = run_with_retry(step, tx, policy, heal_root).await;
+                let result = run_with_retry(step, tx, policy, heal_root, &cancelled).await;
                 let _ = pump.await;
                 result
             });
@@ -555,11 +558,12 @@ async fn run_with_retry(
     tx: mpsc::UnboundedSender<LogLine>,
     policy: RetryPolicy,
     heal_root: PathBuf,
+    cancelled: &AtomicBool,
 ) -> StepResult {
     let domain = step.domain;
     let mut attempt = 0u32;
     loop {
-        match runner::run_step(&step, &tx).await {
+        match runner::run_step(&step, &tx, cancelled).await {
             Ok(outcome) if outcome.success => return StepResult::Done(outcome),
             Ok(outcome) => {
                 if attempt >= policy.max_retries {

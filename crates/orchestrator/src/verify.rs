@@ -347,10 +347,7 @@ mod tests {
     fn test_the_rust_stage_runs_the_workspace_tests() {
         let verifier = Verifier::new(&workspace());
         let Some(Stage::Command {
-            label,
-            program,
-            args,
-            cwd,
+            program, args, cwd, ..
         }) = verifier.stages().iter().find(
             |s| matches!(s, Stage::Command { label, .. } if *label == "Rust workspace tests"),
         )
