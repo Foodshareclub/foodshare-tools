@@ -1,10 +1,17 @@
-//! Android Emulator management
+//! Android Emulator management.
 //!
-//! Provides tools for managing Android emulators.
+//! The devices themselves — what `adb` reports and how to drive one —
+//! live in `foodshare-device`. This module keeps the app tools' names for
+//! them.
 
 use foodshare_core::error::Result;
-use foodshare_core::process::{CommandResult, command_exists, run_command};
+use foodshare_core::process::{CommandResult, command_exists};
 use serde::{Deserialize, Serialize};
+
+pub use foodshare_device::{
+    boot_emulator, clear_logcat, install_apk, launch_android_app, list_avds,
+    list_running_emulators, logcat, screenshot_android, shutdown_all_emulators, shutdown_emulator,
+};
 
 /// Android emulator device information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,7 +23,7 @@ pub struct EmulatorDevice {
 }
 
 /// Execution status of an Android emulator
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EmulatorStatus {
     /// Emulator is currently running
     Running,
@@ -36,90 +43,37 @@ pub fn is_adb_available() -> bool {
     command_exists("adb")
 }
 
-/// List available AVDs (Android Virtual Devices)
-pub fn list_avds() -> Result<Vec<String>> {
-    let result = run_command("emulator", &["-list-avds"])?;
-    Ok(result
-        .stdout
-        .lines()
-        .filter(|l| !l.is_empty())
-        .map(String::from)
-        .collect())
-}
-
 /// List running emulators
 pub fn list_running() -> Result<Vec<String>> {
-    let result = run_command("adb", &["devices"])?;
-    Ok(result
-        .stdout
-        .lines()
-        .skip(1) // Skip header
-        .filter(|l| l.contains("emulator"))
-        .filter_map(|l| l.split_whitespace().next())
-        .map(String::from)
+    Ok(list_running_emulators()?
+        .into_iter()
+        .map(|emulator| emulator.serial)
         .collect())
 }
 
 /// Boot an emulator by AVD name
 pub fn boot(avd_name: &str) -> Result<CommandResult> {
-    // Start emulator in background
-    run_command("emulator", &["-avd", avd_name, "-no-snapshot-load"])
+    boot_emulator(avd_name)
 }
 
 /// Shutdown an emulator
 pub fn shutdown(serial: &str) -> Result<CommandResult> {
-    run_command("adb", &["-s", serial, "emu", "kill"])
+    shutdown_emulator(serial)
 }
 
 /// Shutdown all emulators
-pub fn shutdown_all() -> Result<()> {
-    let running = list_running()?;
-    for serial in running {
-        let _ = shutdown(&serial);
-    }
-    Ok(())
-}
-
-/// Install an APK on an emulator
-pub fn install_apk(serial: &str, apk_path: &str) -> Result<CommandResult> {
-    run_command("adb", &["-s", serial, "install", "-r", apk_path])
+pub fn shutdown_all() -> Result<CommandResult> {
+    shutdown_all_emulators()
 }
 
 /// Launch an app on an emulator
 pub fn launch_app(serial: &str, package: &str, activity: &str) -> Result<CommandResult> {
-    let component = format!("{}/{}", package, activity);
-    run_command(
-        "adb",
-        &["-s", serial, "shell", "am", "start", "-n", &component],
-    )
-}
-
-/// Get logcat output
-pub fn logcat(serial: &str, filter: Option<&str>) -> Result<CommandResult> {
-    let mut args = vec!["-s", serial, "logcat", "-d"];
-    if let Some(f) = filter {
-        args.push("-s");
-        args.push(f);
-    }
-    run_command("adb", &args)
-}
-
-/// Clear logcat
-pub fn clear_logcat(serial: &str) -> Result<CommandResult> {
-    run_command("adb", &["-s", serial, "logcat", "-c"])
+    launch_android_app(serial, package, activity)
 }
 
 /// Take a screenshot
 pub fn screenshot(serial: &str, output_path: &str) -> Result<CommandResult> {
-    // Take screenshot on device
-    let device_path = "/sdcard/screenshot.png";
-    run_command(
-        "adb",
-        &["-s", serial, "shell", "screencap", "-p", device_path],
-    )?;
-
-    // Pull to local
-    run_command("adb", &["-s", serial, "pull", device_path, output_path])
+    foodshare_device::screenshot_android(serial, output_path)
 }
 
 #[cfg(test)]

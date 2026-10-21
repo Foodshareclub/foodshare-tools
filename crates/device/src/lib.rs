@@ -1,9 +1,12 @@
-//! Device discovery: the iOS simulators and the Android emulators.
+//! Device discovery and control for the Foodshare app.
 //!
-//! The two tools that own the devices — `xcrun simctl` and `adb` —
-//! report them in different shapes, and this crate is the one place that
-//! knows both. The app tools drive a device; the end-to-end runner picks
-//! one to run on. Neither of them should be parsing the output.
+//! The two tools that own the devices — `xcrun simctl` and `adb` — are
+//! the only things that know what a device is and how to drive one. This
+//! crate is that knowledge, in one place.
+//!
+//! The app tools drive a device; the end-to-end runner picks one to run
+//! on. Neither of them should be parsing the output, and neither of them
+//! should be assembling the command lines.
 //!
 //! A tool that is not installed is not an error: it means that platform
 //! has no devices.
@@ -11,6 +14,15 @@
 use foodshare_core::error::Result;
 use foodshare_core::process::run_command;
 use serde::{Deserialize, Serialize};
+
+pub mod control;
+
+pub use control::{
+    boot_emulator, boot_simulator, booted_simulator, booted_simulator_id, clear_logcat,
+    erase_simulator, install_apk, install_app, launch_android_app, launch_app, list_avds,
+    list_running_emulators, logcat, open_simulator, screenshot, screenshot_android,
+    shutdown_all_emulators, shutdown_all_simulators, shutdown_emulator, shutdown_simulator,
+};
 
 /// Whether a device is running.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,7 +127,10 @@ fn parse_simulators(output: &str) -> Result<Vec<Simulator>> {
                 name: entry.name,
                 runtime: runtime.clone(),
                 state: DeviceState::parse(&entry.state),
-                is_available: entry.is_available.unwrap_or(true),
+                // A device that does not say whether it is available is
+                // not assumed to be: the app tools list what can be
+                // used.
+                is_available: entry.is_available.unwrap_or(false),
             });
         }
     }

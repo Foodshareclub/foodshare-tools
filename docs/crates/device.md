@@ -11,6 +11,19 @@ run on. Neither of them should be parsing the output.
 A tool that is not installed is not an error: it means that platform has
 no devices.
 
+## Driving a device
+
+The crate owns the commands as well as the discovery, so the tools that
+own the devices are known in one place.
+
+```rust,no_run
+use foodshare_device::{boot_simulator, install_app, launch_app};
+
+boot_simulator("ABC-123")?;
+install_app("ABC-123", "/path/to/FoodShare.app")?;
+launch_app("ABC-123", "com.flutterflow.foodshare")?;
+```
+
 ## Simulators
 
 ```rust,no_run

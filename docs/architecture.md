@@ -152,9 +152,10 @@ orchestrator.
 
 ### Devices (`foodshare-device`)
 
-The iOS simulators and the Android emulators, from the tools that own
-them. The app tools and the end-to-end runner share it, so neither of
-them parses `simctl` or `adb` output.
+The iOS simulators and the Android emulators: what they are, and how to
+drive them. The app tools and the end-to-end runner share it, so neither
+of them parses `simctl` or `adb` output, and neither assembles the
+command lines.
 
 ### Xcode Cloud (`foodshare-xccloud`)
 

@@ -1,14 +1,17 @@
-//! iOS Simulator management
+//! iOS Simulator management.
 //!
-//! Provides tools for managing iOS simulators.
-//!
-//! The device list comes from `foodshare-device`, which is the one
-//! place that knows what `xcrun simctl` reports.
+//! The devices themselves — what `xcrun simctl` reports and how to
+//! drive one — live in `foodshare-device`. This module keeps the app
+//! tools' names for them.
 
 use foodshare_core::error::Result;
 use foodshare_core::process::CommandResult;
-use foodshare_core::process::run_command;
 use serde::{Deserialize, Serialize};
+
+pub use foodshare_device::{
+    boot_simulator, booted_simulator, booted_simulator_id, erase_simulator, install_app,
+    launch_app, open_simulator, screenshot, shutdown_all_simulators, shutdown_simulator,
+};
 
 /// Information about an iOS simulator device
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,54 +48,27 @@ pub fn list_devices() -> Result<Vec<SimulatorDevice>> {
 
 /// Boot a simulator by name or UDID
 pub fn boot(device: &str) -> Result<CommandResult> {
-    run_command("xcrun", &["simctl", "boot", device])
+    boot_simulator(device)
 }
 
 /// Shutdown a simulator
 pub fn shutdown(device: &str) -> Result<CommandResult> {
-    run_command("xcrun", &["simctl", "shutdown", device])
+    shutdown_simulator(device)
 }
 
 /// Shutdown all simulators
 pub fn shutdown_all() -> Result<CommandResult> {
-    run_command("xcrun", &["simctl", "shutdown", "all"])
+    shutdown_all_simulators()
 }
 
 /// Erase a simulator (reset to clean state)
 pub fn erase(device: &str) -> Result<CommandResult> {
-    run_command("xcrun", &["simctl", "erase", device])
-}
-
-/// Install an app on a simulator
-pub fn install_app(device: &str, app_path: &str) -> Result<CommandResult> {
-    run_command("xcrun", &["simctl", "install", device, app_path])
-}
-
-/// Launch an app on a simulator
-pub fn launch_app(device: &str, bundle_id: &str) -> Result<CommandResult> {
-    run_command("xcrun", &["simctl", "launch", device, bundle_id])
-}
-
-/// Take a screenshot
-pub fn screenshot(device: &str, output_path: &str) -> Result<CommandResult> {
-    run_command(
-        "xcrun",
-        &["simctl", "io", device, "screenshot", output_path],
-    )
-}
-
-/// Open Simulator app
-pub fn open_simulator() -> Result<CommandResult> {
-    run_command("open", &["-a", "Simulator"])
+    erase_simulator(device)
 }
 
 /// Get booted device UDID
 pub fn get_booted_device() -> Result<Option<String>> {
-    let devices = list_devices()?;
-    Ok(devices
-        .into_iter()
-        .find(|d| d.state == "Booted")
-        .map(|d| d.udid))
+    booted_simulator_id()
 }
 
 #[cfg(test)]
