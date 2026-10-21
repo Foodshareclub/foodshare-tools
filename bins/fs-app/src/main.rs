@@ -10,6 +10,18 @@ use foodshare_core::error::exit_codes;
 use owo_colors::OwoColorize;
 use std::path::PathBuf;
 
+/// The scheme used when the configuration names none.
+const DEFAULT_SCHEME: &str = "FoodShare";
+
+/// The destination used when the configuration names none.
+const DEFAULT_DESTINATION: &str = "platform=iOS Simulator,name=iPhone 17 Pro Max";
+
+/// The simulator used when the configuration names none.
+const DEFAULT_DEVICE: &str = "iPhone 17 Pro Max";
+
+/// The bundle identifier used when the configuration names none.
+const DEFAULT_BUNDLE_ID: &str = "com.flutterflow.foodshare";
+
 #[derive(Parser)]
 #[command(name = "fs-app")]
 #[command(about = "Git hooks and development tools for Foodshare iOS")]
@@ -82,9 +94,9 @@ enum Commands {
         /// Language: ios, android, both
         #[arg(long, default_value = "ios")]
         lang: String,
-        /// Enable strict mode
+        /// Enable strict mode (defaults to the configuration)
         #[arg(long)]
-        strict: bool,
+        strict: Option<bool>,
         /// Auto-fix violations
         #[arg(long)]
         fix: bool,
@@ -106,9 +118,9 @@ enum Commands {
 
     /// Check migrations status
     Migrations {
-        /// Migrations directory
-        #[arg(long, default_value = "supabase/migrations")]
-        dir: PathBuf,
+        /// Migrations directory (defaults to the configuration)
+        #[arg(long)]
+        dir: Option<PathBuf>,
     },
 
     /// Build project
@@ -185,12 +197,12 @@ enum Commands {
         remote: Option<String>,
         /// Remote URL
         url: Option<String>,
-        /// Fail fast on first error (default: true)
-        #[arg(long, default_value = "true")]
-        fail_fast: bool,
-        /// Use release build for validation
+        /// Fail fast on first error (defaults to the configuration)
         #[arg(long)]
-        release: bool,
+        fail_fast: Option<bool>,
+        /// Use release build for validation (defaults to the configuration)
+        #[arg(long)]
+        release: Option<bool>,
         /// Quick mode: skip optional checks (tests)
         #[arg(long)]
         quick: bool,
@@ -496,6 +508,55 @@ enum ProjectAction {
     },
 }
 
+/// The paths a configuration names, or the fallback when it names none.
+fn paths_or_default(configured: &[String], fallback: &str) -> Vec<String> {
+    if configured.is_empty() {
+        vec![fallback.to_string()]
+    } else {
+        configured.to_vec()
+    }
+}
+
+/// The Xcode scheme to build, from the configuration.
+fn scheme_of(config: &Config) -> String {
+    config
+        .schema
+        .general
+        .scheme
+        .clone()
+        .unwrap_or_else(|| DEFAULT_SCHEME.to_string())
+}
+
+/// The Xcode destination to build for, from the configuration.
+fn destination_of(config: &Config) -> String {
+    config
+        .schema
+        .general
+        .destination
+        .clone()
+        .unwrap_or_else(|| DEFAULT_DESTINATION.to_string())
+}
+
+/// The simulator device to use, from the configuration.
+fn device_of(config: &Config) -> String {
+    config
+        .schema
+        .general
+        .device
+        .clone()
+        .unwrap_or_else(|| DEFAULT_DEVICE.to_string())
+}
+
+/// The app bundle identifier, from the configuration.
+fn bundle_id_of(config: &Config) -> String {
+    config
+        .schema
+        .general
+        .bundle_id
+        .clone()
+        .unwrap_or_else(|| DEFAULT_BUNDLE_ID.to_string())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -504,6 +565,15 @@ fn main() -> Result<()> {
     }
 
     let config = Config::load(cli.config.as_deref().map(|p| p.to_str().unwrap()))?;
+
+    // The configuration may hold keys this build does not act on. They are
+    // reported rather than dropped in silence: a repository that writes a
+    // section the tool does not read should know that the section does
+    // nothing. The report never fails the command.
+    let report = config.unknown_keys_report();
+    if !report.is_empty() {
+        Status::warning(&report);
+    }
 
     let exit_code = match cli.command {
         Commands::Format {
@@ -528,30 +598,33 @@ fn main() -> Result<()> {
             show_diff,
             audit,
             snapshot && !no_snapshot,
+            &config,
         ),
         Commands::Lint {
             files,
             strict,
             fix,
             lang,
-        } => run_lint(&files, strict, fix, &lang),
+        } => run_lint(&files, strict, fix, &lang, &config),
         Commands::CommitMsg { file } => run_commit_msg(&file, &config),
         Commands::Secrets { all } => run_secrets(all, &config),
-        Commands::Migrations { dir } => run_migrations(&dir),
+        Commands::Migrations { dir } => run_migrations(&dir, &config),
         Commands::Build {
             configuration,
             clean,
             platform,
             bundle,
-        } => run_build(&configuration, clean, &platform, bundle),
-        Commands::Test { coverage, platform } => run_test(coverage, &platform),
+        } => run_build(&configuration, clean, &platform, bundle, &config),
+        Commands::Test { coverage, platform } => run_test(coverage, &platform, &config),
         Commands::Run {
             clean,
             logs,
             release,
             device,
-        } => run_app(clean, logs, release, device.as_deref()),
-        Commands::Simulator { action, device } => run_simulator(&action, device.as_deref()),
+        } => run_app(clean, logs, release, device.as_deref(), &config),
+        Commands::Simulator { action, device } => {
+            run_simulator(&action, device.as_deref(), &config)
+        }
         Commands::Doctor { json } => run_doctor(json),
         Commands::Project { action } => run_project(action),
         Commands::Verify => run_verify(),
@@ -571,6 +644,7 @@ fn main() -> Result<()> {
             quick,
             skip,
             detailed,
+            &config,
         ),
         Commands::Deps { action } => run_deps(action),
         Commands::Protect { action } => run_protect(action),
@@ -598,6 +672,7 @@ fn run_format(
     show_diff: bool,
     audit: bool,
     create_snapshot: bool,
+    config: &Config,
 ) -> i32 {
     let mut exit_code = exit_codes::SUCCESS;
 
@@ -647,9 +722,18 @@ fn run_format(
                 }
             }
         } else if files.is_empty() {
-            // Scan for Swift files in FoodShare directory
-            foodshare_core::file_scanner::scan_swift_files(std::path::Path::new("FoodShare"))
-                .unwrap_or_default()
+            // Scan for Swift files in the paths the configuration names.
+            // The configuration is what a repository writes; the directory
+            // that used to be hardcoded here is only the fallback.
+            let paths = paths_or_default(&config.schema.format.paths, "FoodShare");
+            let mut scanned = Vec::new();
+            for path in paths {
+                scanned.extend(
+                    foodshare_core::file_scanner::scan_swift_files(std::path::Path::new(&path))
+                        .unwrap_or_default(),
+                );
+            }
+            scanned
         } else {
             files.to_vec()
         };
@@ -748,8 +832,19 @@ fn run_legacy_format_check(files: &[PathBuf]) -> i32 {
     exit_codes::SUCCESS
 }
 
-fn run_lint(files: &[PathBuf], strict: bool, fix: bool, lang: &str) -> i32 {
+fn run_lint(
+    files: &[PathBuf],
+    strict: Option<bool>,
+    fix: bool,
+    lang: &str,
+    config: &Config,
+) -> i32 {
     let mut exit_code = exit_codes::SUCCESS;
+
+    // The flag wins over the configuration; the configuration wins over
+    // the default. A repository that writes `strict = true` in its
+    // configuration means it, whether or not the caller repeats it.
+    let strict = strict.unwrap_or(config.schema.lint.strict);
 
     if lang == "kotlin" || lang == "both" || lang == "android" {
         use fs_app::kotlin_tools;
@@ -787,25 +882,31 @@ fn run_lint(files: &[PathBuf], strict: bool, fix: bool, lang: &str) -> i32 {
             return exit_codes::FAILURE;
         }
 
-        let target_dir = if files.is_empty() {
-            PathBuf::from("FoodShare")
+        // The paths the configuration names, or the ones the caller gave.
+        let targets: Vec<PathBuf> = if files.is_empty() {
+            paths_or_default(&config.schema.lint.paths, "FoodShare")
+                .into_iter()
+                .map(PathBuf::from)
+                .collect()
         } else {
-            files[0].clone()
+            files.to_vec()
         };
 
-        match swift_tools::lint_directory(&target_dir, strict, fix) {
-            Ok(result) => {
-                if result.success {
-                    Status::success("Swift lint complete");
-                } else {
-                    Status::error("Swift lint found issues");
-                    println!("{}", result.stdout);
+        for target in &targets {
+            match swift_tools::lint_directory(target, strict, fix) {
+                Ok(result) => {
+                    if result.success {
+                        Status::success("Swift lint complete");
+                    } else {
+                        Status::error("Swift lint found issues");
+                        println!("{}", result.stdout);
+                        exit_code = exit_codes::FAILURE;
+                    }
+                }
+                Err(e) => {
+                    Status::error(&format!("Swift lint error: {}", e));
                     exit_code = exit_codes::FAILURE;
                 }
-            }
-            Err(e) => {
-                Status::error(&format!("Swift lint error: {}", e));
-                exit_code = exit_codes::FAILURE;
             }
         }
     }
@@ -851,10 +952,23 @@ fn run_secrets(all: bool, config: &Config) -> i32 {
     secrets::print_results(&matches)
 }
 
-fn run_migrations(dir: &PathBuf) -> i32 {
+fn run_migrations(dir: &Option<PathBuf>, config: &Config) -> i32 {
     use foodshare_hooks::migrations;
 
-    match migrations::check_migrations(dir, true, true) {
+    // The flag wins over the configuration, and the configuration over the
+    // path that used to be hardcoded here.
+    let dir = dir.clone().unwrap_or_else(|| {
+        PathBuf::from(
+            config
+                .schema
+                .migrations
+                .migrations_dir
+                .clone()
+                .unwrap_or_else(|| "supabase/migrations".to_string()),
+        )
+    });
+
+    match migrations::check_migrations(&dir, true, true) {
         Ok(check) => migrations::print_results(&check),
         Err(e) => {
             Status::error(&format!("Migration check error: {}", e));
@@ -863,7 +977,13 @@ fn run_migrations(dir: &PathBuf) -> i32 {
     }
 }
 
-fn run_build(configuration: &str, clean: bool, platform: &str, bundle: bool) -> i32 {
+fn run_build(
+    configuration: &str,
+    clean: bool,
+    platform: &str,
+    bundle: bool,
+    config: &Config,
+) -> i32 {
     if platform == "android" {
         use fs_app::gradle;
         let project_dir = std::path::Path::new(".");
@@ -921,9 +1041,9 @@ fn run_build(configuration: &str, clean: bool, platform: &str, bundle: bool) -> 
         Status::info(&format!("Building {} configuration...", configuration));
 
         match xcode::build(
-            "FoodShare",
+            &scheme_of(config),
             configuration,
-            "platform=iOS Simulator,name=iPhone 17 Pro Max",
+            &destination_of(config),
             clean,
         ) {
             Ok(result) => {
@@ -944,7 +1064,7 @@ fn run_build(configuration: &str, clean: bool, platform: &str, bundle: bool) -> 
     }
 }
 
-fn run_test(coverage: bool, platform: &str) -> i32 {
+fn run_test(coverage: bool, platform: &str, config: &Config) -> i32 {
     if platform == "android" {
         use fs_app::gradle;
 
@@ -971,11 +1091,7 @@ fn run_test(coverage: bool, platform: &str) -> i32 {
 
         Status::info("Running tests...");
 
-        match xcode::test(
-            "FoodShare",
-            "platform=iOS Simulator,name=iPhone 17 Pro Max",
-            coverage,
-        ) {
+        match xcode::test(&scheme_of(config), &destination_of(config), coverage) {
             Ok(result) => {
                 if result.success {
                     Status::success("Tests passed");
@@ -994,16 +1110,16 @@ fn run_test(coverage: bool, platform: &str) -> i32 {
     }
 }
 
-fn run_app(clean: bool, logs: bool, release: bool, device: Option<&str>) -> i32 {
+fn run_app(clean: bool, logs: bool, release: bool, device: Option<&str>, config: &Config) -> i32 {
     use fs_app::{simulator, xcode};
 
-    let device_name = device.unwrap_or("iPhone 17 Pro Max");
+    let device_name = device.map_or_else(|| device_of(config), str::to_string);
     let configuration = if release { "Release" } else { "Debug" };
     let destination = format!("platform=iOS Simulator,name={}", device_name);
 
     // Step 1: Build
     Status::info(&format!("Building {} configuration...", configuration));
-    match xcode::build("FoodShare", configuration, &destination, clean) {
+    match xcode::build(&scheme_of(config), configuration, &destination, clean) {
         Ok(result) => {
             if !result.success {
                 Status::error("Build failed");
@@ -1023,7 +1139,7 @@ fn run_app(clean: bool, logs: bool, release: bool, device: Option<&str>) -> i32 
         Ok(Some(udid)) => udid,
         Ok(None) => {
             Status::info(&format!("Booting {}...", device_name));
-            if let Err(e) = simulator::boot(device_name) {
+            if let Err(e) = simulator::boot(&device_name) {
                 Status::error(&format!("Failed to boot simulator: {}", e));
                 return exit_codes::FAILURE;
             }
@@ -1076,7 +1192,7 @@ fn run_app(clean: bool, logs: bool, release: bool, device: Option<&str>) -> i32 
 
     // Step 5: Launch
     Status::info("Launching app...");
-    match simulator::launch_app(&device_udid, "com.flutterflow.foodshare") {
+    match simulator::launch_app(&device_udid, &bundle_id_of(config)) {
         Ok(result) => {
             if !result.success {
                 Status::error("Launch failed");
@@ -1103,7 +1219,7 @@ fn run_app(clean: bool, logs: bool, release: bool, device: Option<&str>) -> i32 
                 "log",
                 "stream",
                 "--predicate",
-                "subsystem == \"com.flutterflow.foodshare\"",
+                &format!("subsystem == \"{}\"", bundle_id_of(config)),
                 "--level",
                 "info",
             ])
@@ -1117,7 +1233,7 @@ fn run_app(clean: bool, logs: bool, release: bool, device: Option<&str>) -> i32 
     exit_codes::SUCCESS
 }
 
-fn run_simulator(action: &str, device: Option<&str>) -> i32 {
+fn run_simulator(action: &str, device: Option<&str>, config: &Config) -> i32 {
     use fs_app::simulator;
 
     match action {
@@ -1136,8 +1252,8 @@ fn run_simulator(action: &str, device: Option<&str>) -> i32 {
             }
         },
         "boot" => {
-            let device_name = device.unwrap_or("iPhone 17 Pro Max");
-            match simulator::boot(device_name) {
+            let device_name = device.map_or_else(|| device_of(config), str::to_string);
+            match simulator::boot(&device_name) {
                 Ok(_) => {
                     Status::success(&format!("Booted {}", device_name));
                     exit_codes::SUCCESS
@@ -1236,34 +1352,56 @@ fn run_verify() -> i32 {
 fn run_pre_push(
     _remote: Option<&str>,
     _url: Option<&str>,
-    fail_fast: bool,
-    release: bool,
+    fail_fast: Option<bool>,
+    release: Option<bool>,
     quick: bool,
     skip: Vec<String>,
     detailed: bool,
+    config: &Config,
 ) -> i32 {
     use fs_app::hooks::{PrePushConfig, print_pre_push_summary, run_pre_push_checks};
 
     // Check for quick mode environment variable
     let quick_mode = quick || std::env::var("FOODSHARE_QUICK_MODE").is_ok();
 
-    let config = PrePushConfig {
+    // The flag wins over the configuration, and the configuration over the
+    // default. A repository that writes `timeout = 1800` means it.
+    let settings = &config.schema.pre_push;
+    let fail_fast = fail_fast.unwrap_or(settings.fail_fast);
+    let release = release.unwrap_or_else(|| {
+        settings
+            .configuration
+            .as_deref()
+            .is_some_and(|configuration| configuration.eq_ignore_ascii_case("release"))
+    });
+
+    let pre_push = PrePushConfig {
         fail_fast,
         release,
         quick_mode,
         skip_checks: skip,
+        timeout: settings.timeout.map(std::time::Duration::from_secs),
+        timeouts: settings
+            .timeouts
+            .iter()
+            .map(|(name, seconds)| (name.clone(), std::time::Duration::from_secs(*seconds)))
+            .collect(),
+        scheme: config.schema.general.scheme.clone(),
+        destination: config.schema.general.destination.clone(),
     };
 
     if detailed {
         println!("Pre-push configuration:");
-        println!("  fail_fast: {}", config.fail_fast);
-        println!("  release: {}", config.release);
-        println!("  quick_mode: {}", config.quick_mode);
-        println!("  skip_checks: {:?}", config.skip_checks);
+        println!("  fail_fast: {}", pre_push.fail_fast);
+        println!("  release: {}", pre_push.release);
+        println!("  quick_mode: {}", pre_push.quick_mode);
+        println!("  skip_checks: {:?}", pre_push.skip_checks);
+        println!("  timeout: {:?}", pre_push.timeout);
+        println!("  timeouts: {:?}", pre_push.timeouts);
         println!();
     }
 
-    let results = run_pre_push_checks(&config);
+    let results = run_pre_push_checks(&pre_push);
     print_pre_push_summary(&results)
 }
 

@@ -1,8 +1,14 @@
 //! Configuration schema definitions
 //!
 //! Shared configuration types for all platforms.
+//!
+//! Every field here is read by something. A section that no tool consumes
+//! is not declared here on purpose: it is reported as unknown by the
+//! loader, so a repository that writes it learns that it has no effect
+//! instead of believing that it does.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Root configuration schema
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -26,6 +32,22 @@ pub struct ConfigSchema {
     /// Secrets scanning configuration
     #[serde(default)]
     pub secrets: SecretsConfig,
+
+    /// Formatting configuration
+    #[serde(default)]
+    pub format: FormatConfig,
+
+    /// Linting configuration
+    #[serde(default)]
+    pub lint: LintConfig,
+
+    /// Migration configuration
+    #[serde(default)]
+    pub migrations: MigrationsConfig,
+
+    /// Pre-push check configuration
+    #[serde(default)]
+    pub pre_push: PrePushConfig,
 }
 
 /// General project configuration
@@ -38,6 +60,34 @@ pub struct GeneralConfig {
     /// Source directory
     #[serde(default = "default_source_dir")]
     pub source_dir: String,
+
+    /// Swift version the project builds against
+    #[serde(default)]
+    pub swift_version: Option<String>,
+
+    /// Xcode scheme to build and test
+    #[serde(default)]
+    pub scheme: Option<String>,
+
+    /// Xcode destination to build for
+    #[serde(default)]
+    pub destination: Option<String>,
+
+    /// Simulator device name
+    #[serde(default)]
+    pub device: Option<String>,
+
+    /// App bundle identifier
+    #[serde(default)]
+    pub bundle_id: Option<String>,
+
+    /// Android package name
+    #[serde(default)]
+    pub package_name: Option<String>,
+
+    /// Paths excluded from every operation
+    #[serde(default)]
+    pub exclude_paths: Vec<String>,
 }
 
 impl Default for GeneralConfig {
@@ -45,6 +95,13 @@ impl Default for GeneralConfig {
         Self {
             project_name: default_project_name(),
             source_dir: default_source_dir(),
+            swift_version: None,
+            scheme: None,
+            destination: None,
+            device: None,
+            bundle_id: None,
+            package_name: None,
+            exclude_paths: Vec::new(),
         }
     }
 }
@@ -129,6 +186,10 @@ pub struct AnalyzeConfig {
     /// Maximum force unwraps (Swift) or nullable bangs (Kotlin) before warning
     #[serde(default = "default_threshold_force")]
     pub threshold_force: usize,
+
+    /// Paths to analyze
+    #[serde(default)]
+    pub paths: Vec<String>,
 }
 
 impl Default for AnalyzeConfig {
@@ -137,6 +198,7 @@ impl Default for AnalyzeConfig {
             threshold_todos: default_threshold_todos(),
             threshold_fixmes: default_threshold_fixmes(),
             threshold_force: default_threshold_force(),
+            paths: Vec::new(),
         }
     }
 }
@@ -177,7 +239,18 @@ fn default_coverage_threshold() -> u8 {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SecretsConfig {
     /// Additional patterns to check
-    #[serde(default)]
+    ///
+    /// The alias is what the repositories write. Every `.foodshare-hooks.toml`
+    /// in the estate declares its extra patterns as `patterns = [...]`, and
+    /// that key was silently dropped: serde ignores a field the struct does
+    /// not declare, and nothing in the loader complained. A repository
+    /// believed it had thirteen extra patterns and had none. The alias makes
+    /// the declaration mean what it says.
+    ///
+    /// The patterns are raw regular expressions matched against a line, so
+    /// they have to carry their own context. A bare keyword matches every
+    /// line that mentions the word.
+    #[serde(default, alias = "patterns")]
     pub additional_patterns: Vec<String>,
 
     /// Patterns to exclude from scanning
@@ -187,4 +260,75 @@ pub struct SecretsConfig {
     /// Files to exclude from scanning
     #[serde(default)]
     pub exclude_files: Vec<String>,
+}
+
+/// Formatting configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FormatConfig {
+    /// Stage the files that were formatted
+    #[serde(default)]
+    pub stage_fixed: bool,
+
+    /// Paths to format
+    #[serde(default)]
+    pub paths: Vec<String>,
+}
+
+/// Linting configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LintConfig {
+    /// Treat warnings as failures
+    #[serde(default)]
+    pub strict: bool,
+
+    /// Reporter format
+    #[serde(default)]
+    pub reporter: Option<String>,
+
+    /// Paths to lint
+    #[serde(default)]
+    pub paths: Vec<String>,
+}
+
+/// Migration configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MigrationsConfig {
+    /// Directory the migration files live in
+    #[serde(default)]
+    pub migrations_dir: Option<String>,
+}
+
+/// Pre-push check configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrePushConfig {
+    /// Stop on the first failure
+    #[serde(default = "default_true")]
+    pub fail_fast: bool,
+
+    /// Build configuration the checks use
+    #[serde(default)]
+    pub configuration: Option<String>,
+
+    /// Timeout for a check, in seconds
+    #[serde(default)]
+    pub timeout: Option<u64>,
+
+    /// Timeout for a named check, in seconds
+    ///
+    /// The names are the checks the runner knows: `lint`, `build` and
+    /// `test`. A name that is not one of those is reported as unknown
+    /// rather than quietly ignored.
+    #[serde(default)]
+    pub timeouts: BTreeMap<String, u64>,
+}
+
+impl Default for PrePushConfig {
+    fn default() -> Self {
+        Self {
+            fail_fast: true,
+            configuration: None,
+            timeout: None,
+            timeouts: BTreeMap::new(),
+        }
+    }
 }

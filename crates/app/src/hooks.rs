@@ -15,7 +15,7 @@ use foodshare_core::git::GitRepo;
 use foodshare_core::process::run_command;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -548,6 +548,22 @@ pub struct PrePushConfig {
     pub quick_mode: bool,
     /// Checks to skip
     pub skip_checks: Vec<String>,
+    /// The deadline for a check that does not name one
+    ///
+    /// `None` means no deadline: the check runs until it finishes. A
+    /// check that hangs is a worse failure than a check that fails, so a
+    /// repository that wants a deadline writes one.
+    pub timeout: Option<Duration>,
+    /// The deadline for a named check
+    ///
+    /// The name is the check's name: `lint`, `build` or `test`. A name
+    /// that is not one of those is reported, because a deadline that
+    /// applies to nothing is a deadline that reads as protection.
+    pub timeouts: BTreeMap<String, Duration>,
+    /// The Xcode scheme to build, when the configuration names one
+    pub scheme: Option<String>,
+    /// The Xcode destination to build for, when the configuration names one
+    pub destination: Option<String>,
 }
 
 impl Default for PrePushConfig {
@@ -557,7 +573,36 @@ impl Default for PrePushConfig {
             release: false,
             quick_mode: false,
             skip_checks: Vec::new(),
+            timeout: None,
+            timeouts: BTreeMap::new(),
+            scheme: None,
+            destination: None,
         }
+    }
+}
+
+impl PrePushConfig {
+    /// The deadline that applies to a check.
+    ///
+    /// A deadline for the check itself wins over the general one.
+    #[must_use]
+    pub fn timeout_for(&self, check: &str) -> Option<Duration> {
+        self.timeouts.get(check).copied().or(self.timeout)
+    }
+
+    /// The names of the deadlines that name a check that does not exist.
+    ///
+    /// The checks the runner knows are `lint`, `build` and `test`. A
+    /// deadline for anything else does nothing, and a repository that
+    /// believes it set one should be told.
+    #[must_use]
+    pub fn unknown_timeouts(&self) -> Vec<&str> {
+        const KNOWN: [&str; 3] = ["lint", "build", "test"];
+        self.timeouts
+            .keys()
+            .filter(|name| !KNOWN.contains(&name.as_str()))
+            .map(String::as_str)
+            .collect()
     }
 }
 
@@ -569,6 +614,19 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
     println!("{}", "Pre-push Validation".bold());
     println!("{}", "═".repeat(50));
     println!();
+
+    // A deadline for a check that does not exist protects nothing. The
+    // repository is told, because a deadline it believes in is worse than
+    // no deadline at all.
+    let unknown = config.unknown_timeouts();
+    if !unknown.is_empty() {
+        println!(
+            "  {} deadline(s) for checks that do not exist: {}",
+            "⚠".yellow(),
+            unknown.join(", ")
+        );
+        println!();
+    }
 
     // Define checks as a struct-based approach for type safety
     struct CheckDef {
@@ -647,7 +705,6 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
             _ => Ok(()),
         };
         let duration = start.elapsed();
-
         let success = check_result.is_ok();
         let output = check_result.err();
 
@@ -707,12 +764,14 @@ pub fn run_pre_push_checks(config: &PrePushConfig) -> Vec<PrePushCheckResult> {
     results
 }
 
-fn check_lint(_config: &PrePushConfig) -> std::result::Result<(), String> {
+fn check_lint(config: &PrePushConfig) -> std::result::Result<(), String> {
     if !swift_tools::has_swiftlint() {
         return Ok(()); // Skip if not installed
     }
 
-    let result = swift_tools::lint(&["FoodShare"], false, false).map_err(|e| e.to_string())?;
+    let result =
+        swift_tools::lint_with_timeout(&["FoodShare"], false, false, config.timeout_for("lint"))
+            .map_err(|e| e.to_string())?;
 
     if result.success {
         Ok(())
@@ -724,11 +783,12 @@ fn check_lint(_config: &PrePushConfig) -> std::result::Result<(), String> {
 fn check_build(config: &PrePushConfig) -> std::result::Result<(), String> {
     let configuration = if config.release { "Release" } else { "Debug" };
 
-    let result = crate::xcode::build(
-        "FoodShare",
+    let result = crate::xcode::build_with_timeout(
+        &scheme_of(config),
         configuration,
-        "platform=iOS Simulator,name=iPhone 17 Pro Max",
+        &destination_of(config),
         false,
+        config.timeout_for("build"),
     )
     .map_err(|e| e.to_string())?;
 
@@ -739,11 +799,12 @@ fn check_build(config: &PrePushConfig) -> std::result::Result<(), String> {
     }
 }
 
-fn check_tests(_config: &PrePushConfig) -> std::result::Result<(), String> {
-    let result = crate::xcode::test(
-        "FoodShare",
-        "platform=iOS Simulator,name=iPhone 17 Pro Max",
+fn check_tests(config: &PrePushConfig) -> std::result::Result<(), String> {
+    let result = crate::xcode::test_with_timeout(
+        &scheme_of(config),
+        &destination_of(config),
         false,
+        config.timeout_for("test"),
     )
     .map_err(|e| e.to_string())?;
 
@@ -753,6 +814,28 @@ fn check_tests(_config: &PrePushConfig) -> std::result::Result<(), String> {
         Err(result.stderr)
     }
 }
+
+/// The Xcode scheme the checks build, from the configuration.
+fn scheme_of(config: &PrePushConfig) -> String {
+    config
+        .scheme
+        .clone()
+        .unwrap_or_else(|| DEFAULT_SCHEME.to_string())
+}
+
+/// The Xcode destination the checks build for, from the configuration.
+fn destination_of(config: &PrePushConfig) -> String {
+    config
+        .destination
+        .clone()
+        .unwrap_or_else(|| DEFAULT_DESTINATION.to_string())
+}
+
+/// The scheme used when the configuration names none.
+const DEFAULT_SCHEME: &str = "FoodShare";
+
+/// The destination used when the configuration names none.
+const DEFAULT_DESTINATION: &str = "platform=iOS Simulator,name=iPhone 17 Pro Max";
 
 /// Print pre-push summary
 pub fn print_pre_push_summary(results: &[PrePushCheckResult]) -> i32 {

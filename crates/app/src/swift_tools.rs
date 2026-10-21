@@ -3,8 +3,11 @@
 //! Provides wrappers for Swift development tools.
 
 use foodshare_core::error::Result;
-use foodshare_core::process::{CommandResult, command_exists, run_command, run_command_in_dir};
+use foodshare_core::process::{
+    CommandResult, command_exists, run_command, run_command_in_dir, run_command_with_timeout,
+};
 use std::path::Path;
+use std::time::Duration;
 
 /// Check if swiftformat is available
 pub fn has_swiftformat() -> bool {
@@ -41,6 +44,19 @@ pub fn format_directory(dir: &Path, check_only: bool) -> Result<CommandResult> {
 
 /// Lint Swift files with swiftlint
 pub fn lint(files: &[&str], strict: bool, fix: bool) -> Result<CommandResult> {
+    lint_with_timeout(files, strict, fix, None)
+}
+
+/// Lint Swift files with swiftlint, giving up after `timeout`.
+///
+/// A linter that hangs is a worse failure than a linter that fails: the
+/// caller waits forever and learns nothing.
+pub fn lint_with_timeout(
+    files: &[&str],
+    strict: bool,
+    fix: bool,
+    timeout: Option<Duration>,
+) -> Result<CommandResult> {
     let mut args = vec!["lint"];
 
     if strict {
@@ -55,7 +71,10 @@ pub fn lint(files: &[&str], strict: bool, fix: bool) -> Result<CommandResult> {
         args.push(file);
     }
 
-    run_command("swiftlint", &args)
+    match timeout {
+        Some(timeout) => run_command_with_timeout("swiftlint", &args, timeout),
+        None => run_command("swiftlint", &args),
+    }
 }
 
 /// Lint all Swift files in a directory

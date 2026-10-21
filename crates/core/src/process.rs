@@ -6,9 +6,11 @@
 //! - Environment variables
 //! - Streaming output
 
-use crate::error::{Error, Result};
+use crate::error::{Error, ErrorCode, Result};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::time::{Duration, Instant};
 use which::which as which_binary;
 
 /// Result of a command execution
@@ -72,6 +74,130 @@ pub fn run_command_in_dir(program: &str, args: &[&str], dir: &Path) -> Result<Co
         .map_err(|e| Error::process(format!("Failed to execute {program}: {e}")))?;
 
     Ok(CommandResult::from_output(output))
+}
+
+/// How often the timeout watcher looks to see whether the child has finished.
+///
+/// The child is polled rather than watched on a separate thread because the
+/// watcher needs the child handle to be able to kill it, and a handle cannot
+/// be shared across a thread boundary without a platform-specific API.
+const TIMEOUT_POLL_INTERVAL: Duration = Duration::from_millis(20);
+
+/// Run a command and capture output, giving up after `timeout`.
+///
+/// A command that hangs is a worse failure than a command that fails: the
+/// caller waits forever and learns nothing. Here the child is killed when
+/// the deadline passes, and the error names the program and the deadline.
+///
+/// # Errors
+///
+/// Returns an error when the program cannot be started, when the wait
+/// fails, or when the deadline passes before the program finishes.
+pub fn run_command_with_timeout(
+    program: &str,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<CommandResult> {
+    let mut command = Command::new(program);
+    command.args(args);
+    run_spawned_with_timeout(command, program, args, timeout)
+}
+
+/// Run a command in a specific directory, giving up after `timeout`.
+///
+/// See [`run_command_with_timeout`].
+///
+/// # Errors
+///
+/// Returns an error when the program cannot be started, when the wait
+/// fails, or when the deadline passes before the program finishes.
+pub fn run_command_in_dir_with_timeout(
+    program: &str,
+    args: &[&str],
+    dir: &Path,
+    timeout: Duration,
+) -> Result<CommandResult> {
+    let mut command = Command::new(program);
+    command.args(args).current_dir(dir);
+    run_spawned_with_timeout(command, program, args, timeout)
+}
+
+/// Spawn a prepared command and wait for it, up to a deadline.
+///
+/// # Errors
+///
+/// Returns an error when the program cannot be started, when the wait
+/// fails, or when the deadline passes before the program finishes.
+fn run_spawned_with_timeout(
+    mut command: Command,
+    program: &str,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<CommandResult> {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| Error::process(format!("Failed to execute {program}: {e}")))?;
+
+    // The pipes are drained on their own threads. A child that writes more
+    // than one pipe buffer holds would block on the write while we wait for
+    // it to exit, and the two would wait for each other.
+    let stdout = child.stdout.take().map(read_pipe);
+    let stderr = child.stderr.take().map(read_pipe);
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {}
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(Error::process(format!("Failed to wait for {program}: {e}")));
+            }
+        }
+
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            // The readers are joined so the pipes are closed before the
+            // error is returned; a detached reader would keep the child's
+            // output alive for as long as the process lives.
+            let _ = stdout.map(|handle| handle.join());
+            let _ = stderr.map(|handle| handle.join());
+            return Err(Error::new(
+                ErrorCode::ProcessTimeout,
+                format!("{program} did not finish within {}s", timeout.as_secs()),
+            )
+            .with_context(format!("The command was: {program} {}", args.join(" ")))
+            .with_suggestion(
+                "Raise the timeout for this check, or run the command by hand to see what it waits for.",
+            ));
+        }
+
+        std::thread::sleep(TIMEOUT_POLL_INTERVAL);
+    };
+
+    Ok(CommandResult {
+        success: status.success(),
+        exit_code: status.code().unwrap_or(-1),
+        stdout: stdout
+            .map(|handle| handle.join().unwrap_or_default())
+            .unwrap_or_default(),
+        stderr: stderr
+            .map(|handle| handle.join().unwrap_or_default())
+            .unwrap_or_default(),
+    })
+}
+
+/// Read a pipe to the end on its own thread.
+fn read_pipe(mut pipe: impl Read + Send + 'static) -> std::thread::JoinHandle<String> {
+    std::thread::spawn(move || {
+        let mut buffer = String::new();
+        let _ = pipe.read_to_string(&mut buffer);
+        buffer
+    })
 }
 
 /// Run a command with environment variables
@@ -252,5 +378,48 @@ mod tests {
             stderr: "only stderr".to_string(),
         };
         assert_eq!(result.combined_output(), "only stderr");
+    }
+
+    #[test]
+    fn test_run_command_with_timeout_returns_output() {
+        let result = run_command_with_timeout("echo", &["hello"], Duration::from_secs(10))
+            .expect("the command should have finished");
+        assert!(result.success);
+        assert!(result.stdout.contains("hello"));
+    }
+
+    #[test]
+    fn test_run_command_with_timeout_gives_up() {
+        let started = Instant::now();
+        let error = run_command_with_timeout("sleep", &["30"], Duration::from_millis(200))
+            .expect_err("the command should have been given up on");
+        assert_eq!(error.code, ErrorCode::ProcessTimeout);
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the wait should end at the deadline, not at the command's own"
+        );
+    }
+
+    #[test]
+    fn test_run_command_in_dir_with_timeout_returns_output() {
+        let result = run_command_in_dir_with_timeout(
+            "echo",
+            &["in-dir"],
+            Path::new("."),
+            Duration::from_secs(10),
+        )
+        .expect("the command should have finished");
+        assert!(result.success);
+        assert!(result.stdout.contains("in-dir"));
+    }
+
+    #[test]
+    fn test_run_command_with_timeout_reports_a_failing_command() {
+        // A command that fails is a result, not an error: the caller wants
+        // to know the exit code, not to have it swallowed.
+        let result = run_command_with_timeout("false", &[], Duration::from_secs(10))
+            .expect("the command should have run");
+        assert!(!result.success);
+        assert_ne!(result.exit_code, 0);
     }
 }

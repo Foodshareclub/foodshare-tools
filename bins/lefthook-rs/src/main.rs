@@ -83,6 +83,15 @@ fn main() -> Result<()> {
     // foodshare-hooks.toml; fall back to defaults when absent.
     let config = Config::load(None)?;
 
+    // The configuration may hold keys this build does not act on. They are
+    // reported rather than dropped in silence: a repository that writes a
+    // section the tool does not read should know that the section does
+    // nothing. The report never fails the command.
+    let report = config.unknown_keys_report();
+    if !report.is_empty() {
+        Status::warning(&report);
+    }
+
     let result = match cli.command {
         Commands::Security { files } => run_security(&files, &config),
         Commands::ConventionalCommit { message_file } => {
@@ -138,19 +147,22 @@ fn run_conventional_commit(message_file: &str, config: &Config) -> i32 {
     }
 }
 
+/// The branches a push may not reach without a deliberate act.
+///
+/// The list is the estate's. A repository that needs another branch in it
+/// changes this constant; the guard does not guess.
+const PROTECTED_BRANCHES: [&str; 4] = ["main", "master", "production", "staging"];
+
 fn run_protected_branch() -> i32 {
     use foodshare_core::git::GitRepo;
 
-    let protected = ["main", "master", "production", "staging"];
-
     match GitRepo::open_current().and_then(|r| r.current_branch()) {
         Ok(branch) => {
-            if protected.contains(&branch.as_str()) {
+            if PROTECTED_BRANCHES.contains(&branch.as_str()) {
                 Status::warning(&format!(
                     "You are on protected branch '{}'. Are you sure you want to push?",
                     branch
                 ));
-                // Return success but with warning - actual blocking should be in hook config
                 exit_codes::SUCCESS
             } else {
                 exit_codes::SUCCESS
