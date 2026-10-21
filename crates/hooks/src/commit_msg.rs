@@ -31,7 +31,7 @@ pub fn validate_commit_message(
     if commit_msg.is_empty() {
         return Ok(ValidationResult {
             valid: false,
-            exit_code: exit_codes::FAILURE,
+            exit_code: exit_codes::VALIDATION_ERROR,
             message: Some("Commit message is empty".to_string()),
         });
     }
@@ -65,7 +65,7 @@ pub fn validate_commit_message(
     if !regex.is_match(subject) {
         return Ok(ValidationResult {
             valid: false,
-            exit_code: exit_codes::FAILURE,
+            exit_code: exit_codes::VALIDATION_ERROR,
             message: Some(format!("Invalid commit message format: {}", subject)),
         });
     }
@@ -81,7 +81,7 @@ pub fn validate_commit_message(
     if description.len() < config.min_length {
         return Ok(ValidationResult {
             valid: false,
-            exit_code: exit_codes::FAILURE,
+            exit_code: exit_codes::VALIDATION_ERROR,
             message: Some(format!(
                 "Commit description is too short ({} chars, minimum {})",
                 description.len(),

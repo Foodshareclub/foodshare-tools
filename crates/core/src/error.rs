@@ -174,6 +174,56 @@ impl Error {
         }
     }
 
+    /// The exit code that belongs to this error.
+    ///
+    /// The codes are the ones [`exit_codes`] names: a validation failure
+    /// is 2, a configuration failure is 3, a git failure is 4, a security
+    /// failure is 5, a timeout is 124 and a missing command is 127. A
+    /// caller that can tell those apart can act on them: a pipeline that
+    /// knows a secret leaked can do something different from one that
+    /// knows a message was too long.
+    #[must_use]
+    pub fn exit_code(&self) -> i32 {
+        match self.code {
+            ErrorCode::ValidationError
+            | ErrorCode::InvalidInput
+            | ErrorCode::InvalidFormat
+            | ErrorCode::ConstraintViolation => exit_codes::VALIDATION_ERROR,
+
+            ErrorCode::ConfigError
+            | ErrorCode::ConfigNotFound
+            | ErrorCode::ConfigParseError
+            | ErrorCode::ConfigValidationError
+            | ErrorCode::InvalidConfigValue => exit_codes::CONFIG_ERROR,
+
+            ErrorCode::GitError
+            | ErrorCode::NotAGitRepo
+            | ErrorCode::GitCommandFailed
+            | ErrorCode::NoStagedFiles
+            | ErrorCode::BranchNotFound
+            | ErrorCode::MergeConflict => exit_codes::GIT_ERROR,
+
+            ErrorCode::SecurityError
+            | ErrorCode::SecretDetected
+            | ErrorCode::UnauthorizedAccess => exit_codes::SECURITY_ERROR,
+
+            ErrorCode::Timeout | ErrorCode::ProcessTimeout => exit_codes::TIMEOUT,
+
+            ErrorCode::CommandNotFound => exit_codes::COMMAND_NOT_FOUND,
+
+            _ => exit_codes::FAILURE,
+        }
+    }
+
+    /// The message, with the code in front of it.
+    ///
+    /// The code is the part a machine can read and the message is the
+    /// part a person can act on, so they belong together.
+    #[must_use]
+    pub fn coded_message(&self) -> String {
+        format!("{}: {}", self.code, self.message)
+    }
+
     /// Add context to the error
     pub fn with_context(mut self, context: impl Into<String>) -> Self {
         self.context = Some(context.into());
@@ -282,6 +332,14 @@ impl Error {
         )
         .with_suggestion("Remove the secret and use environment variables or a secrets manager")
     }
+}
+
+/// The exit code for an error, when the error is not a `foodshare_core`
+/// error.
+pub fn exit_code_of(error: &anyhow::Error) -> i32 {
+    error
+        .downcast_ref::<Error>()
+        .map_or(exit_codes::FAILURE, Error::exit_code)
 }
 
 /// Serializable error report for logging and API responses
@@ -422,5 +480,62 @@ mod tests {
 
         assert!(json.contains("E4000"));
         assert!(json.contains("Git"));
+    }
+
+    #[test]
+    fn test_a_validation_failure_exits_with_the_validation_code() {
+        let err = Error::validation("the message is too long");
+        assert_eq!(err.exit_code(), exit_codes::VALIDATION_ERROR);
+    }
+
+    #[test]
+    fn test_a_configuration_failure_exits_with_the_configuration_code() {
+        let err = Error::config("the file does not parse");
+        assert_eq!(err.exit_code(), exit_codes::CONFIG_ERROR);
+    }
+
+    #[test]
+    fn test_a_git_failure_exits_with_the_git_code() {
+        let err = Error::not_a_git_repo();
+        assert_eq!(err.exit_code(), exit_codes::GIT_ERROR);
+    }
+
+    #[test]
+    fn test_a_secret_exits_with_the_security_code() {
+        let err = Error::secret_detected("config.toml", 12);
+        assert_eq!(err.exit_code(), exit_codes::SECURITY_ERROR);
+    }
+
+    #[test]
+    fn test_a_timeout_exits_with_the_timeout_code() {
+        let err = Error::new(ErrorCode::ProcessTimeout, "the build did not finish");
+        assert_eq!(err.exit_code(), exit_codes::TIMEOUT);
+    }
+
+    #[test]
+    fn test_a_missing_command_exits_with_the_command_code() {
+        let err = Error::command_not_found("swiftlint");
+        assert_eq!(err.exit_code(), exit_codes::COMMAND_NOT_FOUND);
+    }
+
+    #[test]
+    fn test_an_unclassified_failure_exits_with_the_general_code() {
+        let err = Error::new(ErrorCode::Internal, "something went wrong");
+        assert_eq!(err.exit_code(), exit_codes::FAILURE);
+    }
+
+    #[test]
+    fn test_the_coded_message_names_the_code() {
+        let err = Error::security("a token was found");
+        assert_eq!(err.coded_message(), "E7000: a token was found");
+    }
+
+    #[test]
+    fn test_the_exit_code_of_an_anyhow_error() {
+        let err: anyhow::Error = Error::validation("nope").into();
+        assert_eq!(exit_code_of(&err), exit_codes::VALIDATION_ERROR);
+
+        let other: anyhow::Error = anyhow::anyhow!("something else");
+        assert_eq!(exit_code_of(&other), exit_codes::FAILURE);
     }
 }

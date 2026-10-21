@@ -141,3 +141,57 @@ fn a_bundle_under_the_threshold_lets_the_commit_through() {
         "a bundle under the threshold should be allowed"
     );
 }
+
+#[test]
+fn a_secret_exits_with_the_security_code() {
+    // A secret that was found is a security failure, not a general one.
+    // A pipeline that can tell the two apart can treat them differently.
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    repository_at(dir.path(), "feature/a-change");
+
+    std::fs::write(
+        dir.path().join("config.txt"),
+        "HOOK_SECRET=whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw\n",
+    )
+    .expect("the file should be written");
+
+    let git = |args: &[&str]| {
+        let _ = StdCommand::new("git")
+            .args(args)
+            .current_dir(dir.path())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    };
+    git(&["add", "config.txt"]);
+
+    let mut command = Command::cargo_bin("lefthook-rs").expect("the binary should be built");
+    command.current_dir(dir.path()).arg("security");
+
+    let output = command.output().expect("the command should run");
+    assert_eq!(
+        output.status.code(),
+        Some(5),
+        "a secret should exit with the security code"
+    );
+}
+
+#[test]
+fn a_commit_message_that_does_not_pass_exits_with_the_validation_code() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let message = dir.path().join("COMMIT_MSG");
+    std::fs::write(&message, "this is not a conventional commit\n")
+        .expect("the file should be written");
+
+    let mut command = Command::cargo_bin("lefthook-rs").expect("the binary should be built");
+    command
+        .current_dir(dir.path())
+        .args(["conventional-commit", message.to_str().expect("a path")]);
+
+    let output = command.output().expect("the command should run");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "a message that does not pass should exit with the validation code"
+    );
+}

@@ -1511,7 +1511,6 @@ pub fn print_results_with_stats(matches: &[SecretMatch], stats: Option<&ScanStat
         matches.len()
     );
     eprintln!();
-
     for m in matches {
         let severity_str = match m.severity {
             Severity::Critical => "CRITICAL".red().bold().to_string(),
@@ -1530,12 +1529,10 @@ pub fn print_results_with_stats(matches: &[SecretMatch], stats: Option<&ScanStat
         eprintln!();
     }
 
-    exit_codes::FAILURE
+    // A secret that was found is a security failure, not a general one.
+    // A pipeline that can tell the two apart can treat them differently.
+    exit_codes::SECURITY_ERROR
 }
-
-// =============================================================================
-// Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {

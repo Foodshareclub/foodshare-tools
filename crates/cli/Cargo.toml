@@ -9,6 +9,7 @@ description = "CLI utilities for Foodshare development tools"
 
 [dependencies]
 foodshare-core.workspace = true
+anyhow.workspace = true
 clap.workspace = true
 owo-colors.workspace = true
 indicatif.workspace = true

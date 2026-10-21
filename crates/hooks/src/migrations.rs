@@ -144,7 +144,9 @@ pub fn print_results(check: &MigrationsCheck) -> i32 {
     }
 
     if has_issues {
-        exit_codes::FAILURE
+        // A migration that was not committed is a validation failure, and
+        // a caller that can tell it from a general failure can act on it.
+        exit_codes::VALIDATION_ERROR
     } else {
         exit_codes::SUCCESS
     }

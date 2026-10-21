@@ -935,8 +935,10 @@ fn run_commit_msg(file: &PathBuf, config: &Config) -> i32 {
             result.exit_code
         }
         Err(e) => {
-            Status::error(&format!("Validation error: {}", e));
-            exit_codes::FAILURE
+            // The error carries its code, and the code says what kind of
+            // failure this was.
+            Status::failure_of(&e);
+            foodshare_core::error::exit_code_of(&e)
         }
     }
 }
@@ -955,8 +957,8 @@ fn run_secrets(all: bool, config: &Config) -> i32 {
                 // nothing staged. The difference is the difference between
                 // "there is nothing to find" and "we could not look", and
                 // a scan that never looked must not report a clean bill.
-                Status::error(&format!("Git error: {e}"));
-                return exit_codes::GIT_ERROR;
+                Status::failure(&e);
+                return e.exit_code();
             }
         }
     };
@@ -984,8 +986,8 @@ fn run_migrations(dir: &Option<PathBuf>, config: &Config) -> i32 {
     match migrations::check_migrations(&dir, true, true) {
         Ok(check) => migrations::print_results(&check),
         Err(e) => {
-            Status::error(&format!("Migration check error: {}", e));
-            exit_codes::FAILURE
+            Status::failure_of(&e);
+            foodshare_core::error::exit_code_of(&e)
         }
     }
 }

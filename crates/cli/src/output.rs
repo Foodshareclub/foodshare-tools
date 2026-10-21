@@ -18,6 +18,27 @@ impl Status {
         eprintln!("{} {}", "✗".red(), message);
     }
 
+    /// Print an error with its code.
+    ///
+    /// The code is what a caller reads, so it is on the line with the
+    /// message. A caller that has to guess which failure it is looking at
+    /// is a caller that cannot act on it.
+    pub fn failure(error: &foodshare_core::error::Error) {
+        eprintln!("{} {}", "✗".red(), error.coded_message());
+        if let Some(suggestion) = &error.suggestion {
+            eprintln!("  {}", suggestion.dimmed());
+        }
+    }
+
+    /// Print an error with its code, from an error of any kind.
+    pub fn failure_of(error: &anyhow::Error) {
+        if let Some(error) = error.downcast_ref::<foodshare_core::error::Error>() {
+            Self::failure(error);
+        } else {
+            Self::error(&error.to_string());
+        }
+    }
+
     /// Print a warning message
     pub fn warning(message: &str) {
         eprintln!("{} {}", "⚠".yellow(), message);

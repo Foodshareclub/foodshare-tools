@@ -955,6 +955,7 @@ dependencies = [
 name = "foodshare-cli"
 version = "1.4.0"
 dependencies = [
+ "anyhow",
  "clap",
  "console 0.15.11",
  "foodshare-core",

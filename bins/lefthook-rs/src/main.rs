@@ -122,8 +122,8 @@ fn run_security(files: &[String], config: &Config) -> i32 {
                 // nothing staged. The difference is the difference between
                 // "there is nothing to find" and "we could not look", and
                 // a scan that never looked must not report a clean bill.
-                Status::error(&format!("Git error: {e}"));
-                return exit_codes::GIT_ERROR;
+                Status::failure(&e);
+                return e.exit_code();
             }
         }
     } else {
@@ -152,8 +152,10 @@ fn run_conventional_commit(message_file: &str, config: &Config) -> i32 {
             result.exit_code
         }
         Err(e) => {
-            Status::error(&format!("Validation error: {}", e));
-            exit_codes::FAILURE
+            // The error carries its code, and the code says what kind of
+            // failure this was.
+            Status::failure_of(&e);
+            foodshare_core::error::exit_code_of(&e)
         }
     }
 }
@@ -183,8 +185,8 @@ fn run_protected_branch() -> i32 {
             }
         }
         Err(e) => {
-            Status::error(&format!("Git error: {}", e));
-            exit_codes::GIT_ERROR
+            Status::failure(&e);
+            e.exit_code()
         }
     }
 }
@@ -218,8 +220,8 @@ fn run_large_files(max_size_kb: u64) -> i32 {
             }
         }
         Err(e) => {
-            Status::error(&format!("Git error: {}", e));
-            exit_codes::FAILURE
+            Status::failure(&e);
+            e.exit_code()
         }
     }
 }
