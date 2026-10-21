@@ -55,6 +55,7 @@ foodshare-tools/
 │   ├── image/                 # Image processing (JPEG, PNG, WebP, GIF)
 │   ├── swift-toolchain/       # Swift version management
 │   ├── api-client/            # API client utilities
+│   ├── quadlet/                # Quadlet validation for Podman units
 │   └── motherduck-sync/       # MotherDuck data sync (placeholder submodule)
 ├── bins/                      # Binary crates (14)
 │   ├── fs-app/         # Cross-platform CLI

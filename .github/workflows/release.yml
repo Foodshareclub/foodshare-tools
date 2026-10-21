@@ -76,6 +76,7 @@ jobs:
                      target/${{ matrix.target }}/release/fs-image \
                      target/${{ matrix.target }}/release/foodshare-i18n \
                      target/${{ matrix.target }}/release/foodshare-swift \
+                     target/${{ matrix.target }}/release/foodshare-quadlet \
                      target/${{ matrix.target }}/release/fs-auto \
                      target/${{ matrix.target }}/release/fs-tui \
                      target/${{ matrix.target }}/release/fs-maestro \

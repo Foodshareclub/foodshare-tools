@@ -25,3 +25,4 @@ This directory contains documentation for each crate in the workspace.
 ## Utilities
 
 - [motherduck-sync.md](./motherduck-sync.md) - Database synchronization (placeholder submodule)
+- [quadlet.md](./quadlet.md) - Quadlet unit validation for Podman

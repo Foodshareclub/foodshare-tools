@@ -62,3 +62,4 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | `fs-build`          | Cross-platform build engine: Swift core, iOS, Android                 |
 | `fs-sim`            | Simulator runner: boot, build, install, launch, screenshot            |
 | `fs-xccloud`        | Xcode Cloud builds, logs and diagnostics                             |
+| `foodshare-quadlet` | Quadlet unit validation for Podman                                  |

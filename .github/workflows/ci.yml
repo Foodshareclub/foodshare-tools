@@ -159,6 +159,27 @@ jobs:
           fi
           cargo build --profile release-service --bin fs-orchestrator --target ${{ matrix.target }}
 
+      # A binary that cannot print its own help is broken, and the
+      # artefacts are published without anyone running them. Every binary
+      # that ships is started here, on every runner that can run it.
+      #
+      # The cross-compiled target cannot: the runner is not that
+      # architecture.
+      - name: The binaries start
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        run: |
+          for bin in fs-app fs-auto fs-build fs-image fs-maestro fs-sim \
+                     fs-tui fs-verify fs-wasm fs-xccloud \
+                     foodshare-i18n foodshare-quadlet foodshare-swift \
+                     lefthook-rs; do
+            printf '%-20s' "$bin"
+            ./target/${{ matrix.target }}/release/$bin --help > /dev/null
+            echo "ok"
+          done
+          printf '%-20s' "fs-orchestrator"
+          ./target/${{ matrix.target }}/release-service/fs-orchestrator --help > /dev/null
+          echo "ok"
+
       - uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.target }}
@@ -168,6 +189,7 @@ jobs:
             target/${{ matrix.target }}/release/fs-image
             target/${{ matrix.target }}/release/foodshare-i18n
             target/${{ matrix.target }}/release/foodshare-swift
+            target/${{ matrix.target }}/release/foodshare-quadlet
             target/${{ matrix.target }}/release/fs-auto
             target/${{ matrix.target }}/release/fs-tui
             target/${{ matrix.target }}/release/fs-maestro
