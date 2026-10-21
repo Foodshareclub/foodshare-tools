@@ -13,6 +13,13 @@ This directory contains documentation for each crate in the workspace.
 - [hooks.md](./hooks.md) - Git hook implementations
 - [cli.md](./cli.md) - CLI utilities
 - [telemetry.md](./telemetry.md) - Observability
+- [orchestrator.md](./orchestrator.md) - Workspace build and verification orchestration
+- [maestro.md](./maestro.md) - Maestro E2E flows, syntax checks, device matrix
+- [device.md](./device.md) - iOS simulators and Android emulators
+- [api-client.md](./api-client.md) - HTTP client for the backend services
+- [swift-toolchain.md](./swift-toolchain.md) - Swift version management
+- [wasm.md](./wasm.md) - WebAssembly builds for the published crates
+- [xccloud.md](./xccloud.md) - Xcode Cloud over the App Store Connect API
 
 ## Published Libraries
 
