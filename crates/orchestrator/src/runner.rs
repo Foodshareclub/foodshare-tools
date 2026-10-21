@@ -251,14 +251,33 @@ async fn wait_for(
 async fn stop_process(child: &mut tokio::process::Child) {
     #[cfg(unix)]
     if let Some(pid) = child.id() {
-        let _ = tokio::process::Command::new("kill")
+        // TEMPORARY DIAGNOSTIC
+        let before = std::process::Command::new("ps")
+            .arg("-o")
+            .arg("pid=,ppid=,pgid=,stat=,args=")
+            .arg("-p")
+            .arg(pid.to_string())
+            .output();
+        eprintln!(
+            "DIAG before kill: {before:?}",
+            before = before.map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        );
+        let outcome = tokio::process::Command::new("kill")
             .arg("-KILL")
             .arg(format!("-{pid}"))
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
+            .output()
             .await;
+        eprintln!(
+            "DIAG kill -{pid}: {outcome:?}",
+            outcome = outcome.map(|o| {
+                (
+                    o.status.code(),
+                    String::from_utf8_lossy(&o.stdout).to_string(),
+                    String::from_utf8_lossy(&o.stderr).to_string(),
+                )
+            })
+        );
     }
     let _ = child.start_kill();
     let _ = child.wait().await;
@@ -487,6 +506,22 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(800)).await;
 
         // Nothing of the step is left running.
+        // TEMPORARY DIAGNOSTIC
+        let listing = std::process::Command::new("ps")
+            .arg("-A")
+            .arg("-o")
+            .arg("pid=,ppid=,pgid=,stat=,args=")
+            .output();
+        eprintln!(
+            "DIAG survivors: {survivors:?}",
+            survivors = listing.map(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .filter(|l| l.contains("sleep 37"))
+                    .map(|l| l.to_string())
+                    .collect::<Vec<String>>()
+            })
+        );
         let leftover = still_running("sleep 37");
         assert!(
             leftover.is_empty(),
