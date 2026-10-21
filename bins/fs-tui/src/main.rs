@@ -33,6 +33,9 @@ use foodshare_orchestrator::{DomainKind, Options, Orchestrator, Status, Workspac
 /// How often the screen is redrawn.
 const TICK: Duration = Duration::from_millis(200);
 
+/// How many lines the log pane scrolls at a time.
+const PAGE: usize = 10;
+
 /// How long the keyboard is polled for between redraws.
 const POLL: Duration = Duration::from_millis(50);
 
@@ -82,6 +85,8 @@ struct App {
     should_quit: bool,
     /// Whether a run is in progress, so a second one is not started.
     running: bool,
+    /// How far the log pane is scrolled up from the bottom, in lines.
+    log_scroll: usize,
 }
 
 impl App {
@@ -90,9 +95,11 @@ impl App {
             orchestrator,
             selected: 0,
             started: None,
-            message: "q:quit  r:run domain  v:verify all  c:clean disk  h:help".into(),
+            message: "q:quit  r:run domain  v:verify all  c:clean disk  PgUp/PgDn:scroll  h:help"
+                .into(),
             should_quit: false,
             running: false,
+            log_scroll: 0,
         }
     }
 
@@ -109,11 +116,16 @@ impl App {
             KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
             KeyCode::Char('h') => {
                 self.message =
-                    "h:help  q:quit  r:run selected  v:verify all  c:clean disk  j/k:nav".into()
+                    "h:help  q:quit  r:run selected  v:verify all  c:clean disk  j/k:nav  PgUp/PgDn:scroll"
+                        .into()
             }
             KeyCode::Char('r') => self.start_domain(self.selected_domain()),
             KeyCode::Char('v') => self.start_plan(),
             KeyCode::Char('c') => self.clean_disk(),
+            KeyCode::PageUp => self.scroll_log_up(PAGE),
+            KeyCode::PageDown => self.scroll_log_down(PAGE),
+            KeyCode::Home => self.scroll_log_to_top(),
+            KeyCode::End => self.scroll_log_to_bottom(),
             KeyCode::Down | KeyCode::Char('j') => {
                 self.selected = (self.selected + 1) % Self::domains().len();
             }
@@ -126,6 +138,26 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Scroll the log pane up.
+    fn scroll_log_up(&mut self, lines: usize) {
+        self.log_scroll = self.log_scroll.saturating_add(lines);
+    }
+
+    /// Scroll the log pane down.
+    fn scroll_log_down(&mut self, lines: usize) {
+        self.log_scroll = self.log_scroll.saturating_sub(lines);
+    }
+
+    /// Scroll the log pane to the start.
+    fn scroll_log_to_top(&mut self) {
+        self.log_scroll = usize::MAX / 2;
+    }
+
+    /// Scroll the log pane to the end.
+    fn scroll_log_to_bottom(&mut self) {
+        self.log_scroll = 0;
     }
 
     /// Start one domain, if nothing else is running.
@@ -285,18 +317,47 @@ fn ui(f: &mut Frame, app: &App) {
     f.render_widget(table, chunks[1]);
 
     // Logs for the selected domain
-    let log_text = snapshot
+    let lines: Vec<foodshare_orchestrator::LogLine> = snapshot
         .domain(app.selected_domain())
-        .map(|d| d.logs.join("\n"))
+        .map(|d| d.logs.clone())
         .unwrap_or_default();
-    let logs = Paragraph::new(log_text)
-        .block(Block::default().borders(Borders::ALL).title(format!(
+
+    // The pane shows the tail of the log, and can be scrolled back
+    // through it.
+    let height = chunks[2].height.saturating_sub(2) as usize;
+    let end = lines.len().saturating_sub(app.log_scroll);
+    let start = end.saturating_sub(height);
+    let visible = &lines[start..end];
+
+    let mut spans: Vec<Line> = Vec::with_capacity(visible.len());
+    for line in visible {
+        // An error line that looks like any other line is an error line
+        // nobody sees.
+        let style = match line.stream {
+            foodshare_orchestrator::Stream::Stderr => Style::default().fg(Color::Red),
+            foodshare_orchestrator::Stream::Stdout => Style::default().fg(Color::White),
+        };
+        spans.push(Line::from(line.text.clone()).style(style));
+    }
+
+    let title = if app.log_scroll > 0 {
+        format!(
+            " Logs: {} {} (scrolled {} lines up — PageDown to return) ",
+            app.selected_domain().icon(),
+            app.selected_domain().label(),
+            app.log_scroll
+        )
+    } else {
+        format!(
             " Logs: {} {} ",
             app.selected_domain().icon(),
             app.selected_domain().label()
-        )))
-        .wrap(Wrap { trim: true })
-        .style(Style::default().fg(Color::White));
+        )
+    };
+
+    let logs = Paragraph::new(spans)
+        .block(Block::default().borders(Borders::ALL).title(title))
+        .wrap(Wrap { trim: true });
     f.render_widget(logs, chunks[2]);
 
     // Footer

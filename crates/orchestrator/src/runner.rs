@@ -14,24 +14,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::domain::Step;
 
-/// Which stream a line came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Stream {
-    /// Standard output.
-    Stdout,
-    /// Standard error.
-    Stderr,
-}
-
-/// One line of output from a running step.
-#[derive(Debug, Clone, Serialize)]
-pub struct LogLine {
-    /// The stream the line came from.
-    pub stream: Stream,
-    /// The line itself, without its newline.
-    pub text: String,
-}
+pub use crate::state::{LogLine, Stream};
 
 /// How a step ended.
 #[derive(Debug, Clone, Serialize)]

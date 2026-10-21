@@ -375,15 +375,13 @@ impl Orchestrator {
                 .collect();
             let success = !failed && domain_steps.iter().all(|s| s.success);
             let duration_ms = domain_steps.iter().map(|s| s.duration_ms).sum();
-            let last_error = domain_errors
-                .first()
-                .map(|e| e.message.clone())
-                .or_else(|| {
-                    domain_steps
-                        .iter()
-                        .find(|s| !s.success)
-                        .map(|s| format!("{} exited {}", s.label, s.exit_code))
-                });
+            // The message names the step that failed, not just the
+            // domain: "the web domain failed" is not enough to act on.
+            let last_error = domain_steps
+                .iter()
+                .find(|s| !s.success)
+                .map(|s| format!("{} failed with exit code {}", s.label, s.exit_code))
+                .or_else(|| domain_errors.first().map(|e| e.message.clone()));
 
             self.record_domain_result(*domain, success, duration_ms, last_error);
             outcomes.push(DomainOutcome {
@@ -427,7 +425,7 @@ impl Orchestrator {
                     while let Some(line) = rx.recv().await {
                         let mut state = inner.state.write().unwrap_or_else(|e| e.into_inner());
                         if let Some(entry) = state.domains.iter_mut().find(|d| d.kind == domain) {
-                            entry.push_log(line.text);
+                            entry.push_log(line);
                         }
                     }
                 });

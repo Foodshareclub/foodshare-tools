@@ -17,6 +17,48 @@ pub const MAX_LOGS: usize = 200;
 /// How many lines are dropped when the log is full.
 pub const LOG_DROP: usize = 50;
 
+/// Which of a process's streams a line came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Stream {
+    /// Standard output.
+    Stdout,
+    /// Standard error.
+    Stderr,
+}
+
+/// One line of a run's output.
+///
+/// The stream is kept, because an error line that looks like any other
+/// line is an error line nobody sees.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogLine {
+    /// The stream the line came from.
+    pub stream: Stream,
+    /// The line itself, without its newline.
+    pub text: String,
+}
+
+impl LogLine {
+    /// A line on standard output.
+    #[must_use]
+    pub fn stdout(text: impl Into<String>) -> Self {
+        Self {
+            stream: Stream::Stdout,
+            text: text.into(),
+        }
+    }
+
+    /// A line on standard error.
+    #[must_use]
+    pub fn stderr(text: impl Into<String>) -> Self {
+        Self {
+            stream: Stream::Stderr,
+            text: text.into(),
+        }
+    }
+}
+
 /// Where a domain is in its lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -60,7 +102,7 @@ pub struct DomainState {
     /// The step that is running right now, when there is one.
     pub current_step: Option<String>,
     /// The tail of the run's output.
-    pub logs: Vec<String>,
+    pub logs: Vec<LogLine>,
     /// The last failure message.
     pub last_error: Option<String>,
 }
@@ -82,8 +124,8 @@ impl DomainState {
     }
 
     /// Append a line to the log, trimming the tail when it gets long.
-    pub fn push_log(&mut self, line: impl Into<String>) {
-        self.logs.push(line.into());
+    pub fn push_log(&mut self, line: LogLine) {
+        self.logs.push(line);
         if self.logs.len() > MAX_LOGS {
             self.logs.drain(0..LOG_DROP);
         }
@@ -154,23 +196,38 @@ mod tests {
     fn test_log_is_trimmed_in_blocks() {
         let mut domain = DomainState::new(DomainKind::Rust);
         for index in 0..(MAX_LOGS + 10) {
-            domain.push_log(format!("line {index}"));
+            domain.push_log(LogLine::stdout(format!("line {index}")));
         }
         assert_eq!(domain.logs.len(), MAX_LOGS - LOG_DROP + 10);
         // The oldest lines are the ones dropped.
-        assert_eq!(domain.logs[0], format!("line {LOG_DROP}"));
+        assert_eq!(domain.logs[0].text, format!("line {LOG_DROP}"));
+    }
+
+    #[test]
+    fn test_the_log_keeps_the_stream() {
+        let mut domain = DomainState::new(DomainKind::Rust);
+        domain.push_log(LogLine::stdout("all good"));
+        domain.push_log(LogLine::stderr("error: something broke"));
+
+        assert_eq!(domain.logs[0].stream, Stream::Stdout);
+        assert_eq!(domain.logs[1].stream, Stream::Stderr);
+        // And it survives the trip through the API.
+        let json = serde_json::to_value(&domain.logs).expect("serialised");
+        assert_eq!(json[1]["stream"], "stderr");
+        assert_eq!(json[1]["text"], "error: something broke");
     }
 
     #[test]
     fn test_reset_keeps_the_log() {
         let mut domain = DomainState::new(DomainKind::Rust);
-        domain.push_log("kept");
+        domain.push_log(LogLine::stdout("kept"));
         domain.status = Status::Fail;
         domain.fail = 2;
         domain.reset();
         assert_eq!(domain.status, Status::Idle);
         assert_eq!(domain.fail, 0);
-        assert_eq!(domain.logs, vec!["kept"]);
+        assert_eq!(domain.logs.len(), 1);
+        assert_eq!(domain.logs[0].text, "kept");
     }
 
     #[test]
