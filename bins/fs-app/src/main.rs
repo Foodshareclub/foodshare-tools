@@ -193,10 +193,6 @@ enum Commands {
     /// Pre-push checks - validates build, lint, and tests before push
     #[command(name = "pre-push")]
     PrePush {
-        /// Remote name
-        remote: Option<String>,
-        /// Remote URL
-        url: Option<String>,
         /// Fail fast on first error (defaults to the configuration)
         #[arg(long)]
         fail_fast: Option<bool>,
@@ -629,23 +625,12 @@ fn main() -> Result<()> {
         Commands::Project { action } => run_project(action),
         Commands::Verify => run_verify(),
         Commands::PrePush {
-            remote,
-            url,
             fail_fast,
             release,
             quick,
             skip,
             detailed,
-        } => run_pre_push(
-            remote.as_deref(),
-            url.as_deref(),
-            fail_fast,
-            release,
-            quick,
-            skip,
-            detailed,
-            &config,
-        ),
+        } => run_pre_push(fail_fast, release, quick, skip, detailed, &config),
         Commands::Deps { action } => run_deps(action),
         Commands::Protect { action } => run_protect(action),
 
@@ -893,7 +878,7 @@ fn run_lint(
         };
 
         for target in &targets {
-            match swift_tools::lint_directory(target, strict, fix) {
+            match lint_path(target, strict, fix) {
                 Ok(result) => {
                     if result.success {
                         Status::success("Swift lint complete");
@@ -912,6 +897,26 @@ fn run_lint(
     }
 
     exit_code
+}
+
+/// Lint one path, whether it is a file or a directory.
+///
+/// The command takes files, so a file is linted as a file. Treating it as
+/// a directory meant the linter was pointed inside a path that is not a
+/// directory, which found nothing and said nothing.
+fn lint_path(
+    path: &std::path::Path,
+    strict: bool,
+    fix: bool,
+) -> foodshare_core::error::Result<foodshare_core::process::CommandResult> {
+    use fs_app::swift_tools;
+
+    if path.is_dir() {
+        swift_tools::lint_directory(path, strict, fix)
+    } else {
+        let path = path.to_string_lossy().to_string();
+        swift_tools::lint(&[&path], strict, fix)
+    }
 }
 
 fn run_commit_msg(file: &PathBuf, config: &Config) -> i32 {
@@ -943,9 +948,17 @@ fn run_secrets(all: bool, config: &Config) -> i32 {
         foodshare_core::file_scanner::scan_swift_files(std::path::Path::new("."))
             .unwrap_or_default()
     } else {
-        foodshare_core::git::GitRepo::open_current()
-            .and_then(|r| r.staged_files())
-            .unwrap_or_default()
+        match foodshare_core::git::GitRepo::open_current().and_then(|r| r.staged_files()) {
+            Ok(files) => files,
+            Err(e) => {
+                // A repository that cannot be read is not a repository with
+                // nothing staged. The difference is the difference between
+                // "there is nothing to find" and "we could not look", and
+                // a scan that never looked must not report a clean bill.
+                Status::error(&format!("Git error: {e}"));
+                return exit_codes::GIT_ERROR;
+            }
+        }
     };
 
     let matches = secrets::scan_files(&files, &config.schema.secrets);
@@ -1281,46 +1294,104 @@ fn run_simulator(action: &str, device: Option<&str>, config: &Config) -> i32 {
     }
 }
 
-fn run_doctor(json: bool) -> i32 {
+/// What the environment check found.
+struct DoctorReport {
+    xcode: Option<String>,
+    swift: Option<String>,
+    swiftformat: bool,
+    swiftlint: bool,
+}
+
+impl DoctorReport {
+    /// The tools the build cannot do without.
+    fn missing_required(&self) -> Vec<&str> {
+        let mut missing = Vec::new();
+        if self.xcode.is_none() {
+            missing.push("Xcode");
+        }
+        if self.swift.is_none() {
+            missing.push("Swift");
+        }
+        missing
+    }
+}
+
+/// Check the environment.
+fn doctor_report() -> DoctorReport {
     use fs_app::{swift_tools, xcode};
 
+    DoctorReport {
+        xcode: xcode::is_xcode_available()
+            .then(|| xcode::xcode_version().ok())
+            .flatten(),
+        swift: swift_tools::swift_version().ok(),
+        swiftformat: swift_tools::has_swiftformat(),
+        swiftlint: swift_tools::has_swiftlint(),
+    }
+}
+
+fn run_doctor(json: bool) -> i32 {
+    let report = doctor_report();
+
     if json {
-        // TODO: JSON output
-        Status::info("JSON output not yet implemented");
-        return exit_codes::SUCCESS;
-    }
+        // The report is the answer. A `--json` flag that prints text, or
+        // that prints nothing, is a flag that lies about the format.
+        let output = serde_json::json!({
+            "xcode": {
+                "available": report.xcode.is_some(),
+                "version": report.xcode,
+            },
+            "swift": {
+                "available": report.swift.is_some(),
+                "version": report.swift,
+            },
+            "swiftformat": { "available": report.swiftformat },
+            "swiftlint": { "available": report.swiftlint },
+            "missing": report.missing_required(),
+        });
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output)
+                .unwrap_or_else(|e| format!("{{\"error\": \"{e}\"}}"))
+        );
+    } else {
+        println!("Environment Check");
+        println!();
 
-    println!("Environment Check");
-    println!();
-
-    // Xcode
-    if xcode::is_xcode_available() {
-        if let Ok(version) = xcode::xcode_version() {
-            Status::success(&format!("Xcode: {}", version));
+        // Xcode
+        match &report.xcode {
+            Some(version) => Status::success(&format!("Xcode: {}", version)),
+            None => Status::error("Xcode: not found"),
         }
-    } else {
-        Status::error("Xcode: not found");
+
+        // Swift
+        match &report.swift {
+            Some(version) => Status::success(&format!("Swift: {}", version)),
+            None => Status::error("Swift: not found"),
+        }
+
+        // swiftformat
+        if report.swiftformat {
+            Status::success("swiftformat: installed");
+        } else {
+            Status::warning("swiftformat: not found (optional)");
+        }
+
+        // swiftlint
+        if report.swiftlint {
+            Status::success("swiftlint: installed");
+        } else {
+            Status::warning("swiftlint: not found (optional)");
+        }
     }
 
-    // Swift
-    if let Ok(version) = swift_tools::swift_version() {
-        Status::success(&format!("Swift: {}", version));
-    } else {
-        Status::error("Swift: not found");
-    }
-
-    // swiftformat
-    if swift_tools::has_swiftformat() {
-        Status::success("swiftformat: installed");
-    } else {
-        Status::warning("swiftformat: not found (optional)");
-    }
-
-    // swiftlint
-    if swift_tools::has_swiftlint() {
-        Status::success("swiftlint: installed");
-    } else {
-        Status::warning("swiftlint: not found (optional)");
+    // A diagnostic that reports a missing tool and then says "success" is
+    // a diagnostic that reports and does nothing. Xcode and Swift are what
+    // the build needs; the formatters are a convenience.
+    let missing = report.missing_required();
+    if !missing.is_empty() {
+        Status::error(&format!("Missing: {}", missing.join(", ")));
+        return exit_codes::FAILURE;
     }
 
     exit_codes::SUCCESS
@@ -1350,8 +1421,6 @@ fn run_verify() -> i32 {
 }
 
 fn run_pre_push(
-    _remote: Option<&str>,
-    _url: Option<&str>,
     fail_fast: Option<bool>,
     release: Option<bool>,
     quick: bool,

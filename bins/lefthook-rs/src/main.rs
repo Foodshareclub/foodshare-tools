@@ -74,6 +74,9 @@ enum Commands {
         /// Files to check
         #[arg(trailing_var_arg = true)]
         files: Vec<String>,
+        /// Maximum file size in KB
+        #[arg(short, long, default_value = "500")]
+        max_size: u64,
     },
 }
 
@@ -102,7 +105,7 @@ fn main() -> Result<()> {
         Commands::NextjsSecurity { files } => run_nextjs_security(&files),
         Commands::Accessibility { files } => run_accessibility(&files),
         Commands::BundleSize { threshold } => run_bundle_size(threshold),
-        Commands::PreCommit { files } => run_pre_commit(&files, &config),
+        Commands::PreCommit { files, max_size } => run_pre_commit(&files, &config, max_size),
     };
 
     std::process::exit(result);
@@ -112,9 +115,17 @@ fn run_security(files: &[String], config: &Config) -> i32 {
     use foodshare_hooks::secrets;
 
     let paths: Vec<PathBuf> = if files.is_empty() {
-        foodshare_core::git::GitRepo::open_current()
-            .and_then(|r| r.staged_files())
-            .unwrap_or_default()
+        match foodshare_core::git::GitRepo::open_current().and_then(|r| r.staged_files()) {
+            Ok(files) => files,
+            Err(e) => {
+                // A repository that cannot be read is not a repository with
+                // nothing staged. The difference is the difference between
+                // "there is nothing to find" and "we could not look", and
+                // a scan that never looked must not report a clean bill.
+                Status::error(&format!("Git error: {e}"));
+                return exit_codes::GIT_ERROR;
+            }
+        }
     } else {
         files.iter().map(PathBuf::from).collect()
     };
@@ -159,18 +170,21 @@ fn run_protected_branch() -> i32 {
     match GitRepo::open_current().and_then(|r| r.current_branch()) {
         Ok(branch) => {
             if PROTECTED_BRANCHES.contains(&branch.as_str()) {
-                Status::warning(&format!(
-                    "You are on protected branch '{}'. Are you sure you want to push?",
-                    branch
+                // The guard exists to stop a push to a protected branch.
+                // A warning that lets the push through is not a guard: the
+                // pre-push hook runs this and takes the exit code as the
+                // answer, so the answer has to be "no" here.
+                Status::error(&format!(
+                    "'{branch}' is a protected branch. Push to a branch of your own, or push here with --no-verify if you mean it."
                 ));
-                exit_codes::SUCCESS
+                exit_codes::FAILURE
             } else {
                 exit_codes::SUCCESS
             }
         }
         Err(e) => {
             Status::error(&format!("Git error: {}", e));
-            exit_codes::FAILURE
+            exit_codes::GIT_ERROR
         }
     }
 }
@@ -214,7 +228,15 @@ fn run_nextjs_security(files: &[String]) -> i32 {
     use foodshare_web::nextjs_security;
 
     let paths: Vec<PathBuf> = if files.is_empty() {
-        foodshare_core::file_scanner::scan_ts_files(std::path::Path::new("src")).unwrap_or_default()
+        match foodshare_core::file_scanner::scan_ts_files(std::path::Path::new("src")) {
+            Ok(paths) => paths,
+            Err(e) => {
+                // A scan that could not run is not a scan that found
+                // nothing.
+                Status::error(&format!("Scan error: {e}"));
+                return exit_codes::FAILURE;
+            }
+        }
     } else {
         files.iter().map(PathBuf::from).collect()
     };
@@ -237,10 +259,18 @@ fn run_accessibility(files: &[String]) -> i32 {
     use foodshare_web::accessibility;
 
     let paths: Vec<PathBuf> = if files.is_empty() {
-        foodshare_core::file_scanner::FileScanner::new("src")
+        match foodshare_core::file_scanner::FileScanner::new("src")
             .with_extensions(&["jsx", "tsx"])
             .scan()
-            .unwrap_or_default()
+        {
+            Ok(paths) => paths,
+            Err(e) => {
+                // A check that could not run is not a check that found
+                // nothing.
+                Status::error(&format!("Check error: {e}"));
+                return exit_codes::FAILURE;
+            }
+        }
     } else {
         files.iter().map(PathBuf::from).collect()
     };
@@ -267,6 +297,32 @@ fn run_bundle_size(threshold: Option<u64>) -> i32 {
     match bundle_size::analyze_nextjs_build(build_dir) {
         Ok(analysis) => {
             bundle_size::print_analysis(&analysis, threshold);
+
+            // The threshold is the reason the command takes one. A command
+            // that reports a bundle over the threshold and then says
+            // "success" reports and does nothing.
+            if let Some(threshold) = threshold {
+                let over: Vec<_> = analysis
+                    .bundles
+                    .iter()
+                    .filter(|bundle| bundle.size > threshold * 1024)
+                    .collect();
+                if !over.is_empty() {
+                    Status::error(&format!(
+                        "{} bundle(s) exceed the {threshold} KB threshold",
+                        over.len()
+                    ));
+                    for bundle in over {
+                        eprintln!(
+                            "  - {} ({:.1} KB)",
+                            bundle.name,
+                            bundle.size as f64 / 1024.0
+                        );
+                    }
+                    return exit_codes::FAILURE;
+                }
+            }
+
             exit_codes::SUCCESS
         }
         Err(e) => {
@@ -276,7 +332,7 @@ fn run_bundle_size(threshold: Option<u64>) -> i32 {
     }
 }
 
-fn run_pre_commit(files: &[String], config: &Config) -> i32 {
+fn run_pre_commit(files: &[String], config: &Config, max_size_kb: u64) -> i32 {
     Status::info("Running pre-commit checks...");
 
     // Security check
@@ -286,7 +342,7 @@ fn run_pre_commit(files: &[String], config: &Config) -> i32 {
     }
 
     // Large files check
-    let large_files_result = run_large_files(500);
+    let large_files_result = run_large_files(max_size_kb);
     if large_files_result != exit_codes::SUCCESS {
         return large_files_result;
     }

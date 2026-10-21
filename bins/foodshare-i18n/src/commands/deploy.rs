@@ -101,7 +101,12 @@ async fn run_json(
     if !env_ok {
         results["success"] = serde_json::json!(false);
         println!("{}", serde_json::to_string_pretty(&results)?);
-        return Ok(());
+        // The report says the deployment failed. The exit code has to say
+        // it too: a caller that reads the exit code and a caller that
+        // reads the JSON must not get different answers.
+        return Err(anyhow::anyhow!(
+            "the deployment did not pass its environment check"
+        ));
     }
 
     // Apply migrations
@@ -153,7 +158,16 @@ async fn run_json(
     }
 
     println!("{}", serde_json::to_string_pretty(&results)?);
-    Ok(())
+
+    // The report says whether the deployment passed. The exit code has to
+    // say it too: a caller that reads the exit code and a caller that
+    // reads the JSON must not get different answers.
+    let success = results["success"].as_bool().unwrap_or(false);
+    if success {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("the deployment did not pass every step"))
+    }
 }
 
 /// Check required environment variables
@@ -172,19 +186,23 @@ fn check_environment() -> Result<()> {
 
     let mut missing = Vec::new();
 
+    // The status of each variable goes to stderr. In the text mode the
+    // terminal shows both streams, and in the JSON mode stdout carries the
+    // answer and nothing else — a report that a caller cannot parse is
+    // not a report.
     for (var, desc) in &required_vars {
         if std::env::var(var).is_err() {
             missing.push((*var, *desc));
         } else {
-            println!("  {} {} is set", "✓".green(), var);
+            eprintln!("  {} {} is set", "✓".green(), var);
         }
     }
 
     for (var, desc) in &optional_vars {
         if std::env::var(var).is_err() {
-            println!("  {} {} not set (optional: {})", "⚠".yellow(), var, desc);
+            eprintln!("  {} {} not set (optional: {})", "⚠".yellow(), var, desc);
         } else {
-            println!("  {} {} is set", "✓".green(), var);
+            eprintln!("  {} {} is set", "✓".green(), var);
         }
     }
 

@@ -143,16 +143,34 @@ impl Orchestrator {
     #[must_use]
     pub fn with_config(workspace: Workspace, options: Options, config: &plan::PlanConfig) -> Self {
         let plan = plan::Plan::build_with(&workspace, options, config);
+        let policy = RetryPolicy {
+            max_retries: options
+                .max_retries
+                .unwrap_or(RetryPolicy::default().max_retries),
+        };
         Self {
             workspace,
             plan,
-            policy: RetryPolicy::default(),
+            policy,
             history: Arc::new(History::default()),
             inner: Arc::new(Inner {
                 state: RwLock::new(State::idle()),
                 cancelled: Arc::new(AtomicBool::new(false)),
             }),
         }
+    }
+
+    /// Give the orchestrator a retry policy.
+    #[must_use]
+    pub fn with_retry_policy(mut self, policy: RetryPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    /// The retry policy the orchestrator runs with.
+    #[must_use]
+    pub fn retry_policy(&self) -> RetryPolicy {
+        self.policy
     }
 
     /// Give the orchestrator a history to keep.
@@ -641,6 +659,7 @@ mod tests {
             Options {
                 quick: true,
                 sequential: true,
+                max_retries: None,
             },
         );
         let outcome = orchestrator

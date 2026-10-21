@@ -75,6 +75,9 @@ async fn main() -> Result<()> {
         Options {
             quick: cli.quick,
             sequential: cli.sequential,
+            // The flag used to be printed in the banner and then dropped.
+            // A caller who asks for three attempts gets three.
+            max_retries: Some(cli.retry),
         },
     )?
     .with_history(std::sync::Arc::new(history));

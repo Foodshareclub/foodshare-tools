@@ -106,13 +106,22 @@ async fn main() -> Result<()> {
             quick,
             sequential,
         } => {
-            let orchestrator =
-                Orchestrator::from_workspace(workspace, Options { quick, sequential })?
-                    .with_history(history);
+            let orchestrator = Orchestrator::from_workspace(
+                workspace,
+                Options {
+                    quick,
+                    sequential,
+                    max_retries: None,
+                },
+            )?
+            .with_history(history);
             run(&orchestrator, &domain).await
         }
         Command::Status => {
-            let orchestrator = Orchestrator::new(workspace);
+            // The same plan the run would use. A status that reports a
+            // different plan than the run is a status of something else.
+            let orchestrator =
+                Orchestrator::from_workspace(workspace, Options::default())?.with_history(history);
             let snapshot = orchestrator.snapshot();
             println!("{}", serde_json::to_string_pretty(&snapshot)?);
             Ok(())

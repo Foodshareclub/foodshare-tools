@@ -1311,12 +1311,16 @@ name = "fs-app-cli"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "clap",
  "foodshare-cli",
  "foodshare-core",
  "foodshare-hooks",
  "fs-app",
  "owo-colors",
+ "predicates",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -2068,12 +2072,15 @@ name = "lefthook-rs"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "clap",
  "foodshare-cli",
  "foodshare-core",
  "foodshare-hooks",
  "foodshare-web",
  "owo-colors",
+ "predicates",
+ "tempfile",
 ]
 
 [[package]]

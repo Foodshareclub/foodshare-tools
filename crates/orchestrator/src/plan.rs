@@ -25,6 +25,12 @@ pub struct Options {
     /// Run the web and backend domains one after another instead of
     /// together.
     pub sequential: bool,
+    /// How many extra attempts a failing step gets.
+    ///
+    /// `None` keeps the default. A caller that names a number gets that
+    /// number: a flag that is parsed and then dropped is a flag that
+    /// does nothing.
+    pub max_retries: Option<u32>,
 }
 
 /// The plan, as a configuration file may change it.
