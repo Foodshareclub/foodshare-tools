@@ -131,7 +131,7 @@ prometheus = { version = "0.13", default-features = false }
 # HTTP server (orchestrator daemon)
 # axum 0.8 matches `foodshare-backend/services`, so the two services share
 # one framework, one middleware stack and one probe contract.
-axum = { version = "0.8", default-features = false }
+axum = { version = "0.8", default-features = false, features = ["matched-path"] }
 tower = { version = "0.5", default-features = false }
 tower-http = { version = "0.6", default-features = false }
 http-body-util = "0.1"

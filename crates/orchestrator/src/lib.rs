@@ -40,6 +40,7 @@ use foodshare_core::error::{Error, Result};
 pub mod bin;
 pub mod disk;
 pub mod domain;
+pub mod history;
 pub mod plan;
 pub mod runner;
 pub mod state;
@@ -48,6 +49,7 @@ pub mod workspace;
 
 pub use disk::{DiskStats, HealReport};
 pub use domain::{DomainKind, Step};
+pub use history::{DomainRecord, History, RunRecord};
 pub use plan::{Options, Phase, Plan};
 pub use runner::{LogLine, StepOutcome, Stream};
 pub use state::{DomainState, State, Status};
@@ -117,6 +119,7 @@ pub struct Orchestrator {
     workspace: Workspace,
     plan: Plan,
     policy: RetryPolicy,
+    history: Arc<History>,
     inner: Arc<Inner>,
 }
 
@@ -141,11 +144,24 @@ impl Orchestrator {
             workspace,
             plan,
             policy: RetryPolicy::default(),
+            history: Arc::new(History::default()),
             inner: Arc::new(Inner {
                 state: RwLock::new(State::idle()),
                 cancelled: AtomicBool::new(false),
             }),
         }
+    }
+
+    /// Give the orchestrator a history to keep.
+    #[must_use]
+    pub fn with_history(self, history: Arc<History>) -> Self {
+        Self { history, ..self }
+    }
+
+    /// The history of finished runs.
+    #[must_use]
+    pub fn history(&self) -> Arc<History> {
+        Arc::clone(&self.history)
     }
 
     /// Build an orchestrator from the workspace's configuration file.
@@ -198,6 +214,7 @@ impl Orchestrator {
     /// Run every domain in the plan, stopping at the first failure.
     pub async fn run_plan(&self) -> Result<PlanOutcome> {
         let started = Instant::now();
+        let started_at = history::now();
         self.begin_run();
         let mut domains = Vec::new();
         let mut success = true;
@@ -217,11 +234,18 @@ impl Orchestrator {
         }
 
         self.end_run();
-        Ok(PlanOutcome {
+        let outcome = PlanOutcome {
             success,
             duration_ms: started.elapsed().as_millis() as u64,
             domains,
-        })
+        };
+        self.record_run(
+            &outcome.domains,
+            outcome.success,
+            outcome.duration_ms,
+            started_at,
+        );
+        Ok(outcome)
     }
 
     /// Run one domain: every step that belongs to it.
@@ -230,6 +254,7 @@ impl Orchestrator {
     /// run together — so running one domain runs only its own steps.
     pub async fn run_domain(&self, kind: DomainKind) -> Result<DomainOutcome> {
         let started = Instant::now();
+        let started_at = history::now();
         self.begin_domain_run(kind);
         let mut steps = Vec::new();
         let mut success = true;
@@ -253,12 +278,46 @@ impl Orchestrator {
         }
 
         self.end_run();
-        Ok(DomainOutcome {
+        let outcome = DomainOutcome {
             kind,
             success,
             duration_ms: started.elapsed().as_millis() as u64,
             steps,
-        })
+        };
+        self.record_run(
+            std::slice::from_ref(&outcome),
+            outcome.success,
+            outcome.duration_ms,
+            started_at,
+        );
+        Ok(outcome)
+    }
+
+    /// Add a run to the history.
+    fn record_run(
+        &self,
+        domains: &[DomainOutcome],
+        success: bool,
+        duration_ms: u64,
+        started_at: String,
+    ) {
+        let record = RunRecord {
+            started_at,
+            finished_at: history::now(),
+            duration_ms,
+            success,
+            domains: domains
+                .iter()
+                .map(|d| DomainRecord {
+                    domain: d.kind.name().to_string(),
+                    success: d.success,
+                    duration_ms: d.duration_ms,
+                })
+                .collect(),
+        };
+        if let Err(e) = self.history.record(record) {
+            tracing::warn!(error = %e, "could not record the run in the history");
+        }
     }
 
     /// Run one phase: its groups in order, the steps in a group together.
@@ -290,12 +349,14 @@ impl Orchestrator {
             if selected.is_empty() {
                 continue;
             }
+            self.set_current_steps(&selected);
             for result in self.run_group(&selected).await {
                 match result {
                     StepResult::Done(outcome) => steps.push(outcome),
                     StepResult::Failed { domain, error } => errors.push((domain, error)),
                 }
             }
+            self.clear_current_steps(&selected);
             if !errors.is_empty() {
                 failed = true;
                 break;
@@ -421,6 +482,29 @@ impl Orchestrator {
     fn end_run(&self) {
         let mut state = self.inner.state.write().unwrap_or_else(|e| e.into_inner());
         state.running = false;
+    }
+
+    /// Say which steps are running.
+    fn set_current_steps(&self, steps: &[Step]) {
+        let mut state = self.inner.state.write().unwrap_or_else(|e| e.into_inner());
+        for step in steps {
+            if let Some(domain) = state.domains.iter_mut().find(|d| d.kind == step.domain) {
+                domain.current_step = Some(match domain.current_step.take() {
+                    Some(current) => format!("{current}, {}", step.label),
+                    None => step.label.clone(),
+                });
+            }
+        }
+    }
+
+    /// Say that nothing is running.
+    fn clear_current_steps(&self, steps: &[Step]) {
+        let mut state = self.inner.state.write().unwrap_or_else(|e| e.into_inner());
+        for step in steps {
+            if let Some(domain) = state.domains.iter_mut().find(|d| d.kind == step.domain) {
+                domain.current_step = None;
+            }
+        }
     }
 
     fn set_status(&self, kind: DomainKind, status: Status) {

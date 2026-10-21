@@ -12,6 +12,8 @@ categories = ["development-tools::build-utils"]
 [dependencies]
 foodshare-core.workspace = true
 foodshare-telemetry.workspace = true
+chrono.workspace = true
+dirs.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true

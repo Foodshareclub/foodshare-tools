@@ -57,6 +57,8 @@ pub struct DomainState {
     pub fail: u64,
     /// How long the last run took.
     pub duration_ms: Option<u64>,
+    /// The step that is running right now, when there is one.
+    pub current_step: Option<String>,
     /// The tail of the run's output.
     pub logs: Vec<String>,
     /// The last failure message.
@@ -73,6 +75,7 @@ impl DomainState {
             pass: 0,
             fail: 0,
             duration_ms: None,
+            current_step: None,
             logs: Vec::new(),
             last_error: None,
         }

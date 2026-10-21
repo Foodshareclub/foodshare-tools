@@ -16,7 +16,10 @@ use std::sync::RwLock;
 use std::time::Instant;
 
 use prometheus::core::Collector;
-use prometheus::{Histogram, HistogramOpts, IntCounter, IntGauge, Opts, Registry, TextEncoder};
+use prometheus::{
+    Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, Opts, Registry,
+    TextEncoder,
+};
 use serde::Serialize;
 
 /// Bucket boundaries, in milliseconds, for duration histograms.
@@ -59,6 +62,17 @@ pub struct HistogramStats {
 /// The name of the gauge that always reports the process uptime.
 pub const UPTIME_METRIC: &str = "foodshare_service_uptime_seconds";
 
+/// The name of the counter that counts HTTP requests.
+pub const HTTP_REQUESTS_METRIC: &str = "foodshare_http_requests_total";
+
+/// The name of the histogram that measures HTTP request duration.
+pub const HTTP_DURATION_METRIC: &str = "foodshare_http_request_duration_seconds";
+
+/// The buckets for HTTP request duration, in seconds.
+pub const HTTP_DURATION_BUCKETS: &[f64] = &[
+    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 300.0,
+];
+
 /// The metric registry.
 ///
 /// Cheap to share: the type is `Sync`, and the handles are cloned out of
@@ -66,6 +80,8 @@ pub const UPTIME_METRIC: &str = "foodshare_service_uptime_seconds";
 pub struct Telemetry {
     registry: Registry,
     metrics: RwLock<HashMap<String, Entry>>,
+    label_counters: RwLock<HashMap<String, IntCounterVec>>,
+    label_histograms: RwLock<HashMap<String, HistogramVec>>,
     start_time: Instant,
 }
 
@@ -76,6 +92,8 @@ impl Telemetry {
         let telemetry = Self {
             registry: Registry::new(),
             metrics: RwLock::new(HashMap::new()),
+            label_counters: RwLock::new(HashMap::new()),
+            label_histograms: RwLock::new(HashMap::new()),
             start_time: Instant::now(),
         };
         // A scrape target with nothing in it is hard to tell apart from a
@@ -219,6 +237,97 @@ impl Telemetry {
                 _ => None,
             })
             .collect()
+    }
+
+    /// A counter with labels, created on first use.
+    ///
+    /// The labels are the dimensions the metric is broken down by — a
+    /// route, a method, a status. The vector is kept, so the caller can
+    /// hold on to it and record against it without a lookup.
+    pub fn counter_with_labels(
+        &self,
+        name: &str,
+        help: &str,
+        label_names: &[&str],
+    ) -> anyhow::Result<IntCounterVec> {
+        let mut counters = self
+            .label_counters
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+
+        if let Some(counter) = counters.get(name) {
+            return Ok(counter.clone());
+        }
+
+        let counter = IntCounterVec::new(Opts::new(sanitize(name), help), label_names)
+            .map_err(|e| anyhow::anyhow!("could not create the counter {name}: {e}"))?;
+        self.registry
+            .register(Box::new(counter.clone()))
+            .map_err(|e| anyhow::anyhow!("could not register the counter {name}: {e}"))?;
+        counters.insert(name.to_string(), counter.clone());
+        Ok(counter)
+    }
+
+    /// A histogram with labels, created on first use.
+    pub fn histogram_with_labels(
+        &self,
+        name: &str,
+        help: &str,
+        label_names: &[&str],
+        buckets: &[f64],
+    ) -> anyhow::Result<HistogramVec> {
+        let mut histograms = self
+            .label_histograms
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+
+        if let Some(histogram) = histograms.get(name) {
+            return Ok(histogram.clone());
+        }
+
+        let histogram = HistogramVec::new(
+            HistogramOpts::new(sanitize(name), help).buckets(buckets.to_vec()),
+            label_names,
+        )
+        .map_err(|e| anyhow::anyhow!("could not create the histogram {name}: {e}"))?;
+        self.registry
+            .register(Box::new(histogram.clone()))
+            .map_err(|e| anyhow::anyhow!("could not register the histogram {name}: {e}"))?;
+        histograms.insert(name.to_string(), histogram.clone());
+        Ok(histogram)
+    }
+
+    /// Record one HTTP request.
+    ///
+    /// The route is a template, not a concrete path: a path with a
+    /// parameter in it would otherwise make one label per request.
+    pub fn observe_http(
+        &self,
+        service: &str,
+        route: &str,
+        method: &str,
+        status: u16,
+        seconds: f64,
+    ) -> anyhow::Result<()> {
+        let requests = self.counter_with_labels(
+            HTTP_REQUESTS_METRIC,
+            "Total HTTP requests, labelled by route template, method and status",
+            &["service", "route", "method", "status"],
+        )?;
+        let duration = self.histogram_with_labels(
+            HTTP_DURATION_METRIC,
+            "HTTP request duration in seconds",
+            &["service", "route", "method"],
+            HTTP_DURATION_BUCKETS,
+        )?;
+
+        requests
+            .with_label_values(&[service, route, method, &status.to_string()])
+            .inc();
+        duration
+            .with_label_values(&[service, route, method])
+            .observe(seconds);
+        Ok(())
     }
 
     /// A JSON snapshot of every metric.
