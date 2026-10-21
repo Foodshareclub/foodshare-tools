@@ -7,12 +7,6 @@ license.workspace = true
 rust-version.workspace = true
 description = "Telemetry, metrics, and observability for Foodshare tools"
 
-[features]
-default = ["metrics"]
-metrics = []
-tracing = []
-full = ["metrics", "tracing"]
-
 [dependencies]
 tracing.workspace = true
 tracing-subscriber.workspace = true

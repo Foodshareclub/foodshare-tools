@@ -143,7 +143,9 @@ fs-orchestrator serve                # The HTTP daemon
 ```
 
 The daemon serves the same probe contract as the backend's `job-worker`,
-so one Prometheus covers both services.
+so one Prometheus covers both services. The probe routes are open; the
+control routes that start builds take a token, the way the backend's
+job routes do.
 
 | Route                | What it answers                                  |
 | -------------------- | ------------------------------------------------ |

@@ -40,6 +40,11 @@ struct Cli {
     /// `foodshare-app`.
     #[arg(long, global = true)]
     root: Option<PathBuf>,
+
+    /// The token that guards the control routes. Also read from
+    /// `FOODSHARE_ORCHESTRATOR_TOKEN`.
+    #[arg(long, global = true, env = "FOODSHARE_ORCHESTRATOR_TOKEN")]
+    token: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -84,7 +89,7 @@ async fn main() -> Result<()> {
 
     let command = cli.command.unwrap_or(Command::Serve);
     match command {
-        Command::Serve => serve(&workspace, &cli.addr).await,
+        Command::Serve => serve(&workspace, &cli.addr, cli.token).await,
         Command::Run {
             domain,
             quick,
@@ -130,9 +135,10 @@ async fn heal_disk(workspace: &Workspace, min_free_gb: f64, force: bool) -> Resu
 }
 
 /// Serve the HTTP API until the process is asked to stop.
-async fn serve(workspace: &Workspace, addr: &str) -> Result<()> {
+async fn serve(workspace: &Workspace, addr: &str, token: Option<String>) -> Result<()> {
     let orchestrator = Orchestrator::new(workspace.clone());
-    let state = AppState::new(orchestrator);
+    let guarded = token.is_some();
+    let state = AppState::new(orchestrator).with_token(token);
     let app = http::router(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -140,11 +146,15 @@ async fn serve(workspace: &Workspace, addr: &str) -> Result<()> {
     tracing::info!(
         service = SERVICE_NAME,
         workspace = %workspace.root().display(),
+        guarded,
         "serving"
     );
     println!("🦀 {SERVICE_NAME} listening on http://{bound}");
     println!("   workspace: {}", workspace.root().display());
     println!("   routes:    /healthz /readyz /metrics /status /run/{{domain}} /cancel");
+    if guarded {
+        println!("   the control routes need `Authorization: Bearer <token>`");
+    }
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

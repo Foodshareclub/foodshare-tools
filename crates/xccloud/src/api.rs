@@ -3,6 +3,8 @@
 //! Only the Xcode Cloud endpoints are wrapped: products, build runs,
 //! actions, issues, artefacts and workflows.
 
+use std::time::Duration;
+
 use foodshare_core::error::{Error, Result};
 use serde::de::DeserializeOwned;
 
@@ -14,6 +16,12 @@ use crate::model::{
 
 /// The App Store Connect API root.
 pub const BASE_URL: &str = "https://api.appstoreconnect.apple.com";
+
+/// How long a request may take.
+///
+/// The watch loop polls every eight seconds, so a request that hangs
+/// would hold the whole tool.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A client for the Xcode Cloud endpoints.
 #[derive(Debug, Clone)]
@@ -39,6 +47,7 @@ impl Client {
     pub fn with_token(token: String) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent("foodshare-tools/xccloud")
+            .timeout(REQUEST_TIMEOUT)
             .build()
             .map_err(|e| Error::process(format!("could not build the HTTP client: {e}")))?;
         Ok(Self {

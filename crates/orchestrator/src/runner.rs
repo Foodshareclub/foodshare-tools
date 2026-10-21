@@ -48,11 +48,48 @@ pub struct StepOutcome {
     pub duration_ms: u64,
 }
 
+/// How long a step may take before it is stopped.
+///
+/// A build can legitimately take a long time, so the default is
+/// generous. It is there so a hung process fails the step instead of
+/// hanging the orchestrator, and with it the daemon.
+pub const DEFAULT_STEP_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+
+/// The environment variable that overrides the step timeout.
+pub const STEP_TIMEOUT_ENV: &str = "FOODSHARE_STEP_TIMEOUT_SECS";
+
+/// How long a step may take.
+#[must_use]
+pub fn step_timeout() -> Duration {
+    parse_step_timeout(std::env::var(STEP_TIMEOUT_ENV).ok().as_deref())
+}
+
+/// The step timeout, from a setting.
+///
+/// A value of zero means "no limit", which is not what an operator who
+/// sets the variable means, so it falls back to the default.
+#[must_use]
+pub fn parse_step_timeout(value: Option<&str>) -> Duration {
+    match value.and_then(|v| v.trim().parse::<u64>().ok()) {
+        Some(0) | None => DEFAULT_STEP_TIMEOUT,
+        Some(seconds) => Duration::from_secs(seconds),
+    }
+}
+
 /// Run a step, streaming its output to `tx`.
 ///
 /// The step is not retried here; retrying belongs to the caller, which
 /// also owns the disk healing that goes with it.
 pub async fn run_step(step: &Step, tx: &UnboundedSender<LogLine>) -> Result<StepOutcome> {
+    run_step_with_timeout(step, tx, step_timeout()).await
+}
+
+/// Run a step, with an explicit timeout.
+pub async fn run_step_with_timeout(
+    step: &Step,
+    tx: &UnboundedSender<LogLine>,
+    timeout: Duration,
+) -> Result<StepOutcome> {
     let started = Instant::now();
 
     let mut command = Command::new(&step.program);
@@ -84,10 +121,26 @@ pub async fn run_step(step: &Step, tx: &UnboundedSender<LogLine>) -> Result<Step
     let stdout_task = stdout.map(|out| pump(out, tx.clone(), Stream::Stdout));
     let stderr_task = stderr.map(|err| pump(err, tx.clone(), Stream::Stderr));
 
-    let status = child
-        .wait()
-        .await
-        .map_err(|e| Error::process(format!("Failed to wait for `{}`: {e}", step.program)))?;
+    let status = match tokio::time::timeout(timeout, child.wait()).await {
+        Ok(Ok(status)) => status,
+        Ok(Err(e)) => {
+            return Err(Error::process(format!(
+                "Failed to wait for `{}`: {e}",
+                step.program
+            )));
+        }
+        Err(_) => {
+            // The step is still running, so it is stopped rather than
+            // left behind.
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+            return Err(Error::process(format!(
+                "`{}` did not finish within {}s and was stopped",
+                step.label,
+                timeout.as_secs()
+            )));
+        }
+    };
 
     if let Some(task) = stdout_task {
         let _ = task.await;
@@ -210,5 +263,31 @@ mod tests {
         assert_eq!(backoff(1), Duration::from_secs(1));
         assert_eq!(backoff(3), Duration::from_secs(3));
         assert_eq!(backoff(0), Duration::from_secs(1));
+    }
+
+    #[test]
+    fn test_the_step_timeout_falls_back_to_the_default() {
+        assert_eq!(parse_step_timeout(None), DEFAULT_STEP_TIMEOUT);
+        assert_eq!(parse_step_timeout(Some("")), DEFAULT_STEP_TIMEOUT);
+        assert_eq!(
+            parse_step_timeout(Some("not a number")),
+            DEFAULT_STEP_TIMEOUT
+        );
+        // Zero would mean "no limit", which is not what was asked for.
+        assert_eq!(parse_step_timeout(Some("0")), DEFAULT_STEP_TIMEOUT);
+        assert_eq!(parse_step_timeout(Some(" 90 ")), Duration::from_secs(90));
+    }
+
+    #[tokio::test]
+    async fn test_a_step_that_overruns_its_timeout_is_stopped() {
+        let (tx, _rx) = unbounded_channel();
+        let step = Step::new(DomainKind::Rust, "sleeper", "sh", &["-c", "sleep 30"], ".");
+        let error = run_step_with_timeout(&step, &tx, Duration::from_millis(200))
+            .await
+            .expect_err("the step times out");
+        assert!(
+            error.to_string().contains("did not finish within"),
+            "got: {error}"
+        );
     }
 }

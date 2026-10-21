@@ -215,7 +215,7 @@ impl Orchestrator {
     /// run together — so running one domain runs only its own steps.
     pub async fn run_domain(&self, kind: DomainKind) -> Result<DomainOutcome> {
         let started = Instant::now();
-        self.begin_run();
+        self.begin_domain_run(kind);
         let mut steps = Vec::new();
         let mut success = true;
 
@@ -384,6 +384,21 @@ impl Orchestrator {
                 .unwrap_or(0),
         );
         for domain in &mut state.domains {
+            domain.reset();
+        }
+    }
+
+    /// Start a single domain, leaving the others' results alone.
+    fn begin_domain_run(&self, kind: DomainKind) {
+        let mut state = self.inner.state.write().unwrap_or_else(|e| e.into_inner());
+        state.running = true;
+        state.started_at_ms = Some(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        );
+        if let Some(domain) = state.domains.iter_mut().find(|d| d.kind == kind) {
             domain.reset();
         }
     }

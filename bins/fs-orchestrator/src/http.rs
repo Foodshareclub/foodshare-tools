@@ -16,7 +16,7 @@
 use std::time::{Duration, Instant};
 
 use axum::extract::{Path, Query, State};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -42,6 +42,8 @@ pub struct AppState {
     pub orchestrator: Orchestrator,
     /// When the daemon started.
     pub started_at: Instant,
+    /// The token that guards the control routes, when there is one.
+    pub token: Option<String>,
 }
 
 impl AppState {
@@ -51,7 +53,15 @@ impl AppState {
         Self {
             orchestrator,
             started_at: Instant::now(),
+            token: None,
         }
+    }
+
+    /// Guard the control routes with a token.
+    #[must_use]
+    pub fn with_token(mut self, token: Option<String>) -> Self {
+        self.token = token;
+        self
     }
 
     /// How long the daemon has been up, in seconds.
@@ -62,16 +72,27 @@ impl AppState {
 }
 
 /// Build the router.
+///
+/// The probe routes are open, the way the backend's `job-worker` leaves
+/// them open: a health check or a Prometheus scrape has no secret to
+/// present. The control routes start builds, so they take a token when
+/// one is configured.
 #[must_use]
 pub fn router(state: AppState) -> Router {
+    let token = state.token.clone();
+
+    let control = Router::new()
+        .route("/run/{domain}", post(run_domain))
+        .route("/cancel", post(cancel))
+        .route_layer(axum::middleware::from_fn_with_state(token, require_token));
+
     Router::new()
         .route("/healthz", get(healthz))
         .route("/health", get(healthz))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics))
         .route("/status", get(status))
-        .route("/run/{domain}", post(run_domain))
-        .route("/cancel", post(cancel))
+        .merge(control)
         // The last layer added is the outermost, so the order below reads
         // from the handler outwards: the timeout is closest to the
         // handler, and the panic catcher is furthest out.
@@ -84,6 +105,59 @@ pub fn router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(CatchPanicLayer::custom(panic_response))
         .with_state(state)
+}
+
+/// Reject a control request without the shared token.
+///
+/// The comparison is constant time, so a caller cannot learn the token
+/// one byte at a time from the response timing.
+async fn require_token(
+    State(token): State<Option<String>>,
+    headers: HeaderMap,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    if let Some(expected) = token {
+        if expected.is_empty() {
+            tracing::warn!("a control route was reached with an empty token configured");
+            return unauthorized();
+        }
+
+        let presented = headers
+            .get("authorization")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .unwrap_or_default();
+
+        if !constant_time_eq(presented.as_bytes(), expected.as_bytes()) {
+            tracing::warn!("rejected a control request with a bad or missing token");
+            return unauthorized();
+        }
+    }
+
+    next.run(request).await
+}
+
+/// The response to a request without the token.
+fn unauthorized() -> Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        [(header::CONTENT_TYPE, "application/json")],
+        r#"{"error":"unauthorized"}"#,
+    )
+        .into_response()
+}
+
+/// Compare two byte strings in constant time.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 
 /// Turn a panic into a 500 rather than a dead process.
@@ -211,7 +285,10 @@ async fn run_domain(
                 tracing::error!(error = %e, "plan run failed");
             }
         });
-        return accepted_response("all", background.abort_handle());
+        // Dropping the handle detaches the task, so the run carries on
+        // after the response.
+        drop(background);
+        return accepted_response("all");
     }
 
     let Some(kind) = DomainKind::from_name(&requested) else {
@@ -233,7 +310,10 @@ async fn run_domain(
             tracing::error!(error = %e, domain = kind.name(), "domain run failed");
         }
     });
-    accepted_response(kind.name(), background.abort_handle())
+    // Dropping the handle detaches the task, so the run carries on after
+    // the response.
+    drop(background);
+    accepted_response(kind.name())
 }
 
 /// Stop the run in progress.
@@ -246,14 +326,13 @@ async fn cancel(State(state): State<AppState>) -> Response {
         .into_response()
 }
 
-fn accepted_response(domain: &str, handle: tokio::task::AbortHandle) -> Response {
+fn accepted_response(domain: &str) -> Response {
     (
         StatusCode::ACCEPTED,
         Json(serde_json::json!({
             "accepted": true,
             "domain": domain,
             "running": true,
-            "abort_handle": format!("{:?}", handle),
         })),
     )
         .into_response()
@@ -314,6 +393,46 @@ mod tests {
             .expect("body")
             .to_bytes();
         (status, String::from_utf8_lossy(&body).to_string())
+    }
+
+    /// The server, on a port the operating system picks.
+    ///
+    /// The router tests above exercise the routes in process. This one
+    /// starts the real server and talks to it over a socket, which is
+    /// what a Prometheus scrape or a Quadlet health check does.
+    #[tokio::test]
+    async fn test_the_server_answers_over_a_socket() {
+        let workspace = Workspace::with_root("/tmp/foodshare-orchestrator-test");
+        let orchestrator = Orchestrator::new(workspace);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("address");
+
+        let server = tokio::spawn(async move {
+            let _ = axum::serve(listener, app()).await;
+        });
+
+        let body = reqwest::get(format!("http://{address}/healthz"))
+            .await
+            .expect("request")
+            .text()
+            .await
+            .expect("body");
+        assert!(body.contains("fs-orchestrator"), "got: {body}");
+
+        let metrics = reqwest::get(format!("http://{address}/metrics"))
+            .await
+            .expect("request")
+            .text()
+            .await
+            .expect("body");
+        assert!(
+            metrics.contains("foodshare_service_uptime_seconds"),
+            "got: {metrics}"
+        );
+
+        server.abort();
     }
 
     #[tokio::test]
@@ -378,5 +497,55 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    /// A daemon with a token on the control routes.
+    fn guarded_app() -> Router {
+        let workspace = Workspace::with_root("/tmp/foodshare-orchestrator-test");
+        let orchestrator = Orchestrator::new(workspace);
+        router(AppState::new(orchestrator).with_token(Some("s3cret".to_string())))
+    }
+
+    async fn post(app: Router, path: &str, token: Option<&str>) -> StatusCode {
+        let mut request = Request::builder().method("POST").uri(path);
+        if let Some(token) = token {
+            request = request.header("authorization", format!("Bearer {token}"));
+        }
+        app.oneshot(request.body(Body::empty()).expect("request"))
+            .await
+            .expect("response")
+            .status()
+    }
+
+    #[tokio::test]
+    async fn test_the_control_routes_need_the_token() {
+        let status = post(guarded_app(), "/cancel", None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_the_control_routes_reject_a_wrong_token() {
+        let status = post(guarded_app(), "/cancel", Some("wrong")).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_the_control_routes_accept_the_token() {
+        let status = post(guarded_app(), "/cancel", Some("s3cret")).await;
+        assert_eq!(status, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_the_probe_routes_stay_open() {
+        let (status, body) = get("/healthz").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("fs-orchestrator"), "got: {body}");
+    }
+
+    #[test]
+    fn test_the_token_comparison_is_constant_time() {
+        assert!(constant_time_eq(b"abc", b"abc"));
+        assert!(!constant_time_eq(b"abc", b"abd"));
+        assert!(!constant_time_eq(b"abc", b"ab"));
     }
 }

@@ -54,6 +54,13 @@ if let Some(domain) = snapshot.domain(DomainKind::Web) {
 # }
 ```
 
+## Timeouts
+
+A step that overruns its timeout is stopped, so a hung process fails the
+step rather than hanging the orchestrator — and with it the daemon. The
+default is thirty minutes, which is generous for a build, and
+`FOODSHARE_STEP_TIMEOUT_SECS` overrides it.
+
 ## Retries and disk healing
 
 A failing step is retried, and the disk is healed between attempts: a

@@ -371,15 +371,19 @@ The HTTP daemon, and the orchestrator from the command line.
 
 ```bash
 fs-orchestrator serve --addr 127.0.0.1:7878
+fs-orchestrator serve --token "$TOKEN"
 fs-orchestrator run --domain rust
 fs-orchestrator run --domain all --quick --sequential
 fs-orchestrator status
+fs-orchestrator disk [--force]
 ```
 
 Options:
 
 - `--addr <host:port>` - The address the daemon listens on
 - `--root <path>` - The workspace root
+- `--token <token>` - The token that guards the control routes. Also
+  read from `FOODSHARE_ORCHESTRATOR_TOKEN`
 
 The `run` subcommand takes `--domain <rust|wasm|web|backend|mobile|all>`,
 `--quick` and `--sequential`.
@@ -397,6 +401,12 @@ Routes:
 
 `POST /run/{domain}` starts the run and answers `202`. Add `?wait=true`
 to wait for the result and get the outcome in the body.
+
+The probe routes are open, the way the backend's `job-worker` leaves
+them open: a health check or a Prometheus scrape has no secret to
+present. The control routes start builds, so they take a token when one
+is configured — `Authorization: Bearer <token>`, compared in constant
+time.
 
 ### fs-maestro
 

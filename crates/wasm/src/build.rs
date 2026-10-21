@@ -109,7 +109,8 @@ pub async fn build_one(layout: &Layout, krate: &Crate) -> BuildOutcome {
         };
     }
 
-    let output = Command::new("wasm-pack")
+    let mut command = Command::new("wasm-pack");
+    command
         .arg("build")
         .arg(&crate_dir)
         .arg("--target")
@@ -123,11 +124,11 @@ pub async fn build_one(layout: &Layout, krate: &Crate) -> BuildOutcome {
         .arg("wasm")
         .current_dir(&layout.tools_dir)
         .stdin(Stdio::null())
-        .output()
-        .await;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
-    let output = match output {
-        Ok(output) => output,
+    let mut child = match command.spawn() {
+        Ok(child) => child,
         Err(e) => {
             return BuildOutcome {
                 crate_name: krate.name.to_string(),
@@ -140,14 +141,48 @@ pub async fn build_one(layout: &Layout, krate: &Crate) -> BuildOutcome {
         }
     };
 
-    if !output.status.success() {
-        let mut error = describe_exit(output.status);
+    // The build output goes to the terminal as it happens, and the last
+    // few lines are kept for the failure message.
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let out_task = stdout.map(|stream| tokio::spawn(pump(stream, Stream::Stdout)));
+    let err_task = stderr.map(|stream| tokio::spawn(pump(stream, Stream::Stderr)));
+
+    let status = child.wait().await;
+    let out_tail = match out_task {
+        Some(task) => task.await.unwrap_or_default(),
+        None => String::new(),
+    };
+    let err_tail = match err_task {
+        Some(task) => task.await.unwrap_or_default(),
+        None => String::new(),
+    };
+
+    let status = match status {
+        Ok(status) => status,
+        Err(e) => {
+            return BuildOutcome {
+                crate_name: krate.name.to_string(),
+                success: false,
+                duration_ms: started.elapsed().as_millis() as u64,
+                size_kb: None,
+                out_dir,
+                error: Some(format!("wasm-pack failed: {e}")),
+            };
+        }
+    };
+
+    if !status.success() {
+        let mut error = describe_exit(status);
         // The build output is the useful part of the failure.
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let tail: Vec<&str> = stderr.lines().rev().take(6).collect();
+        let tail = if err_tail.is_empty() {
+            out_tail
+        } else {
+            err_tail
+        };
         if !tail.is_empty() {
             error.push_str(": ");
-            error.push_str(&tail.into_iter().rev().collect::<Vec<_>>().join(" "));
+            error.push_str(&tail);
         }
         return BuildOutcome {
             crate_name: krate.name.to_string(),
@@ -177,6 +212,47 @@ pub async fn build_one(layout: &Layout, krate: &Crate) -> BuildOutcome {
         out_dir,
         error: None,
     }
+}
+
+/// How many lines of output are kept for the failure message.
+const TAIL_LINES: usize = 6;
+
+/// Which of a process's streams is being read.
+#[derive(Debug, Clone, Copy)]
+enum Stream {
+    /// Standard output.
+    Stdout,
+    /// Standard error.
+    Stderr,
+}
+
+/// Copy a process's output to the terminal, keeping the last few lines.
+///
+/// The build takes a while, and its progress is worth seeing while it
+/// happens. The tail is what the failure message quotes.
+async fn pump<R>(stream: R, kind: Stream) -> String
+where
+    R: tokio::io::AsyncRead + Unpin + Send + 'static,
+{
+    use std::collections::VecDeque;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    let mut lines = BufReader::new(stream).lines();
+    let mut tail: VecDeque<String> = VecDeque::with_capacity(TAIL_LINES);
+    let mut terminal: Box<dyn tokio::io::AsyncWrite + Send + Unpin> = match kind {
+        Stream::Stdout => Box::new(tokio::io::stdout()),
+        Stream::Stderr => Box::new(tokio::io::stderr()),
+    };
+
+    while let Ok(Some(line)) = lines.next_line().await {
+        if tail.len() == TAIL_LINES {
+            tail.pop_front();
+        }
+        tail.push_back(line.clone());
+        let _ = terminal.write_all(format!("{line}\n").as_bytes()).await;
+    }
+    let _ = terminal.flush().await;
+
+    tail.into_iter().collect::<Vec<_>>().join(" ")
 }
 
 /// Restore the `.gitignore` the vendored module directory needs.
