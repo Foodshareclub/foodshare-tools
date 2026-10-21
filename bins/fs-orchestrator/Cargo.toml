@@ -17,7 +17,7 @@ path = "src/main.rs"
 foodshare-orchestrator.workspace = true
 foodshare-core.workspace = true
 foodshare-telemetry.workspace = true
-axum = { workspace = true, features = ["json", "http1", "tokio", "query"] }
+axum = { workspace = true, features = ["json", "http1", "tokio", "query", "matched-path"] }
 tower = { workspace = true, features = ["util"] }
 tower-http = { workspace = true, features = [
   "trace",

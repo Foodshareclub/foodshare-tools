@@ -384,6 +384,8 @@ Options:
 - `--root <path>` - The workspace root
 - `--token <token>` - The token that guards the control routes. Also
   read from `FOODSHARE_ORCHESTRATOR_TOKEN`
+- `--state <path>` - Where the run history is kept. Defaults to the
+  state directory
 
 The `run` subcommand takes `--domain <rust|wasm|web|backend|mobile|all>`,
 `--quick` and `--sequential`.
@@ -397,6 +399,7 @@ Routes:
 | `/metrics`           | GET    | The Prometheus exposition format          |
 | `/status`            | GET    | The state of every domain                 |
 | `/plan`              | GET    | The plan that will run                   |
+| `/runs`              | GET    | The runs that have finished              |
 | `/run/{domain}`      | POST   | Start a domain, or `all`                  |
 | `/cancel`            | POST   | Stop the run in progress                  |
 

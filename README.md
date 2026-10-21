@@ -154,6 +154,8 @@ job routes do.
 | `GET /readyz`        | Whether the daemon can do work                   |
 | `GET /metrics`       | The Prometheus exposition format                 |
 | `GET /status`        | The state of every domain                        |
+| `GET /plan`          | The plan that will run                            |
+| `GET /runs`          | The runs that have finished                       |
 | `POST /run/{domain}` | Start a domain, or `all`                         |
 | `POST /cancel`       | Stop the run in progress                         |
 

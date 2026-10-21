@@ -54,6 +54,23 @@ if let Some(domain) = snapshot.domain(DomainKind::Web) {
 # }
 ```
 
+## The run history
+
+A daemon that only knows about the run in progress cannot say what
+happened before it started. The history keeps the last twenty runs, and
+writes them out so they survive a restart.
+
+```rust,no_run
+use foodshare_orchestrator::history::{History, DEFAULT_LIMIT};
+
+let history = History::load(history::default_path(), DEFAULT_LIMIT)?;
+history.record(record)?;
+```
+
+The file lives in the state directory, not in the workspace: the history
+belongs to the machine, not to the repository. The daemon serves it on
+`/runs`.
+
 ## The plan configuration
 
 The plan has five domains, and a file at the workspace root may change

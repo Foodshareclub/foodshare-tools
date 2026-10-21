@@ -45,6 +45,10 @@ struct Cli {
     /// `FOODSHARE_ORCHESTRATOR_TOKEN`.
     #[arg(long, global = true, env = "FOODSHARE_ORCHESTRATOR_TOKEN")]
     token: Option<String>,
+
+    /// Where the run history is kept. Defaults to the state directory.
+    #[arg(long, global = true)]
+    state: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -87,9 +91,16 @@ async fn main() -> Result<()> {
         None => Workspace::discover()?,
     };
 
+    let history = foodshare_orchestrator::history::History::load(
+        cli.state
+            .or_else(foodshare_orchestrator::history::default_path),
+        foodshare_orchestrator::history::DEFAULT_LIMIT,
+    )?;
+    let history = std::sync::Arc::new(history);
+
     let command = cli.command.unwrap_or(Command::Serve);
     match command {
-        Command::Serve => serve(&workspace, &cli.addr, cli.token).await,
+        Command::Serve => serve(&workspace, &cli.addr, cli.token, history).await,
         Command::Run {
             domain,
             quick,
@@ -136,8 +147,14 @@ async fn heal_disk(workspace: &Workspace, min_free_gb: f64, force: bool) -> Resu
 }
 
 /// Serve the HTTP API until the process is asked to stop.
-async fn serve(workspace: &Workspace, addr: &str, token: Option<String>) -> Result<()> {
-    let orchestrator = Orchestrator::from_workspace(workspace.clone(), Options::default())?;
+async fn serve(
+    workspace: &Workspace,
+    addr: &str,
+    token: Option<String>,
+    history: std::sync::Arc<foodshare_orchestrator::history::History>,
+) -> Result<()> {
+    let orchestrator =
+        Orchestrator::from_workspace(workspace.clone(), Options::default())?.with_history(history);
     let guarded = token.is_some();
     let state = AppState::new(orchestrator).with_token(token);
     let app = http::router(state);

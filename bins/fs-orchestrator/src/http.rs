@@ -93,6 +93,7 @@ pub fn router(state: AppState) -> Router {
         .route("/metrics", get(metrics))
         .route("/status", get(status))
         .route("/plan", get(plan))
+        .route("/runs", get(runs))
         .merge(control)
         // The last layer added is the outermost, so the order below reads
         // from the handler outwards: the timeout is closest to the
@@ -105,7 +106,39 @@ pub fn router(state: AppState) -> Router {
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(TraceLayer::new_for_http())
         .layer(CatchPanicLayer::custom(panic_response))
+        .layer(axum::middleware::from_fn(observe_request))
         .with_state(state)
+}
+
+/// Measure one request.
+///
+/// The route is the template, not the concrete path: `/run/{domain}` has
+/// to stay one label however many domains are run.
+async fn observe_request(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let method = request.method().to_string();
+    let route = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(|path| path.as_str().to_string())
+        .unwrap_or_else(|| "unmatched".to_string());
+    let started = std::time::Instant::now();
+
+    let response = next.run(request).await;
+
+    if let Err(e) = foodshare_telemetry::metrics().observe_http(
+        SERVICE_NAME,
+        &route,
+        &method,
+        response.status().as_u16(),
+        started.elapsed().as_secs_f64(),
+    ) {
+        tracing::warn!(error = %e, "could not record the request");
+    }
+
+    response
 }
 
 /// Reject a control request without the shared token.
@@ -236,6 +269,17 @@ async fn metrics() -> Response {
             "text/plain; version=0.0.4; charset=utf-8",
         )],
         foodshare_telemetry::prometheus::render(),
+    )
+        .into_response()
+}
+
+/// The runs that have finished.
+async fn runs(State(state): State<AppState>) -> Response {
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "runs": state.orchestrator.history().records(),
+        })),
     )
         .into_response()
 }

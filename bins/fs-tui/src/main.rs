@@ -246,19 +246,21 @@ fn ui(f: &mut Frame, app: &App) {
 
     let snapshot = app.orchestrator.snapshot();
     let rows = App::domains().into_iter().enumerate().map(|(index, kind)| {
-        let status = snapshot
-            .domain(kind)
-            .map(|d| d.status)
-            .unwrap_or(Status::Idle);
+        let domain = snapshot.domain(kind);
+        let status = domain.map(|d| d.status).unwrap_or(Status::Idle);
         let style = if index == app.selected {
             Style::default().bg(Color::DarkGray).fg(Color::White)
         } else {
             Style::default()
         };
+        // The step that is running is more useful than the fixed detail.
+        let detail = domain
+            .and_then(|d| d.current_step.clone())
+            .unwrap_or_else(|| kind.detail().to_string());
         Row::new(vec![
             Cell::from(format!(" {} {} ", kind.icon(), kind.label())),
             Cell::from(format!(" {} ", status.label())).style(status_style(status)),
-            Cell::from(format!(" {} ", kind.detail())),
+            Cell::from(format!(" {} ", detail)),
         ])
         .style(style)
         .height(1)
