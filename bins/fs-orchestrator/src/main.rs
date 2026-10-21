@@ -95,7 +95,8 @@ async fn main() -> Result<()> {
             quick,
             sequential,
         } => {
-            let orchestrator = Orchestrator::with_options(workspace, Options { quick, sequential });
+            let orchestrator =
+                Orchestrator::from_workspace(workspace, Options { quick, sequential })?;
             run(&orchestrator, &domain).await
         }
         Command::Status => {
@@ -136,7 +137,7 @@ async fn heal_disk(workspace: &Workspace, min_free_gb: f64, force: bool) -> Resu
 
 /// Serve the HTTP API until the process is asked to stop.
 async fn serve(workspace: &Workspace, addr: &str, token: Option<String>) -> Result<()> {
-    let orchestrator = Orchestrator::new(workspace.clone());
+    let orchestrator = Orchestrator::from_workspace(workspace.clone(), Options::default())?;
     let guarded = token.is_some();
     let state = AppState::new(orchestrator).with_token(token);
     let app = http::router(state);

@@ -17,6 +17,7 @@ foodshare-tools/
 │   ├── maestro/      # Maestro E2E flows, devices, matrix
 │   ├── wasm/         # WebAssembly builds for the published crates
 │   ├── xccloud/      # Xcode Cloud over the App Store Connect API
+│   ├── device/       # iOS simulators and Android emulators
 │   └── [libs]/       # Published libraries (geo, crypto, search, etc.)
 ├── bins/             # Binary entry points
 │   ├── fs-app/         # Cross-platform CLI
@@ -136,6 +137,12 @@ Maestro E2E support:
 - Flow discovery, in a suite and its subflows
 - Syntax checking
 - Single-device suites and the multi-device matrix
+
+### Devices (`foodshare-device`)
+
+The iOS simulators and the Android emulators, from the tools that own
+them. The app tools and the end-to-end runner share it, so neither of
+them parses `simctl` or `adb` output.
 
 ### Xcode Cloud (`foodshare-xccloud`)
 

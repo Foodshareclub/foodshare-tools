@@ -61,13 +61,13 @@ async fn main() -> Result<()> {
         println!("🧹 cleaned {} artefact director(ies)", removed.len());
     }
 
-    let orchestrator = Orchestrator::with_options(
+    let orchestrator = Orchestrator::from_workspace(
         workspace,
         Options {
             quick: cli.quick,
             sequential: cli.sequential,
         },
-    );
+    )?;
 
     let outcome = orchestrator.run_plan().await?;
 

@@ -92,6 +92,7 @@ pub fn router(state: AppState) -> Router {
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics))
         .route("/status", get(status))
+        .route("/plan", get(plan))
         .merge(control)
         // The last layer added is the outermost, so the order below reads
         // from the handler outwards: the timeout is closest to the
@@ -237,6 +238,11 @@ async fn metrics() -> Response {
         foodshare_telemetry::prometheus::render(),
     )
         .into_response()
+}
+
+/// The plan that will run.
+async fn plan(State(state): State<AppState>) -> Response {
+    (StatusCode::OK, Json(state.orchestrator.plan())).into_response()
 }
 
 /// The state of every domain.

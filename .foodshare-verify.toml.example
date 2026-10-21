@@ -1,0 +1,34 @@
+# The verification plan for this workspace.
+#
+# The plan has five domains — Rust, WASM, Web, Backend and Mobile — and
+# this file changes two things about it: which domains run, and what a
+# domain runs. Everything else keeps the built-in shape, so a file with
+# one line in it does not have to restate the whole plan.
+#
+# The file is optional. Without it, the built-in plan is the plan.
+#
+# A step's `cwd` is relative to the workspace root, so the file is the
+# same on every machine.
+
+# Leave a domain out. The domains are `rust`, `wasm`, `web`, `backend`
+# and `mobile`.
+#
+# skip = ["wasm"]
+
+# Give a domain different steps. The steps replace the domain's built-in
+# ones and run in order.
+#
+# [[domain]]
+# name = "web"
+#
+# [[domain.step]]
+# label = "Web type-check"
+# program = "bun"
+# args = ["run", "type-check"]
+# cwd = "foodshare-web"
+#
+# [[domain.step]]
+# label = "Web lint"
+# program = "bun"
+# args = ["run", "lint"]
+# cwd = "foodshare-web"

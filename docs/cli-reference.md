@@ -396,6 +396,7 @@ Routes:
 | `/readyz`            | GET    | Whether the daemon can do work            |
 | `/metrics`           | GET    | The Prometheus exposition format          |
 | `/status`            | GET    | The state of every domain                 |
+| `/plan`              | GET    | The plan that will run                   |
 | `/run/{domain}`      | POST   | Start a domain, or `all`                  |
 | `/cancel`            | POST   | Stop the run in progress                  |
 

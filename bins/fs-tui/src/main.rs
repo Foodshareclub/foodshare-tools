@@ -28,7 +28,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
 };
 
-use foodshare_orchestrator::{DomainKind, Orchestrator, Status, Workspace, disk};
+use foodshare_orchestrator::{DomainKind, Options, Orchestrator, Status, Workspace, disk};
 
 /// How often the screen is redrawn.
 const TICK: Duration = Duration::from_millis(200);
@@ -345,7 +345,7 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let workspace = Workspace::discover()?;
-    let orchestrator = Orchestrator::new(workspace);
+    let orchestrator = Orchestrator::from_workspace(workspace, Options::default())?;
 
     // Non-interactive mode: run one domain, or the whole plan.
     if let Some(command) = cli.command {

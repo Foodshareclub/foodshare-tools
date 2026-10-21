@@ -54,6 +54,32 @@ if let Some(domain) = snapshot.domain(DomainKind::Web) {
 # }
 ```
 
+## The plan configuration
+
+The plan has five domains, and a file at the workspace root may change
+two things about it: which domains run, and what a domain runs. Every
+other domain keeps the built-in shape, so a file with one line in it
+does not have to restate the whole plan.
+
+```toml
+# .foodshare-verify.toml
+skip = ["wasm"]
+
+[[domain]]
+name = "web"
+
+[[domain.step]]
+label = "Web lint"
+program = "bun"
+args = ["run", "lint"]
+cwd = "foodshare-web"
+```
+
+A step's `cwd` is relative to the workspace root, so the file is the
+same on every machine. The file is optional: without it, the built-in
+plan is the plan. `foodshare-verify.toml.example` in the repository root
+is a starting point.
+
 ## Timeouts
 
 A step that overruns its timeout is stopped, so a hung process fails the

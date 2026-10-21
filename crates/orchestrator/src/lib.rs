@@ -130,7 +130,13 @@ impl Orchestrator {
     /// Build an orchestrator with a specific plan and retry policy.
     #[must_use]
     pub fn with_options(workspace: Workspace, options: Options) -> Self {
-        let plan = Plan::build(&workspace, options);
+        Self::with_config(workspace, options, &plan::PlanConfig::default())
+    }
+
+    /// Build an orchestrator, with a configuration file's changes applied.
+    #[must_use]
+    pub fn with_config(workspace: Workspace, options: Options, config: &plan::PlanConfig) -> Self {
+        let plan = plan::Plan::build_with(&workspace, options, config);
         Self {
             workspace,
             plan,
@@ -140,6 +146,15 @@ impl Orchestrator {
                 cancelled: AtomicBool::new(false),
             }),
         }
+    }
+
+    /// Build an orchestrator from the workspace's configuration file.
+    ///
+    /// A file that is not there is not an error: the built-in plan is
+    /// the plan.
+    pub fn from_workspace(workspace: Workspace, options: Options) -> Result<Self> {
+        let config = plan::PlanConfig::load(workspace.root())?;
+        Ok(Self::with_config(workspace, options, &config))
     }
 
     /// The workspace being orchestrated.

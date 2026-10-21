@@ -32,6 +32,7 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | [foodshare-orchestrator](./crates/orchestrator.md) | Workspace build and verification orchestration |
 | [foodshare-maestro](./crates/maestro.md) | Maestro E2E flows, syntax checks, device matrix     |
 | [foodshare-wasm](./crates/wasm.md) | WebAssembly builds for the published crates       |
+| [foodshare-device](./crates/device.md) | iOS simulators and Android emulators          |
 | [foodshare-xccloud](./crates/xccloud.md) | Xcode Cloud over the App Store Connect API   |
 
 ### Published Libraries

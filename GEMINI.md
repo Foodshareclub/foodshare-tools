@@ -30,7 +30,7 @@ resolves a package's own shebang — so every `bunx` call here passes `--bun`.
 
 ```
 foodshare-tools/
-├── crates/                    # Library crates (19)
+├── crates/                    # Library crates (21)
 │   ├── core/                  # Shared: git, file scanning, process, health
 │   ├── hooks/                 # Git hooks: commit-msg, secrets, migrations
 │   ├── cli/                   # CLI utilities: terminal output, progress
@@ -41,6 +41,7 @@ foodshare-tools/
 │   ├── maestro/               # Maestro E2E flows, devices, matrix
 │   ├── wasm/                  # WebAssembly builds for the published crates
 │   ├── xccloud/               # Xcode Cloud over the App Store Connect API
+│   ├── device/                # iOS simulators and Android emulators
 │   ├── geo/                   # Geospatial utilities
 │   ├── crypto/                # HMAC, constant-time comparison
 │   ├── search/                # Search utilities
