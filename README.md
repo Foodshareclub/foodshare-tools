@@ -36,7 +36,7 @@ cargo install --path bins/lefthook-rs
 
 ```
 foodshare-tools/
-├── crates/                    # Library crates (21)
+├── crates/                    # Library crates (20)
 │   ├── core/                  # Shared: git, file scanning, process, health
 │   ├── hooks/                 # Git hooks: commit-msg, secrets, migrations
 │   ├── cli/                   # CLI utilities: terminal output, progress
@@ -55,15 +55,13 @@ foodshare-tools/
 │   ├── image/                 # Image processing (JPEG, PNG, WebP, GIF)
 │   ├── swift-toolchain/       # Swift version management
 │   ├── api-client/            # API client utilities
-│   ├── migrate/               # Migration tooling
 │   └── motherduck-sync/       # MotherDuck data sync (placeholder submodule)
-├── bins/                      # Binary crates (15)
+├── bins/                      # Binary crates (14)
 │   ├── fs-app/         # Cross-platform CLI
 │   ├── lefthook-rs/           # Web CLI (git hooks)
 │   ├── fs-image/              # Image processing CLI
 │   ├── foodshare-i18n/        # Internationalization CLI
 │   ├── foodshare-swift/       # Swift toolchain CLI
-│   ├── foodshare-migrate/     # Migration CLI
 │   ├── fs-auto/               # Headless run-until-green orchestrator
 │   ├── fs-tui/                # Live build and test monitor
 │   ├── fs-orchestrator/       # HTTP daemon over the orchestrator

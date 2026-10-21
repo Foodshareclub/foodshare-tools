@@ -165,7 +165,6 @@ jobs:
           path: |
             target/${{ matrix.target }}/release/fs-app
             target/${{ matrix.target }}/release/lefthook-rs
-            target/${{ matrix.target }}/release/foodshare-migrate
             target/${{ matrix.target }}/release/fs-image
             target/${{ matrix.target }}/release/foodshare-i18n
             target/${{ matrix.target }}/release/foodshare-swift

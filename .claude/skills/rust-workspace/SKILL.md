@@ -29,7 +29,6 @@ foodshare-tools/
 │   ├── motherduck-sync/      # MotherDuck sync
 │   ├── swift-toolchain/      # Swift toolchain management
 │   ├── api-client/           # API client
-│   └── migrate/              # Migration utilities
 ├── bins/                     # Binary crates
 │   ├── fs-ios/        # iOS CLI binary
 │   ├── fs-android/    # Android CLI binary
@@ -37,7 +36,6 @@ foodshare-tools/
 │   ├── fs-image/             # Image CLI
 │   ├── foodshare-i18n/       # i18n CLI
 │   ├── foodshare-swift/      # Swift toolchain CLI
-│   └── foodshare-migrate/    # Migration CLI
 ```
 
 ## Workspace Configuration

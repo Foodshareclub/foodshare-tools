@@ -54,7 +54,6 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | `fs-image`          | Image processing CLI                                                  |
 | `foodshare-i18n`    | Translation management CLI ([docs](../bins/foodshare-i18n/README.md)) |
 | `foodshare-swift`   | Swift toolchain version management CLI                                |
-| `foodshare-migrate` | Secret migration CLI for self-hosted Supabase                         |
 | `fs-auto`           | Headless run-until-green orchestrator                                 |
 | `fs-tui`            | Live build and test monitor                                           |
 | `fs-orchestrator`   | HTTP daemon over the workspace orchestrator                           |
