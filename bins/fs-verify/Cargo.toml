@@ -1,0 +1,24 @@
+[package]
+name = "fs-verify"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Full cross-repository verification for the Foodshare workspace"
+keywords = ["verification", "ci", "foodshare"]
+categories = ["development-tools::testing"]
+
+[[bin]]
+name = "fs-verify"
+path = "src/main.rs"
+
+[dependencies]
+foodshare-orchestrator.workspace = true
+foodshare-telemetry.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true

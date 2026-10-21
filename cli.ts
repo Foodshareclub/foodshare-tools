@@ -44,51 +44,6 @@ const ROOT_DIR = resolveWorkspaceRoot();
 const APP_DIR = join(ROOT_DIR, "foodshare-app");
 const WEB_DIR = join(ROOT_DIR, "foodshare-web");
 const BACKEND_DIR = join(ROOT_DIR, "foodshare-backend");
-const TOOLS_DIR = join(ROOT_DIR, "foodshare-tools");
-
-/**
- * Every repository in the workspace, with the directory its guard lives in.
- *
- * The Node.js guard is per-repository — each one knows its own layout, its
- * own Deno carve-out, and its own container files — but the *policy* is
- * one: Bun is the only runtime. This runs all four so the policy is
- * enforced across the workspace, not just inside whichever repository you
- * happen to be standing in.
- */
-const NODE_GUARD_REPOS = [
-  { name: "foodshare-web", dir: WEB_DIR },
-  { name: "foodshare-app", dir: APP_DIR },
-  { name: "foodshare-backend", dir: BACKEND_DIR },
-  { name: "foodshare-tools", dir: TOOLS_DIR },
-];
-
-/**
- * Run the Node.js guard in every repository in the workspace.
- *
- * Returns the number of repositories that failed, so the caller can decide
- * what to do about it.
- */
-async function runNodeGuards(): Promise<number> {
-  let failed = 0;
-
-  for (const repo of NODE_GUARD_REPOS) {
-    const script = join(repo.dir, "scripts", "check-no-node.ts");
-    if (!existsSync(script)) {
-      console.error(`❌ ${repo.name}: scripts/check-no-node.ts is missing`);
-      failed += 1;
-      continue;
-    }
-
-    console.log(`\n🛡️  [${repo.name}] Node.js guard...`);
-    const code = await runCommand(["bun", "scripts/check-no-node.ts"], repo.dir);
-    if (code !== 0) {
-      console.error(`❌ ${repo.name}: Node.js guard failed.`);
-      failed += 1;
-    }
-  }
-
-  return failed;
-}
 
 async function runCommand(
   cmd: string[],
@@ -251,89 +206,25 @@ async function handleTui(args: string[]) {
 // cleanup that the Rust orchestrator owns.
 
 
+/**
+ * The toolchain policy check, in every repository.
+ *
+ * The guard itself lives in Rust, with the rest of the verification.
+ */
 async function runNodeCheck() {
-  console.log("🛡️ =========================================================");
-  console.log("🛡️  FoodShare Node.js Guard — every repository");
-  console.log("🛡️ =========================================================");
-
-  const failed = await runNodeGuards();
-
-  if (failed > 0) {
-    console.error(
-      `\n❌ ${failed} repository/repositories let Node.js back into the toolchain.`,
-    );
-    process.exit(1);
-  }
-
-  console.log("\n✅ Every repository runs on Bun. No Node.js in the toolchain.");
+  await runRustBin("fs-verify", ["node-check"]);
 }
 
+/**
+ * The full cross-repository verification.
+ *
+ * The stages live in Rust (`foodshare-orchestrator::verify`), so this is
+ * a dispatch: the toolchain policy in every repository, the disk, the
+ * Rust workspace, the web build, the mobile smoke tests and the backend
+ * edge function tests.
+ */
 async function runFullVerification() {
-  console.log("🌟 =========================================================");
-  console.log("🌟 FoodShare 10x Full Domain Verification");
-  console.log("🌟 =========================================================");
-
-  // 0. The toolchain policy, across every repository in the workspace.
-  //    Bun is the only runtime; this fails the whole verification if any
-  //    repository has let Node.js back in.
-  console.log("\n🛡️  [0/5] Running the Node.js guard in every repository...");
-  const nodeFailures = await runNodeGuards();
-  if (nodeFailures > 0) {
-    console.error(
-      `\n❌ Node.js guard failed in ${nodeFailures} repository/repositories.`,
-    );
-    process.exit(1);
-  }
-
-  // 1. Disk Health
-  await runDiskHeal(false);
-
-  // 2. Rust Crates & Test Engine
-  console.log("\n🦀 [1/5] Running Rust 2024 Workspace Test Engine...");
-  const rustCode = await runCommand(
-    ["cargo", "test", "--workspace"],
-    join(ROOT_DIR, "foodshare-tools"),
-  );
-  if (rustCode !== 0) {
-    console.error("❌ Rust workspace tests failed.");
-    process.exit(1);
-  }
-
-  // 3. Web Build & Type Check
-  console.log("\n📦 [2/5] Building Web Application with Next.js Turbopack...");
-  const webBuildCode = await runCommand(["bun", "run", "build"], WEB_DIR);
-  if (webBuildCode !== 0) {
-    console.error("❌ Web build failed.");
-    process.exit(1);
-  }
-
-  // 4. Mobile Smoke Test Suite
-  console.log("\n📱 [3/5] Executing Mobile Simulator Runner & Smoke Tests...");
-  await runRustBin("fs-sim", ["--smoke"]);
-
-  // 5. Backend Edge Function Deno Unit Tests
-  console.log(
-    "\n⚡ [4/5] Executing Backend Supabase Edge Function Deno Tests...",
-  );
-  const backendCode = await runCommand(
-    [
-      "deno",
-      "test",
-      "--allow-all",
-      "--config",
-      "supabase/functions/deno.json",
-      "supabase/functions/__tests__/",
-    ],
-    BACKEND_DIR,
-  );
-  if (backendCode !== 0) {
-    console.error("❌ Backend edge function tests failed.");
-    process.exit(1);
-  }
-
-  console.log("\n==========================================");
-  console.log("🎉 ALL DOMAIN SYSTEMS VERIFIED 100% GREEN!");
-  console.log("==========================================\n");
+  await runRustBin("fs-verify");
 }
 
 async function printStatus() {

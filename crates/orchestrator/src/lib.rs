@@ -43,6 +43,7 @@ pub mod domain;
 pub mod plan;
 pub mod runner;
 pub mod state;
+pub mod verify;
 pub mod workspace;
 
 pub use disk::{DiskStats, HealReport};
@@ -50,6 +51,7 @@ pub use domain::{DomainKind, Step};
 pub use plan::{Options, Phase, Plan};
 pub use runner::{LogLine, StepOutcome, Stream};
 pub use state::{DomainState, State, Status};
+pub use verify::{Stage, StageOutcome, Verifier, VerifyReport};
 pub use workspace::{Repo, Workspace};
 
 /// How a failed step is retried.

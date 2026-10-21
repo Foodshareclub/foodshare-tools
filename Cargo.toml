@@ -35,6 +35,7 @@ members = [
     "bins/fs-build",
     "bins/fs-sim",
     "bins/fs-xccloud",
+    "bins/fs-verify",
 ]
 
 [workspace.package]
