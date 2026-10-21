@@ -72,6 +72,15 @@ jobs:
         run: bun run check:no-node
       - name: Type-check with tsrs
         run: bun run type-check
+      - name: Type-check with tsc, for parity
+        # The checker this repository runs is a prerelease of the Rust
+        # port, so a second opinion runs beside it. The two have to agree:
+        # a bug in the fast one is a bug in the gate, and the gate is
+        # what stands between a change and the estate.
+        #
+        # The web repository has run this since it moved to tsrs. This
+        # repository had the script and nothing ran it.
+        run: bun run type-check:tsc
 
   lint:
     name: Lint
