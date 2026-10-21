@@ -33,6 +33,8 @@
     "auto:quick": "bun cli.ts auto --quick",
     "auto:keep": "bun cli.ts auto --keep",
     "check:no-node": "bun scripts/check-no-node.ts",
+    "docs:cli-reference": "bun scripts/generate-cli-reference.ts",
+    "check:cli-reference": "bun scripts/generate-cli-reference.ts --check",
     "verify": "bun run check:no-node && bun run lint && bun run type-check && bun run test",
     "auto:headless": "cargo run --bin fs-auto -- --quick",
     "build:cli": "bun build --compile --outfile dist/foodshare-cli cli.ts"

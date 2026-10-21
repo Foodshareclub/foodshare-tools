@@ -96,7 +96,7 @@ proptest! {
     fn commit_msg_length_respected(
         msg in "[a-z]{1,100}: [a-zA-Z0-9 ]{1,200}"
     ) {
-        let config = CommitMsgConfig { max_subject_length: 72, ..Default::default() };
+        let config = CommitMsgConfig { max_length: 72, ..Default::default() };
         if msg.len() <= 72 {
             assert!(validate(&msg, &config).is_ok());
         }
@@ -114,22 +114,22 @@ use predicates::prelude::*;
 
 #[test]
 fn cli_prints_version() {
-    Command::cargo_bin("fs-ios")
+    Command::cargo_bin("fs-app")
         .unwrap()
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("fs-ios"));
+        .stdout(predicate::str::contains("fs-app"));
 }
 
 #[test]
 fn cli_fails_on_invalid_commit() {
-    Command::cargo_bin("fs-ios")
+    Command::cargo_bin("fs-app")
         .unwrap()
-        .args(["commit-msg", "--message", "bad message"])
+        .args(["commit-msg", ".git/COMMIT_MSG"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("E6001"));
+        .code(2);
 }
 ```
 
@@ -162,7 +162,7 @@ crates/{crate}/
 │   └── integration.rs
 ├── benches/            # Benchmarks
 │   └── benchmark.rs
-└── snapshots/          # insta snapshot files
+└── tests/snapshots/   # insta snapshot files
 ```
 </essential_principles>
 

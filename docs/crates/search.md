@@ -19,49 +19,34 @@ foodshare-search = "1.4"
 ## Usage
 
 ```rust
-use foodshare_search::{FuzzySearch, SearchResult};
+use foodshare_search::{fuzzy_match, levenshtein_distance};
 
-let items = vec!["apple", "banana", "apricot", "avocado"];
-let searcher = FuzzySearch::new(&items);
+// Whether a string matches a query, and how well
+let (matched, score) = fuzzy_match("apple", "app");
 
-let results = searcher.search("app", 10);
-// Returns: ["apple", "apricot"] with scores
+// The distance between two strings
+let distance = levenshtein_distance("apple", "apples");
 ```
 
-### With Custom Items
+### Vector and hybrid search
 
 ```rust
-use foodshare_search::{FuzzySearch, Searchable};
+use foodshare_search::{calculate_hybrid_score, cosine_similarity, apply_rrf};
 
-struct Product {
-    id: u32,
-    name: String,
-}
-
-impl Searchable for Product {
-    fn search_text(&self) -> &str {
-        &self.name
-    }
-}
-
-let products = vec![
-    Product { id: 1, name: "Fresh Apples".into() },
-    Product { id: 2, name: "Banana Bread".into() },
-];
-
-let searcher = FuzzySearch::new(&products);
-let results = searcher.search("apple", 5);
+let similarity = cosine_similarity(&query, &item);
+let score = calculate_hybrid_score(&query, &item, &weights);
+let ranked = apply_rrf(&result_lists, 60);
 ```
 
 ## WASM Usage
 
 ```typescript
-import init, { fuzzy_search } from '@foodshare/search-wasm';
+import init, { search_items } from '@foodshare/search-wasm';
 
 await init();
 
 const items = JSON.stringify(['apple', 'banana', 'apricot']);
-const results = JSON.parse(fuzzy_search('app', items, 10));
+const results = JSON.parse(search_items('app', items, 10));
 ```
 
 ## Performance

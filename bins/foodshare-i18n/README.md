@@ -5,11 +5,12 @@ Enterprise-grade translation management CLI for Foodshare.
 ## Features
 
 - 🏥 **Health Checks** - Monitor all translation endpoints
-- 📊 **Status** - View overall translation system status
 - 🧪 **Testing** - Test translation fetch, delta sync, and ETag caching
 - 🔍 **Audit** - Check translation coverage across all locales
 - 🌐 **Auto-Translate** - Translate missing keys using AI
-- 🔄 **Sync** - Sync all locales at once
+- 🚀 **Deploy** - Apply the migrations, deploy the edge functions, test the endpoints
+- ♻️ **Update and backfill** - Update a locale, or backfill the posts
+- 📱 **Info.plist** - Generate the localized `InfoPlist.strings` files for iOS
 - ⚡ **Benchmark** - Performance testing for endpoints
 - 🌍 **Locales** - List all supported languages
 
@@ -29,28 +30,39 @@ cargo install --path bins/foodshare-i18n
 # Show help
 foodshare-i18n --help
 
-# Check system status
-foodshare-i18n status
-
 # Health check all endpoints
-foodshare-i18n health --timing
+foodshare-i18n health
+foodshare-i18n health --detailed
 
 # Test translation fetch for a locale
-foodshare-i18n test en --delta --cache
+foodshare-i18n test fetch --locale en --delta --cache
 
 # Audit translation coverage
 foodshare-i18n audit                    # All locales
-foodshare-i18n audit de --missing       # Single locale with missing keys
+foodshare-i18n audit --locale de --missing   # Single locale with missing keys
 
 # Auto-translate missing keys (dry-run)
-foodshare-i18n translate de
+foodshare-i18n translate --locale de
 
 # Auto-translate and apply
-foodshare-i18n translate de --apply
+foodshare-i18n translate --locale de --apply
 
-# Sync all locales
-foodshare-i18n sync                     # Dry-run
-foodshare-i18n sync --apply             # Apply changes
+# Translate every locale at once
+foodshare-i18n translate --all
+foodshare-i18n translate --all --apply
+
+# Deploy the translation system
+foodshare-i18n deploy
+foodshare-i18n deploy --no-migrations --no-functions --no-test
+
+# Update one locale
+foodshare-i18n update --locale de --file messages/de.json
+
+# Backfill the posts
+foodshare-i18n backfill --batch-size 50
+
+# Generate the localized Info.plist files
+foodshare-i18n generate-infoplist
 
 # Benchmark endpoints
 foodshare-i18n bench --count 10 --locale en
@@ -63,11 +75,14 @@ foodshare-i18n locales
 
 ```bash
 # Text output (default)
-foodshare-i18n status
+foodshare-i18n health
 
 # JSON output (for scripting)
-foodshare-i18n --format json status
+foodshare-i18n --format json health
 ```
+
+In JSON mode the answer is the only thing on stdout, so a caller can
+parse it; the messages go to stderr.
 
 ## Supported Locales
 
@@ -124,7 +139,7 @@ The CLI communicates with these Supabase Edge Functions:
 
 ```bash
 # Run with verbose logging
-foodshare-i18n -v status
+foodshare-i18n -v health
 
 # Run tests
 cargo test -p foodshare-i18n

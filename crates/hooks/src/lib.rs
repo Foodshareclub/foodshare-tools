@@ -9,7 +9,7 @@
 //! # Secret Scanning
 //!
 //! The secret scanning module provides enterprise-grade detection with:
-//! - 19 built-in patterns for common secret types
+//! - 20 built-in patterns for common secret types
 //! - Configuration-driven pattern management
 //! - Allowlisting and fingerprint suppression
 //! - Parallel file scanning

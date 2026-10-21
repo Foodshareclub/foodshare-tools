@@ -35,7 +35,7 @@ clap = { workspace = true }
 thiserror = { workspace = true }
 
 # Internal dependencies
-foodshare-core = { path = "../core" }
+foodshare-core = { workspace = true }
 ```
 
 ### 3. Register in workspace
@@ -87,8 +87,8 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true }
-foodshare-core = { path = "../../crates/core" }
-foodshare-{crate} = { path = "../../crates/{crate}" }
+foodshare-core = { workspace = true }
+foodshare-{crate} = { workspace = true }
 ```
 
 ### 3. Create src/main.rs
@@ -130,18 +130,15 @@ Every crate should define its own error type:
 
 ```rust
 // src/error.rs
-use thiserror::Error;
+//
+// The error type is `foodshare_core::error::Error`. It carries an
+// `ErrorCode`, and the code decides the exit code, so a crate does not
+// need its own error enum to say what went wrong.
+use foodshare_core::error::{Error, ErrorCode};
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("E{code}: {message}")]
-    Structured {
-        code: u16,
-        message: String,
-    },
-
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
+fn load(path: &std::path::Path) -> Result<String, Error> {
+    std::fs::read_to_string(path)
+        .map_err(|e| Error::new(ErrorCode::IoError, format!("{path}: {e}")))
 }
 ```
 
@@ -173,7 +170,7 @@ cargo check --workspace --all-targets
 cargo test -p foodshare-{crate-name}
 
 # Lint
-cargo clippy -p foodshare-{crate-name} -- -D warnings
+cargo clippy -p foodshare-{crate-name} -- -D clippy::correctness -D clippy::suspicious
 ```
 </essential_principles>
 

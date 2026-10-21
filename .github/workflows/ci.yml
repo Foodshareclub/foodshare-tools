@@ -209,6 +209,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --workspace --no-deps
 
+      # The CLI reference is generated from the binaries' own help, so it
+      # cannot describe a command that does not exist. This fails when it
+      # has fallen behind the code.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build the binaries
+        run: cargo build --release --workspace
+      - name: The CLI reference is up to date
+        run: bun scripts/generate-cli-reference.ts --check
+
   msrv:
     name: MSRV (1.88)
     runs-on: ubuntu-latest

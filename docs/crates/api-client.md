@@ -23,8 +23,8 @@ behaviour is written once rather than in each caller.
 ```rust,no_run
 use foodshare_api_client::{ClientConfig, FoodshareClient};
 
-let client = FoodshareClient::new(ClientConfig::from_env()?);
-let health = client.get_bff_health().await?;
+let client = FoodshareClient::new();
+let health = client.health().check().await?;
 ```
 
 ## The endpoints

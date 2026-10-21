@@ -96,6 +96,20 @@ The duration is recorded in the `scanning` histogram, in milliseconds.
 
 ## Configuration
 
+The configuration is a Rust value, not a file. The crate never reads a
+TOML file: a service that wants one reads it and builds the value.
+
+```rust
+use foodshare_telemetry::TelemetryConfig;
+
+let config = TelemetryConfig {
+    log_level: "debug".to_string(),
+    ..TelemetryConfig::default()
+};
+```
+
+The fields it used to be read from a file were:
+
 ```toml
 [telemetry]
 enabled = true

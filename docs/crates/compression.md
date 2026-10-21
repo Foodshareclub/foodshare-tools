@@ -21,34 +21,35 @@ foodshare-compression = "1.4"
 ### Brotli
 
 ```rust
-use foodshare_compression::brotli;
+use foodshare_compression::{brotli_compress, brotli_decompress};
 
 // Compress
-let compressed = brotli::compress(data, 11)?; // quality 0-11
+let compressed = brotli_compress(data, 11)?; // quality 0-11
 
 // Decompress
-let decompressed = brotli::decompress(&compressed)?;
+let decompressed = brotli_decompress(&compressed)?;
 ```
 
 ### Gzip
 
 ```rust
-use foodshare_compression::gzip;
+use foodshare_compression::{gzip_compress, gzip_decompress};
 
 // Compress
-let compressed = gzip::compress(data, 9)?; // level 0-9
+let compressed = gzip_compress(data, 9)?; // level 0-9
 
 // Decompress
-let decompressed = gzip::decompress(&compressed)?;
+let decompressed = gzip_decompress(&compressed)?;
 ```
 
 ### Auto-detect
 
 ```rust
-use foodshare_compression::decompress;
+use foodshare_compression::{compress, decompress, Algorithm};
 
-// Automatically detects format
-let data = decompress(&compressed)?;
+// Compress, and decompress without knowing which algorithm was used
+let compressed = compress(data, Algorithm::Gzip, 6)?;
+let data = decompress(&compressed, Algorithm::Gzip)?;
 ```
 
 ## WASM Usage

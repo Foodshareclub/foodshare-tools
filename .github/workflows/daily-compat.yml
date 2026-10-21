@@ -2,7 +2,7 @@ name: Daily Compatibility & E2E
 
 # Nightly cross-repo compatibility orchestrator (tools hosts the shared
 # compat-check script + ai-review action). Cargo lint/test/build coverage
-# already runs daily via ci.yml (06:00 UTC) including the MSRV 1.85 gate.
+# already runs daily via ci.yml (06:00 UTC) including the MSRV 1.88 gate.
 #
 # This workflow:
 # 1. Runs clippy (advisory lint layer beyond ci.yml's check/test)

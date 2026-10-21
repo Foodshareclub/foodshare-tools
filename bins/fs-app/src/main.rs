@@ -2306,7 +2306,7 @@ fn run_supabase_auth_fix(
     println!("  Monitor logs:");
     println!(
         "    {} supabase logs geolocate-user --tail",
-        "foodshare-hooks".dimmed()
+        "bunx --bun".dimmed()
     );
     println!();
 
@@ -2339,10 +2339,7 @@ fn run_supabase_auth_check(backend_path: &PathBuf) -> i32 {
                     "✗".red()
                 );
                 println!();
-                println!(
-                    "  Run {} to fix this",
-                    "foodshare-hooks supabase auth-fix".cyan()
-                );
+                println!("  Run {} to fix this", "fs-app supabase auth-fix".cyan());
                 return exit_codes::FAILURE;
             }
         }

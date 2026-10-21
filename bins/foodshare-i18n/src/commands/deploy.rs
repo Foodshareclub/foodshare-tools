@@ -71,10 +71,10 @@ pub async fn run(
     println!();
     println!("{}", "Next steps:".bold());
     println!(
-        "  1. Test with CLI: {}",
-        "foodshare-i18n test-translation --locale ru".cyan()
+        "  1. Check the health: {}",
+        "foodshare-i18n health --detailed".cyan()
     );
-    println!("  2. View status:   {}", "foodshare-i18n status".cyan());
+    println!("  2. Audit the coverage: {}", "foodshare-i18n audit".cyan());
     println!();
 
     Ok(())

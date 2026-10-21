@@ -36,10 +36,10 @@ cargo install --path bins/lefthook-rs
 
 ```
 foodshare-tools/
-├── crates/                    # Library crates (20)
+├── crates/                    # Library crates (19) and one binary
 │   ├── core/                  # Shared: git, file scanning, process, health
 │   ├── hooks/                 # Git hooks: commit-msg, secrets, migrations
-│   ├── cli/                   # CLI utilities: terminal output, progress
+│   ├── cli/                   # CLI utilities: terminal output
 │   ├── app/                   # Cross-platform app support (iOS + Android)
 │   ├── web/                   # Web: Next.js security, bundle analysis
 │   ├── telemetry/             # Observability: logging, metrics, tracing
@@ -55,10 +55,10 @@ foodshare-tools/
 │   ├── image/                 # Image processing (JPEG, PNG, WebP, GIF)
 │   ├── swift-toolchain/       # Swift version management
 │   ├── api-client/            # API client utilities
-│   ├── quadlet/                # Quadlet validation for Podman units
+│   ├── quadlet/               # Quadlet validation for Podman units (a binary)
 │   └── motherduck-sync/       # MotherDuck data sync (placeholder submodule)
 ├── bins/                      # Binary crates (14)
-│   ├── fs-app/         # Cross-platform CLI
+│   ├── fs-app/                # Cross-platform CLI
 │   ├── lefthook-rs/           # Web CLI (git hooks)
 │   ├── fs-image/              # Image processing CLI
 │   ├── foodshare-i18n/        # Internationalization CLI
@@ -73,31 +73,27 @@ foodshare-tools/
 │   ├── fs-xccloud/            # Xcode Cloud builds, logs and diagnostics
 │   └── fs-verify/             # Full cross-repository verification
 ├── scripts/                   # Utility scripts
-├── tests/                     # Integration tests
 ├── docs/                      # Documentation
-├── packages/                  # Additional packages (WASM bindings, shared types)
+├── packages/                  # Package stubs: the WASM bindings live in crates/
 └── .github/workflows/
-    ├── ci.yml                 # CI: lint, security audit, test (3 OS), coverage, build, docs
+    ├── ci.yml                 # CI: toolchain, lint, audit, test (3 OS), coverage, build, docs
+    ├── daily-compat.yml       # Daily compatibility check
     ├── publish.yml            # Publish crates to crates.io
     └── release.yml            # Build release binaries + GitHub Release
 ```
 
 ## Usage
 
-### Shared Commands (all platforms)
+Every command and flag is in the [CLI reference](docs/cli-reference.md), which is
+generated from the binaries' own help.
+
+### App (used with foodshare-app)
 
 ```bash
-# Validate commit message format
-<binary> commit-msg .git/COMMIT_MSG
-
-# Scan for secrets in staged files
-<binary> secrets
-
-# Check Supabase migrations
-<binary> migrations --dir supabase/migrations
-
-# Run pre-push checks
-<binary> pre-push
+fs-app commit-msg .git/COMMIT_MSG  # Validate commit message format
+fs-app secrets                     # Scan for secrets in staged files
+fs-app migrations                  # Check Supabase migrations
+fs-app pre-push                    # Run pre-push checks
 ```
 
 ### iOS (used with foodshare-app)
@@ -117,7 +113,7 @@ fs-app doctor                 # Environment check
 fs-app format --lang kotlin
 fs-app lint
 fs-app emulator list
-fs-app emulator boot pixel_7
+fs-app emulator boot --name pixel_7
 ```
 
 ### Web (used with foodshare-web)
@@ -125,8 +121,9 @@ fs-app emulator boot pixel_7
 ```bash
 lefthook-rs security                 # Security checks
 lefthook-rs nextjs-security          # Next.js specific
-lefthook-rs bundle-size --threshold 500kb
+lefthook-rs bundle-size --threshold 500
 lefthook-rs conventional-commit .git/COMMIT_MSG
+lefthook-rs protected-branch         # Refuse a push to a protected branch
 ```
 
 ### Orchestration
@@ -213,16 +210,23 @@ up working on one machine and failing on the next.
 
 ## Error Codes
 
-| Code Range | Category      | Example                 |
-| ---------- | ------------- | ----------------------- |
-| E1xxx      | General       | E1001 Internal error    |
-| E2xxx      | IO            | E2001 File not found    |
-| E3xxx      | Configuration | E3002 Parse error       |
-| E4xxx      | Git           | E4001 Not a git repo    |
-| E5xxx      | Process       | E5001 Command not found |
-| E6xxx      | Validation    | E6001 Invalid input     |
-| E7xxx      | Security      | E7001 Secret detected   |
-| E8xxx      | Platform      | E8001 Xcode error       |
+An error carries its code to the command line: the code is printed with the
+message, and the exit code says what kind of failure it was.
+
+| Code Range | Category      | Example                 | Exit |
+| ---------- | ------------- | ----------------------- | ---- |
+| E1xxx      | General       | E1001 Internal error    | 1    |
+| E2xxx      | IO            | E2001 File not found    | 1    |
+| E3xxx      | Configuration | E3002 Parse error       | 3    |
+| E4xxx      | Git           | E4001 Not a git repo    | 4    |
+| E5xxx      | Process       | E5001 Command not found | 127  |
+| E6xxx      | Validation    | E6001 Invalid input     | 2    |
+| E7xxx      | Security      | E7001 Secret detected   | 5    |
+| E8xxx      | Platform      | E8001 Xcode error       | 1    |
+
+A timeout is 124. A check that found a secret exits with 5, a commit message that
+did not pass the format exits with 2, and a scan that could not look at all
+exits with 4 — a pipeline can tell those apart.
 
 ## License
 

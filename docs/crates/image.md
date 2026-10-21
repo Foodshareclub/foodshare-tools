@@ -33,26 +33,33 @@ match format {
 }
 ```
 
-### Dimensions
+### Metadata
 
 ```rust
-use foodshare_image::dimensions;
+use foodshare_image::extract_metadata;
 
-let (width, height) = dimensions(&bytes)?;
-println!("{}x{}", width, height);
+let metadata = extract_metadata(&bytes)?;
+println!("{}x{}", metadata.width, metadata.height);
 ```
 
-### Validation
+### Resizing
 
 ```rust
-use foodshare_image::validate;
+use foodshare_image::{fit_within, resize_image, FitOptions, ResizeOptions};
 
-// Validate image
-let result = validate(&bytes, &ValidationConfig {
-    max_width: 4096,
-    max_height: 4096,
-    max_size: 5_000_000, // 5MB
-    allowed_formats: vec![ImageFormat::Jpeg, ImageFormat::Png],
+// To a target width, with the height calculated
+let resized = resize_image(&bytes, &ResizeOptions {
+    width: 800,
+    quality: 85,
+    format: None,
+})?;
+
+// Inside a set of bounds, keeping the shape
+let fitted = fit_within(&bytes, &FitOptions {
+    max_width: 1242,
+    max_height: 2688,
+    quality: 90,
+    format: None,
 })?;
 ```
 
@@ -62,11 +69,11 @@ let result = validate(&bytes, &ValidationConfig {
 # Detect format
 fs-image detect image.jpg
 
-# Get dimensions
-fs-image dimensions image.jpg
+# Get the metadata
+fs-image metadata image.jpg
 
 # Validate
-fs-image validate image.jpg --max-size 5MB
+fs-image analyze image.jpg
 ```
 
 ## Magic Bytes

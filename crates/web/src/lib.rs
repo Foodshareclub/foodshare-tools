@@ -4,7 +4,6 @@
 //! - Next.js security scanning (OWASP)
 //! - Bundle size analysis
 //! - Accessibility checks
-//! - Import organization
 
 #![warn(missing_docs)]
 

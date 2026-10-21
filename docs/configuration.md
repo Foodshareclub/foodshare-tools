@@ -12,50 +12,97 @@ Configuration is discovered relative to the current working directory. The first
 
 There is no user-level (`~/.config`) configuration file and no environment-variable overrides for configuration values.
 
+## What this build reads
+
+These are the sections the tools act on. A section that is not here is
+not implemented by this build, and the loader says so — see [Unknown
+keys](#unknown-keys) below.
+
+| Section      | What it does                                              |
+| ------------ | --------------------------------------------------------- |
+| `general`    | The scheme, destination, device, bundle identifier and package name the builds use, and the paths to exclude |
+| `commit_msg` | The commit-message format: the types, the length bounds, and the merge and revert skips |
+| `analyze`    | The thresholds for TODOs, FIXMEs and force unwraps, and the paths to analyze |
+| `test`       | The coverage threshold                                     |
+| `secrets`    | The extra patterns to look for, the patterns to excuse, and the files to skip |
+| `format`     | Whether to stage what was formatted, and the paths to format |
+| `lint`       | Whether warnings are failures, the reporter, and the paths to lint |
+| `migrations` | Where the migration files live                             |
+| `pre_push`   | Whether to stop at the first failure, the build configuration, and the deadlines |
+
 Example:
 
 ```toml
 # .foodshare-hooks.toml
 
+[general]
+scheme = "FoodShare"
+destination = "platform=iOS Simulator,name=iPhone 17 Pro Max"
+device = "iPhone 17 Pro Max"
+bundle_id = "com.flutterflow.foodshare"
+package_name = "com.foodshare"
+exclude_paths = ["**/Build/**", "**/DerivedData/**"]
+
 [commit_msg]
 # Allowed commit types
 types = ["feat", "fix", "docs", "style", "refactor", "test", "chore", "perf", "ci", "build", "revert"]
 
-# Maximum subject line length
+# Subject line length bounds
 max_length = 72
-
-# Minimum subject line length
 min_length = 10
 
-# Skip validation for merge commits
+# Skip validation for merge and revert commits
 skip_merge = true
-
-# Skip validation for revert commits
 skip_revert = true
 
 [secrets]
-# Additional patterns to detect (regex)
-additional_patterns = []
-
-# Patterns to exclude (e.g., placeholder values)
-exclude_patterns = [
-    "EXAMPLE_",
-    "PLACEHOLDER_",
-    "YOUR_",
-    "xxx",
-    "test_"
+# Extra patterns to detect, as regular expressions.
+#
+# These are anchored to an assignment on purpose. A bare keyword is not
+# a pattern: a repository talks about tokens, secrets and credentials
+# in prose, in source comments and in translation strings, so a list of
+# plain words matched every one of those lines. A guard that reports
+# everything is a guard that gets turned off, and then it reports
+# nothing.
+patterns = [
+    '(?i)\b(secret|credential|token)\b\s*[=:]\s*["\'][^$"\'\n][^"\'\n]{7,}["\']',
 ]
 
-# Files to exclude from secret scanning
+# Lines that are known to hold a placeholder. The value is matched
+# anywhere in the line, so only the placeholder line is skipped and a
+# real secret on another line is still found.
+exclude_patterns = [
+    "your_token_here",
+]
+
+# Files to exclude from secret scanning. Matched as a substring of the
+# path, not as a glob.
 exclude_files = [
-    "*.test.ts",
-    "*.spec.ts",
-    "*.mock.ts",
-    "*.fixture.ts",
-    "__mocks__/**",
-    "**/__tests__/**"
+    ".lefthook.yml",
+    "compose.yaml",
 ]
 ```
+
+## Unknown keys
+
+A section or a key that this build does not implement is reported, on
+stderr, when the configuration is read:
+
+```
+⚠ .foodshare-hooks.toml: 3 configuration key(s) are not implemented by this tool and were ignored:
+  android.module
+  pre_push.full_checks
+  version.project_file
+```
+
+The report never fails a command. A repository with a section the tool
+does not read should still be able to run the tool; it should just
+learn that the section does nothing.
+
+The sections the estate writes that no tool reads today are `[android]`,
+`[build]`, `[clean]`, `[deps]`, `[docs]` and `[version]`. They are in
+the report on purpose: they are the ones somebody would otherwise
+believe were doing something.
 
 ## Environment Variables
 
@@ -71,11 +118,17 @@ Binaries recognize the following environment variables at runtime (these are not
 | `FOODSHARE_DEBUG`        | Enable debug output                                                          |
 | `FOODSHARE_ENV`          | Environment name                                                             |
 | `FOODSHARE_HOOKS_BIN`    | Path to the `lefthook-rs` binary invoked by centralized `lefthook.yml` gates |
+| `FOODSHARE_ORCHESTRATOR_TOKEN` | Token the daemon's control routes require                           |
+| `FOODSHARE_ORCHESTRATOR_URL`  | Where the daemon is running                                            |
 | `FOODSHARE_PARALLEL`     | Run checks in parallel                                                       |
 | `FOODSHARE_QUICK_MODE`   | Enable quick mode (skip slow checks)                                         |
+| `FOODSHARE_STEP_TIMEOUT_SECS` | Timeout for a step, in seconds                                        |
 | `FOODSHARE_STRICT`       | Treat warnings as errors                                                     |
 | `FOODSHARE_TELEMETRY`    | Enable/disable telemetry                                                     |
 | `FOODSHARE_TIMEOUT_SECS` | Operation timeout in seconds                                                 |
+| `FOODSHARE_WORKSPACE_ROOT` | Where the workspace is                                               |
+| `ANDROID_HOME`           | The Android SDK, for the mobile steps                                        |
+| `ANDROID_SDK_ROOT`       | The Android SDK, for the mobile steps                                        |
 
 ## Per-Command Configuration
 
@@ -106,25 +159,40 @@ skip_revert = true
 
 ### Secret Patterns
 
-Built-in patterns detect:
+The built-in patterns are twenty:
 
-| Pattern               | Example                                   |
-| --------------------- | ----------------------------------------- |
-| AWS Access Key        | `AKIA...`                                 |
-| AWS Secret Key        | `aws_secret_access_key = "..."`           |
-| Supabase Anon Key     | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
-| Supabase Service Role | `service_role` key pattern                |
-| GitHub Token          | `ghp_...`, `gho_...`, `ghu_...`           |
-| Stripe Key            | `sk_live_...`, `pk_live_...`              |
-| Generic API Key       | `api_key`, `apikey`, `api-key` patterns   |
-| Private Key           | PEM headers containing `PRIVATE KEY`      |
-| Password in URL       | `://user:password@`                       |
+| Pattern                    | Example                                      |
+| -------------------------- | -------------------------------------------- |
+| AWS access key             | `AKIA...`                                    |
+| AWS secret key             | `aws_secret_access_key = "..."`              |
+| Google API key             | `AIza...`                                    |
+| Firebase URL               | a Firebase database URL                      |
+| Heroku API key             | a Heroku API key                             |
+| GitHub token               | `ghp_...`, `gho_...`, `ghu_...`              |
+| npm token                  | `npm_...`                                    |
+| PyPI token                 | `pypi-...`                                   |
+| Database URL               | a URL with a password in it                  |
+| Supabase key               | a Supabase anon or service-role key          |
+| Stripe secret key          | `sk_live_...`, `sk_test_...`                 |
+| Slack webhook              | a Slack webhook URL                          |
+| Discord webhook            | a Discord webhook URL                        |
+| Standard Webhooks secret   | `whsec_...`                                  |
+| Twilio auth token          | a Twilio auth token                          |
+| SendGrid API key           | `SG. ...`                                    |
+| Private key                | PEM headers containing `PRIVATE KEY`         |
+| Password assignment        | `password = "..."`                           |
+| Generic API key            | `api_key`, `apikey`, `api-key` patterns      |
+| Debug print                | a `print` that looks like it prints a secret |
+| Custom token               | a token-shaped value                         |
+
+The scanner also looks for a line that is high-entropy, whatever it
+looks like.
 
 Add your own patterns:
 
 ```toml
 [secrets]
-additional_patterns = [
+patterns = [
     "my_company_[a-zA-Z0-9]{32}",
     "internal_token_[0-9a-f]{64}"
 ]

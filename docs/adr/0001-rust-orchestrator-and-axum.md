@@ -129,6 +129,6 @@ the sibling repositories are updated.
   repositories are not Rust. That is a boundary of the workspace, not a
   gap in the tools.
 - The Xcode Cloud tool needed ES256 signing, so the workspace gained
-  `p256`, at the same version the backend's `fs-verify` resolves.
+  `p256`, at the version the workspace's `[workspace.dependencies]` pins.
 
 

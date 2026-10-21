@@ -108,7 +108,7 @@ cwd = "foodshare-web"
 
 A step's `cwd` is relative to the workspace root, so the file is the
 same on every machine. The file is optional: without it, the built-in
-plan is the plan. `foodshare-verify.toml.example` in the repository root
+plan is the plan. `.foodshare-verify.toml.example` in the repository root
 is a starting point.
 
 The same file configures the full verification. Its stages run in order

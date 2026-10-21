@@ -20,7 +20,6 @@ cargo test --workspace
 foodshare-tools/
 ├── crates/           # Library crates
 ├── bins/             # Binary entry points
-├── tests/            # Integration tests
 └── docs/             # Documentation
 ```
 
@@ -30,7 +29,7 @@ foodshare-tools/
 # Build
 cargo build                          # Debug build
 cargo build --release                # Release build
-cargo build -p fs-app         # Single crate
+cargo build -p fs-app-cli     # Single binary (the library is `fs-app`)
 
 # Test
 cargo test --workspace               # All tests
@@ -38,7 +37,7 @@ cargo test -p foodshare-core         # Single crate
 cargo test -- --nocapture            # Show output
 
 # Lint
-cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets -- -D clippy::correctness -D clippy::suspicious
 
 # Format
 cargo fmt --all                      # Format code
@@ -219,10 +218,10 @@ pub enum MyError {
 ## Pull Request Checklist
 
 - [ ] Tests pass: `cargo test --workspace`
-- [ ] Clippy clean: `cargo clippy --workspace -- -D warnings`
+- [ ] Clippy clean: `cargo clippy --workspace --all-targets -- -D clippy::correctness -D clippy::suspicious`
 - [ ] Formatted: `cargo fmt --all`
 - [ ] Documentation updated
-- [ ] CHANGELOG.md updated (if applicable)
+- [ ] The CLI reference regenerated: `bun scripts/generate-cli-reference.ts`
 - [ ] Commit messages follow conventional commits
 
 ## Release Process

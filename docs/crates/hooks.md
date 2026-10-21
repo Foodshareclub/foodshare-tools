@@ -12,16 +12,20 @@ Git hook implementations for commit validation, secret scanning, and migration c
 ## Usage
 
 ```rust
-use foodshare_hooks::{commit_msg, secrets, migrations};
+use foodshare_hooks::{commit_msg, migrations, secrets};
+use foodshare_core::config::SecretsConfig;
 
-// Validate commit message
-commit_msg::validate("feat: add new feature")?;
+// Validate a commit message file
+let result = commit_msg::validate_commit_message(
+    std::path::Path::new(".git/COMMIT_MSG"),
+    &Default::default(),
+)?;
 
-// Scan for secrets
-let findings = secrets::scan_staged_files()?;
+// Scan files for secrets
+let findings = secrets::scan_files(&[std::path::PathBuf::from("config.toml")], &SecretsConfig::default());
 
-// Check migrations
-let issues = migrations::validate("supabase/migrations")?;
+// Check the migration files
+let check = migrations::check_migrations(std::path::Path::new("supabase/migrations"), true, true)?;
 ```
 
 ## Modules
@@ -31,18 +35,22 @@ let issues = migrations::validate("supabase/migrations")?;
 Conventional commit validation.
 
 ```rust
-use foodshare_hooks::commit_msg::{validate, Config};
+use foodshare_core::config::CommitMsgConfig;
+use foodshare_hooks::commit_msg::validate_commit_message;
 
 // Default validation
-validate("feat: add login")?;
+let result = validate_commit_message(
+    std::path::Path::new(".git/COMMIT_MSG"),
+    &CommitMsgConfig::default(),
+)?;
 
 // Custom configuration
-let config = Config {
+let config = CommitMsgConfig {
     types: vec!["feat", "fix", "docs"],
     max_length: 72,
     ..Default::default()
 };
-validate_with_config("feat(auth): add login", &config)?;
+let result = validate_commit_message(std::path::Path::new(".git/COMMIT_MSG"), &config)?;
 ```
 
 ### `secrets`

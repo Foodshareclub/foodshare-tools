@@ -19,16 +19,13 @@ cd foodshare-tools
 cargo build --release
 
 # Binaries are in target/release/
-ls target/release/{fs-app,lefthook-rs,fs-image} foodshare-*
+ls target/release/{fs-app,lefthook-rs,fs-image,foodshare-*}
 ```
 
 ### Install Globally
 
 ```bash
-# iOS tools
-cargo install --path bins/fs-app
-
-# Android tools
+# The cross-platform app tool, for iOS and Android
 cargo install --path bins/fs-app
 
 # Web tools (lefthook-rs)
@@ -37,6 +34,8 @@ cargo install --path bins/lefthook-rs
 # Image tools
 cargo install --path bins/fs-image
 ```
+
+`./install.sh --install` installs all of them.
 
 ### Quick Install Script
 
@@ -83,8 +82,11 @@ fs-app doctor
 
 Required tools:
 
-- Node.js 18+
 - bun
+
+There is no Node.js in this toolchain. The build fails if one creeps
+back in, and `bun` is the package manager, the script runner, the test
+runner and the Next.js runtime.
 
 ```bash
 # Available subcommands
@@ -144,7 +146,7 @@ lefthook install
 fs-app secrets
 
 # Validate a commit message
-echo "feat: add new feature" | fs-app commit-msg -
+fs-app commit-msg .git/COMMIT_MSG
 
 # Run all pre-push checks
 fs-app pre-push

@@ -33,30 +33,33 @@ let signature = hmac_sha256(secret, payload);
 let valid = verify_signature(secret, payload, &signature);
 ```
 
-### Webhook Verification
+### One-time passwords
 
 ```rust
-use foodshare_crypto::webhook;
+use foodshare_crypto::totp;
 
-// Verify Stripe webhook
-let valid = webhook::verify_stripe(
-    &payload,
-    &signature_header,
-    &webhook_secret,
-)?;
+// The code for a secret, right now
+let code = foodshare_crypto::generate_totp(secret, 30, 6)?;
 
-// Verify GitHub webhook
-let valid = webhook::verify_github(
-    &payload,
-    &signature_header,
-    &webhook_secret,
-)?;
+// Whether a code is the one for a secret
+let valid = foodshare_crypto::verify_totp(secret, &code, 30, 6)?;
+
+// The URI an authenticator application reads
+let uri = foodshare_crypto::build_otpauth_uri("Foodshare", secret, 30, 6)?;
+```
+
+### Constant-time comparison
+
+```rust
+use foodshare_crypto::constant_time_compare;
+
+let equal = constant_time_compare(provided.as_bytes(), expected.as_bytes());
 ```
 
 ## WASM Usage
 
 ```typescript
-import init, { hmac_sha256, verify_signature } from '@foodshare/crypto-wasm';
+import init, { hmac_sha256_hex, verify_webhook_sha256 } from '@foodshare/crypto-wasm';
 
 await init();
 

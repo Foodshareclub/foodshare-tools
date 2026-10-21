@@ -8,9 +8,10 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | --------------------------------------- | ------------------------------------ |
 | [Getting Started](./getting-started.md) | Installation and first steps         |
 | [Architecture](./architecture.md)       | System design and crate structure    |
-| [CLI Reference](./cli-reference.md)     | Command-line interface documentation |
+| [CLI Reference](./cli-reference.md)     | Every command and flag, from the code |
 | [Configuration](./configuration.md)     | TOML configuration options           |
 | [Development](./development.md)         | Contributing and local development   |
+| [Design](./DESIGN.md)                   | What this repository is, and its rules |
 
 ## Crate Documentation
 
@@ -20,6 +21,7 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | -------------------------------- | ------------------------------------------------------------------------------ |
 | [fs-app](./crates/app.md)        | Cross-platform (iOS, Android) CLI tools (Xcode, Gradle, simulators, emulators) |
 | [foodshare-web](./crates/web.md) | Web development tools (Next.js security, bundle analysis)                      |
+| [foodshare-quadlet](./crates/quadlet.md) | Quadlet unit validation for Podman                                   |
 
 ### Core Libraries
 
@@ -27,13 +29,15 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | -------------------------------------------- | --------------------------------------------------- |
 | [foodshare-core](./crates/core.md)           | Shared infrastructure (git, file scanning, process) |
 | [foodshare-hooks](./crates/hooks.md)         | Git hooks (commit-msg, secrets, migrations)         |
-| [foodshare-cli](./crates/cli.md)             | CLI utilities (terminal output, progress bars)      |
+| [foodshare-cli](./crates/cli.md)             | CLI utilities (terminal output)                     |
 | [foodshare-telemetry](./crates/telemetry.md) | Observability (logging, metrics, tracing)           |
 | [foodshare-orchestrator](./crates/orchestrator.md) | Workspace build and verification orchestration |
 | [foodshare-maestro](./crates/maestro.md) | Maestro E2E flows, syntax checks, device matrix     |
 | [foodshare-wasm](./crates/wasm.md) | WebAssembly builds for the published crates       |
 | [foodshare-device](./crates/device.md) | iOS simulators and Android emulators          |
 | [foodshare-xccloud](./crates/xccloud.md) | Xcode Cloud over the App Store Connect API   |
+| [foodshare-api-client](./crates/api-client.md) | The HTTP client for the Foodshare backend |
+| [foodshare-swift-toolchain](./crates/swift-toolchain.md) | Swift toolchain version management   |
 
 ### Published Libraries
 
@@ -44,6 +48,12 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | [foodshare-search](./crates/search.md)           | Fuzzy search            |
 | [foodshare-compression](./crates/compression.md) | Brotli/Gzip compression |
 | [foodshare-image](./crates/image.md)             | Image format detection  |
+
+### Placeholders
+
+| Crate                                            | Description                        |
+| ------------------------------------------------ | ---------------------------------- |
+| [foodshare-motherduck-sync](./crates/motherduck-sync.md) | A stub; the CLI is not written yet |
 
 ## Binaries
 
@@ -57,6 +67,7 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | `fs-auto`           | Headless run-until-green orchestrator                                 |
 | `fs-tui`            | Live build and test monitor                                           |
 | `fs-orchestrator`   | HTTP daemon over the workspace orchestrator                           |
+| `fs-verify`         | Full cross-repository verification                                    |
 | `fs-maestro`        | Maestro E2E runner: syntax, suites, device matrix                     |
 | `fs-wasm`           | WebAssembly build engine                                              |
 | `fs-build`          | Cross-platform build engine: Swift core, iOS, Android                 |

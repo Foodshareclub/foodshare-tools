@@ -6,66 +6,72 @@ Shared infrastructure crate providing foundational functionality for all platfor
 
 - Git operations (repository detection, staged files, commit info)
 - File scanning with pattern matching
-- Process execution and output capture
+- Process execution, with an optional deadline
 - Health check framework
-- Structured error types
+- Structured error types, with codes and exit codes
+- The shared configuration schema, and the report of the keys it does not read
 
 ## Usage
 
 ```rust
-use foodshare_core::{git, fs, process, health};
+use foodshare_core::{git, process};
+use std::time::Duration;
 
 // Git operations
-let repo = git::find_repo()?;
-let staged = git::staged_files(&repo)?;
+let repo = git::GitRepo::open_current()?;
+let staged = repo.staged_files()?;
 
 // File scanning
-let matches = fs::scan_directory("src", &["*.rs"])?;
+let files = foodshare_core::file_scanner::scan_swift_files(std::path::Path::new("."))?;
 
 // Process execution
-let output = process::run("swift", &["--version"])?;
+let output = process::run_command("swift", &["--version"])?;
 
-// Health checks
-let status = health::check_tool("swiftformat")?;
+// A command that may hang, given a deadline
+let output = process::run_command_with_timeout("xcodebuild", &[], Duration::from_secs(600))?;
 ```
 
 ## Modules
 
 ### `git`
 
-Git repository operations.
+Git repository operations. The repository is a value you open and then
+ask questions of; there are no free functions that go looking for it.
 
 ```rust
-use foodshare_core::git;
+use foodshare_core::git::GitRepo;
 
-// Find repository root
-let repo_root = git::find_repo()?;
+// Open the repository the working directory is in
+let repo = GitRepo::open_current()?;
 
-// Get staged files
-let staged = git::staged_files(&repo_root)?;
+// The files that are staged
+let staged = repo.staged_files()?;
 
-// Get commit message
-let msg = git::read_commit_msg(".git/COMMIT_MSG")?;
+// The staged files of one kind
+let swift = repo.staged_swift_files()?;
 
-// Check if path is ignored
-let ignored = git::is_ignored(&repo_root, "node_modules")?;
+// The branch
+let branch = repo.current_branch()?;
+
+// Whether a path is ignored
+let ignored = repo.is_ignored(std::path::Path::new("node_modules"));
 ```
 
-### `fs`
+### `file_scanner`
 
-File system operations.
+File system scanning.
 
 ```rust
-use foodshare_core::fs;
+use foodshare_core::file_scanner::FileScanner;
 
-// Scan directory with patterns
-let files = fs::scan_directory("src", &["*.rs", "*.toml"])?;
+// Scan for a set of extensions, with exclusions
+let files = FileScanner::new("src")
+    .with_extensions(&["ts", "tsx"])
+    .exclude(&["**/node_modules/**"])
+    .scan()?;
 
-// Read file content
-let content = fs::read_file("config.toml")?;
-
-// Check file exists
-let exists = fs::exists("Cargo.toml");
+// Or one of the shortcuts
+let swift = foodshare_core::file_scanner::scan_swift_files(std::path::Path::new("."))?;
 ```
 
 ### `process`
@@ -74,14 +80,19 @@ Process execution.
 
 ```rust
 use foodshare_core::process;
+use std::time::Duration;
 
-// Run command
-let output = process::run("swift", &["--version"])?;
+// Run a command
+let output = process::run_command("swift", &["--version"])?;
 
-// Run with timeout
-let output = process::run_with_timeout("long-command", &[], Duration::from_secs(30))?;
+// Run a command in a directory
+let output = process::run_command_in_dir("swiftlint", &["lint"], std::path::Path::new("src"))?;
 
-// Check command exists
+// Run a command that may hang, with a deadline. The child is killed when
+// the deadline passes, and the error says so.
+let output = process::run_command_with_timeout("xcodebuild", &[], Duration::from_secs(600))?;
+
+// Check a command exists
 let exists = process::command_exists("swiftformat");
 ```
 
@@ -90,59 +101,60 @@ let exists = process::command_exists("swiftformat");
 Health check framework.
 
 ```rust
-use foodshare_core::health::{HealthCheck, HealthStatus};
+use foodshare_core::health::{CommandCheck, HealthChecker};
 
-// Check single tool
-let check = HealthCheck::new("swiftformat")
-    .with_version_arg("--version")
-    .check()?;
+// Aggregate the standard checks
+let report = HealthChecker::new().with_standard_checks().run();
 
-// Aggregate checks
-let checks = vec![
-    HealthCheck::new("git"),
-    HealthCheck::new("swift"),
-    HealthCheck::new("swiftformat"),
-];
+// Or build the checks yourself
+let report = HealthChecker::new()
+    .add_check(CommandCheck::new("swiftformat", Some("--version")))
+    .run();
+```
 
-let results: Vec<HealthStatus> = checks
-    .iter()
-    .map(|c| c.check())
-    .collect();
+### `config`
+
+The shared configuration schema, and the report of the keys this build
+does not implement.
+
+```rust
+use foodshare_core::config::Config;
+
+let config = Config::load(None)?;
+
+// The keys in the file that this build does not act on
+for key in &config.unknown_keys {
+    eprintln!("{key} is not implemented by this tool");
+}
 ```
 
 ### `error`
 
-Structured error types.
+Structured error types. The code decides the exit code, so a caller can
+tell a secret that leaked from a message that was too long.
 
 ```rust
 use foodshare_core::error::{Error, ErrorCode};
 
-// Create error with code
-let err = Error::new(ErrorCode::FileNotFound, "config.toml not found");
+let err = Error::new(ErrorCode::SecretDetected, "a token was found");
 
-// Error codes
-// E1xxx - General
-// E2xxx - IO
-// E3xxx - Configuration
-// E4xxx - Git
-// E5xxx - Process
-// E6xxx - Validation
-// E7xxx - Security
-// E8xxx - Platform
+assert_eq!(err.exit_code(), 5);
+assert_eq!(err.coded_message(), "E7001: a token was found");
 ```
 
 ## Error Codes
 
-| Code | Description |
-|------|-------------|
-| E1001 | Internal error |
-| E2001 | File not found |
-| E2002 | Permission denied |
-| E3001 | Config not found |
-| E3002 | Config parse error |
-| E4001 | Not a git repository |
-| E4002 | Git command failed |
-| E5001 | Command not found |
-| E5002 | Command failed |
-| E6001 | Invalid input |
-| E7001 | Secret detected |
+| Code | Description | Exit |
+|------|-------------|------|
+| E1001 | Internal error | 1 |
+| E2001 | File not found | 1 |
+| E2002 | Permission denied | 1 |
+| E3001 | Config not found | 3 |
+| E3002 | Config parse error | 3 |
+| E4001 | Not a git repository | 4 |
+| E4002 | Git command failed | 4 |
+| E5001 | Command not found | 127 |
+| E5002 | Command failed | 1 |
+| E5003 | Process timed out | 124 |
+| E6001 | Invalid input | 2 |
+| E7001 | Secret detected | 5 |

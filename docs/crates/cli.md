@@ -1,35 +1,28 @@
 # foodshare-cli
 
-CLI utilities for terminal output, progress bars, and user interaction.
+Terminal output helpers shared by the Foodshare command-line tools.
 
 ## Features
 
-- Colored terminal output
-- Progress bars and spinners
-- Table formatting
-- Cross-platform support
+- Status messages in one shape, so every tool says the same things the
+  same way
+- Errors that carry their code, so a caller can tell a security failure
+  from a validation failure
+- Formatting for durations, sizes and counts
 
 ## Usage
 
 ```rust
-use foodshare_cli::{output, progress, table};
+use foodshare_cli::output::Status;
 
 // Colored output
-output::success("Build completed");
-output::error("Build failed");
-output::warning("Deprecated API");
+Status::success("Build completed");
+Status::error("Build failed");
+Status::warning("Deprecated API");
+Status::info("Processing files...");
 
-// Progress bar
-let pb = progress::bar(100);
-for i in 0..100 {
-    pb.inc(1);
-}
-pb.finish();
-
-// Table output
-let table = table::new(&["Name", "Status"]);
-table.add_row(&["Build", "✓"]);
-table.print();
+// An error with its code
+Status::failure(&error);
 ```
 
 ## Modules
@@ -39,48 +32,22 @@ table.print();
 Colored terminal output.
 
 ```rust
-use foodshare_cli::output;
+use foodshare_cli::output::Status;
 
-output::success("Operation completed");
-output::error("Operation failed");
-output::warning("Deprecation warning");
-output::info("Processing files...");
-output::debug("Debug info");
+Status::success("Operation completed");
+Status::error("Operation failed");
+Status::warning("Deprecation warning");
+Status::info("Processing files...");
+Status::header("A section");
+Status::step(1, 3, "The first of three");
 ```
 
-### `progress`
-
-Progress indicators.
+The formatting helpers are free functions:
 
 ```rust
-use foodshare_cli::progress;
+use foodshare_cli::output::{format_count, format_duration, format_size};
 
-// Progress bar
-let pb = progress::bar(total);
-pb.inc(1);
-pb.finish_with_message("Done");
-
-// Spinner
-let spinner = progress::spinner("Loading...");
-spinner.finish_with_message("Loaded");
+assert_eq!(format_duration(std::time::Duration::from_millis(500)), "500ms");
+assert_eq!(format_size(2048), "2.00 KB");
+assert_eq!(format_count(1, "file", "files"), "1 file");
 ```
-
-### `table`
-
-Table formatting.
-
-```rust
-use foodshare_cli::table;
-
-let mut t = table::new(&["Check", "Status", "Time"]);
-t.add_row(&["Secrets", "✓", "15ms"]);
-t.add_row(&["Commit", "✓", "1ms"]);
-t.print();
-```
-
-## Color Support
-
-Colors are automatically disabled when:
-- Output is not a TTY
-- `NO_COLOR` environment variable is set
-- `--no-color` flag is passed

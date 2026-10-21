@@ -29,10 +29,16 @@ foodshare-tools/
 │   ├── fs-maestro/     # Maestro E2E runner
 │   ├── fs-wasm/        # WebAssembly build engine
 │   ├── fs-build/       # Cross-platform build engine
-│   └── fs-sim/         # Simulator runner
-├── tests/            # Integration tests
+│   ├── fs-sim/         # Simulator runner
+│   ├── fs-verify/      # Full cross-repository verification
+│   ├── fs-xccloud/     # Xcode Cloud builds and diagnostics
+│   ├── foodshare-i18n/ # Translation management
+│   └── foodshare-swift/# Swift toolchain management
 └── docs/             # Documentation
 ```
+
+The integration tests live with the crate they test, in that crate's
+`tests/` directory. There is no repository-wide `tests/` directory.
 
 ## Dependency Graph
 
@@ -41,13 +47,23 @@ foodshare-tools/
                          │
      ┌───────────────────┼───────────────────┐
      │                   │                   │
-  fs-app             fs-auto             fs-tui          fs-orchestrator
-     │                   │                   │                   │
-     └───────────────────┴─────────┬─────────┴───────────────────┘
-                                   │
-                          foodshare-orchestrator
-                                   │
-                       foodshare-core  +  foodshare-telemetry
+  fs-app    fs-auto    fs-tui   fs-orchestrator   fs-verify
+     │          │         │            │              │
+     └──────────┴─────────┴──────┬─────┴──────────────┘
+                                │
+                      foodshare-orchestrator
+                                │
+              foodshare-core  +  foodshare-telemetry
+
+  fs-maestro ── foodshare-maestro ── foodshare-device
+  fs-image   ── foodshare-image
+  fs-wasm    ── foodshare-wasm
+  fs-xccloud ── foodshare-xccloud
+  fs-build   ── fs-app
+  fs-sim     ── fs-app  +  foodshare-maestro
+  lefthook-rs── foodshare-hooks  +  foodshare-web
+  foodshare-i18n ── foodshare-api-client
+  foodshare-swift ── foodshare-swift-toolchain
 ```
 
 The orchestrator is a library with no HTTP dependency. The three
@@ -226,7 +242,7 @@ exclude_patterns = ["EXAMPLE_"]
 ## Testing Strategy
 
 - **Unit tests** - Per-crate in `src/` modules
-- **Integration tests** - In `tests/` directory
+- **Integration tests** - In each crate's own `tests/` directory
 - **Snapshot tests** - Using `insta` for output verification
 - **Property tests** - Using `proptest` for edge cases
 - **Benchmarks** - Using `criterion` for performance
