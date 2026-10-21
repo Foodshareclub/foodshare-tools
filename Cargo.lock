@@ -1130,6 +1130,7 @@ version = "1.4.0"
 dependencies = [
  "clap",
  "indicatif",
+ "tempfile",
 ]
 
 [[package]]
@@ -1153,11 +1154,14 @@ name = "foodshare-swift"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "clap",
  "colored",
  "foodshare-swift-toolchain",
  "owo-colors",
+ "predicates",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -1299,6 +1303,7 @@ name = "fs-auto"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "chrono",
  "clap",
  "console",
@@ -1306,8 +1311,10 @@ dependencies = [
  "foodshare-telemetry",
  "indicatif",
  "owo-colors",
+ "predicates",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]
@@ -1317,11 +1324,14 @@ name = "fs-build"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "clap",
  "foodshare-core",
  "fs-app",
+ "predicates",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]
@@ -1331,12 +1341,15 @@ name = "fs-image"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "clap",
  "foodshare-image",
  "image",
  "indicatif",
+ "predicates",
  "rayon",
  "serde_json",
+ "tempfile",
  "walkdir",
 ]
 
@@ -1345,11 +1358,14 @@ name = "fs-maestro"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "clap",
  "foodshare-core",
  "foodshare-maestro",
+ "predicates",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]
@@ -1359,6 +1375,7 @@ name = "fs-orchestrator"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "axum",
  "clap",
  "foodshare-core",
@@ -1366,6 +1383,7 @@ dependencies = [
  "foodshare-orchestrator",
  "foodshare-telemetry",
  "http-body-util",
+ "predicates",
  "reqwest",
  "serde",
  "serde_json",
@@ -1381,12 +1399,15 @@ name = "fs-sim"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "clap",
  "foodshare-core",
  "foodshare-maestro",
  "fs-app",
+ "predicates",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]
@@ -1396,12 +1417,14 @@ name = "fs-tui"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "chrono",
  "clap",
  "crossterm",
  "foodshare-orchestrator",
  "foodshare-telemetry",
  "owo-colors",
+ "predicates",
  "ratatui",
  "reqwest",
  "serde",
@@ -1415,11 +1438,14 @@ name = "fs-verify"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "clap",
  "foodshare-orchestrator",
  "foodshare-telemetry",
+ "predicates",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]
@@ -1429,11 +1455,14 @@ name = "fs-wasm"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "clap",
  "foodshare-core",
  "foodshare-wasm",
+ "predicates",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]
@@ -1443,12 +1472,15 @@ name = "fs-xccloud"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "chrono",
  "clap",
  "foodshare-core",
  "foodshare-xccloud",
+ "predicates",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]

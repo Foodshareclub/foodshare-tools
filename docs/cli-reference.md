@@ -1088,6 +1088,7 @@ Options:
       --sequential     Run the web and backend domains one after another
       --state <STATE>  Where the run history is kept. Defaults to the state directory
   -h, --help           Print help
+  -V, --version        Print version
 ```
 
 ## fs-tui

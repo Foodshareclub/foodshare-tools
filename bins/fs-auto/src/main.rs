@@ -14,7 +14,8 @@ use foodshare_orchestrator::{Options, Orchestrator, Workspace, disk};
 #[derive(Parser, Debug)]
 #[command(
     name = "fs-auto",
-    about = "FoodShare auto — run until green, build, close & clean"
+    about = "FoodShare auto — run until green, build, close & clean",
+    version
 )]
 struct Cli {
     /// Keep the build artefacts after a successful run.

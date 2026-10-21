@@ -36,5 +36,7 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true
+assert_cmd.workspace = true
+predicates.workspace = true
 reqwest.workspace = true
 tower = { workspace = true, features = ["util"] }

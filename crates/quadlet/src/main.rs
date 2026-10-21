@@ -222,3 +222,89 @@ fn main() {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A container file that passes every check.
+    const GOOD: &str = "\
+[Container]
+Image=quay.io/fedora/fedora:41
+HealthCmd=/usr/bin/true
+Volume=/home/runner/work:/home/runner/work
+";
+
+    fn write(content: &str) -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let path = dir.path().join("unit.container");
+        std::fs::write(&path, content).expect("the file should be written");
+        (dir, path)
+    }
+
+    #[test]
+    fn a_good_container_file_passes() {
+        let (_dir, path) = write(GOOD);
+        assert!(check_container_file(&path).is_ok());
+    }
+
+    #[test]
+    fn a_missing_image_key_is_an_error() {
+        let (_dir, path) = write("HealthCmd=/usr/bin/true\n");
+        let error = check_container_file(&path).expect_err("the file should fail");
+        assert_eq!(error.code, ErrorCode::ValidationError);
+        assert!(
+            error.message.contains("missing Image="),
+            "the reason should be named: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_missing_health_command_is_an_error() {
+        let (_dir, path) = write("Image=quay.io/fedora/fedora:41\n");
+        let error = check_container_file(&path).expect_err("the file should fail");
+        assert!(
+            error.message.contains("missing HealthCmd="),
+            "the reason should be named: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn an_absolute_users_volume_is_an_error() {
+        // The path only works on the machine that wrote it, which is the
+        // failure this validator exists to catch.
+        let (_dir, path) = write(&format!("{GOOD}Volume=/Users/someone/work:/work\n"));
+        let error = check_container_file(&path).expect_err("the file should fail");
+        assert!(
+            error.message.contains("absolute /Users/"),
+            "the reason should be named: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_transcript_leak_is_an_error() {
+        let (_dir, path) = write(&format!("{GOOD}# tool_call in the notes\n"));
+        let error = check_container_file(&path).expect_err("the file should fail");
+        assert!(
+            error.message.contains("transcript leakage"),
+            "the reason should be named: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_file_that_is_not_there_is_an_error() {
+        let error = check_container_file(Path::new("/not/a/file.container"))
+            .expect_err("the file should fail");
+        assert_eq!(error.code, ErrorCode::FileReadError);
+    }
+
+    #[test]
+    fn no_files_at_all_is_an_error() {
+        let error = check_files(&[]).expect_err("the check should fail");
+        assert_eq!(error.code, ErrorCode::ValidationError);
+    }
+}
