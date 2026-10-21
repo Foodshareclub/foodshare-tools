@@ -61,7 +61,7 @@ use std::time::Instant;
 
 /// Current version of the built-in pattern set.
 /// Increment when patterns are added, removed, or modified.
-pub const PATTERN_VERSION: &str = "2.0.0";
+pub const PATTERN_VERSION: &str = "2.1.0";
 
 /// API version for serialized configurations.
 pub const CONFIG_API_VERSION: u32 = 1;
@@ -679,6 +679,26 @@ static BUILTIN_PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
             severity: Severity::Medium,
             category: PatternCategory::Communication,
             description: "Discord Webhook URL".into(),
+            enabled: true,
+        },
+        PatternDef {
+            id: "standardwebhooks-secret".into(),
+            name: "Standard Webhooks Signing Secret".into(),
+            // The secret format the Standard Webhooks specification issues:
+            // the `whsec_` prefix and a long opaque body. A repository that
+            // pastes one into a comment, a runbook or an env template is
+            // pasting a live signing key.
+            //
+            // The length is the filter. The specification's body is 32
+            // base62 characters, and the base64 form the estate uses is
+            // longer, so a floor of 32 catches both. It also keeps the
+            // placeholders out: `whsec_xxxxx` and `whsec_your_secret_here`
+            // are documentation, and a guard that flags documentation is a
+            // guard that gets switched off.
+            pattern: r"whsec_[A-Za-z0-9+/=_\-]{32,}".into(),
+            severity: Severity::Critical,
+            category: PatternCategory::Communication,
+            description: "Standard Webhooks signing secret (whsec_ prefix)".into(),
             enabled: true,
         },
         PatternDef {
@@ -1401,6 +1421,9 @@ pub fn scan_content_with_entropy(
     for file in &config.exclude_files {
         scanner = scanner.exclude_file(file);
     }
+    for pattern in &config.additional_patterns {
+        scanner = scanner.add_pattern_regex(format!("custom-{}", pattern.len()), pattern);
+    }
 
     scanner
         .scan_str(content, file_name)
@@ -1440,6 +1463,14 @@ pub fn scan_files_with_stats(
     }
     for file in &config.exclude_files {
         scanner = scanner.exclude_file(file);
+    }
+    // The repository's own patterns. This function is what the hook command
+    // calls, so before this line a repository that declared extra patterns
+    // had a configuration that was read, written down, and then ignored.
+    // The sibling `scan_content` has always applied them, which is why the
+    // two disagreed.
+    for pattern in &config.additional_patterns {
+        scanner = scanner.add_pattern_regex(format!("custom-{}", pattern.len()), pattern);
     }
 
     let output = scanner.scan_files(paths);
@@ -1523,7 +1554,7 @@ mod tests {
 
     #[test]
     fn test_builtin_patterns_count() {
-        assert_eq!(BUILTIN_PATTERNS.len(), 19);
+        assert_eq!(BUILTIN_PATTERNS.len(), 20);
     }
 
     #[test]
@@ -1591,6 +1622,56 @@ mod tests {
             let result = SecretScanner::new().scan_str(&token, "test.env");
             assert!(result.has_secrets(), "Failed for prefix: {}", prefix);
         }
+    }
+
+    // =========================================================================
+    // Standard Webhooks Tests
+    // =========================================================================
+
+    #[test]
+    fn test_standardwebhooks_secret() {
+        let result =
+            SecretScanner::new().scan_str("whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw", "test.env");
+        assert!(result.has_secrets());
+        assert_eq!(result.findings()[0].pattern_id, "standardwebhooks-secret");
+    }
+
+    #[test]
+    fn test_standardwebhooks_secret_in_versioned_context() {
+        // The GoTrue and Svix wire format prefixes the secret with its
+        // version. The value is still the secret.
+        let result = SecretScanner::new().scan_str(
+            "HOOK_BEFORE_USER_CREATED_SECRETS=v1,whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw",
+            ".env",
+        );
+        assert!(result.has_secrets());
+        assert_eq!(result.findings()[0].pattern_id, "standardwebhooks-secret");
+    }
+
+    #[test]
+    fn test_standardwebhooks_placeholder_not_matched() {
+        // A placeholder is not a secret, and the estate writes these in
+        // documentation. A guard that flags them is a guard that gets
+        // disabled.
+        for placeholder in ["whsec_xxxxx", "whsec_", "whsec_your_secret_here"] {
+            let result = SecretScanner::new().scan_str(placeholder, "README.md");
+            assert!(
+                !result.has_secrets(),
+                "Placeholder was reported as a secret: {}",
+                placeholder
+            );
+        }
+    }
+
+    #[test]
+    fn test_standardwebhooks_prefix_stripping_code_not_matched() {
+        // The edge functions strip the prefix off the header. The literal
+        // prefix in that code is not a secret.
+        let result = SecretScanner::new().scan_str(
+            "Deno.env.get(\"BEFORE_USER_CREATED_HOOK_SECRET\")?.replace(\"v1,whsec_\", \"\")",
+            "geocoding.ts",
+        );
+        assert!(!result.has_secrets());
     }
 
     // =========================================================================
@@ -1914,6 +1995,49 @@ mod tests {
         let matches = scan_content("AKIAIOSFODNN7EXAMPLE", "test.env", &config);
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].pattern_name, "AWS Access Key");
+    }
+
+    #[test]
+    fn test_legacy_scan_files_applies_the_repository_patterns() {
+        // `scan_files` is the path the hook command takes, and it used to
+        // drop the repository's own patterns on the floor: the schema did
+        // not accept the key the repositories write, and this function did
+        // not apply the key the schema did accept. A repository could
+        // declare its extra patterns and get none of them.
+        let directory = std::env::temp_dir().join("foodshare-scan-files-patterns");
+        std::fs::create_dir_all(&directory).unwrap();
+        let file = directory.join("hook.sh");
+        std::fs::write(
+            &file,
+            "HOOK_SECRET=v1,whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw\n",
+        )
+        .unwrap();
+
+        let config = SecretsConfig {
+            additional_patterns: vec![r"HOOK_SECRET=[^[:space:]]+".to_string()],
+            ..SecretsConfig::default()
+        };
+        let matches = scan_files(&[file.clone()], &config);
+        assert!(
+            matches
+                .iter()
+                .any(|m| m.pattern_name.contains("Standard Webhooks")),
+            "the built-in pattern should still find the secret: {:?}",
+            matches
+        );
+
+        let config = SecretsConfig {
+            additional_patterns: vec![r"HOOK_[A-Z_]+=v[0-9],whsec_[A-Za-z0-9+/=]{32,}".to_string()],
+            ..SecretsConfig::default()
+        };
+        let matches = scan_files(&[file], &config);
+        assert!(
+            matches.len() >= 1,
+            "the repository's own pattern should have been applied: {:?}",
+            matches
+        );
+
+        std::fs::remove_dir_all(&directory).ok();
     }
 
     #[test]
