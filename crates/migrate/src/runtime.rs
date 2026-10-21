@@ -89,8 +89,12 @@ fn choose(requested: Option<Runtime>, owners: &[(Runtime, bool)]) -> Result<Runt
 /// same as one that does not have the container.
 ///
 /// `requested` comes from `--runtime` or the `CONTAINER_RUNTIME`
-/// environment variable.
+/// environment variable. An explicit choice is not second-guessed, and
+/// asking the machine about it would cost a subprocess for nothing.
 pub fn resolve(requested: Option<Runtime>, container: &str) -> Result<Runtime> {
+    if let Some(runtime) = requested {
+        return Ok(runtime);
+    }
     let owners: Vec<(Runtime, bool)> = Runtime::all()
         .into_iter()
         .map(|runtime| (runtime, owns_container(runtime, container)))
