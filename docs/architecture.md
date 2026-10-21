@@ -138,6 +138,12 @@ Maestro E2E support:
 - Syntax checking
 - Single-device suites and the multi-device matrix
 
+### The workspace
+
+`foodshare-orchestrator::workspace::Workspace` is the one answer to
+"where am I?". Every binary uses it, so the tools find the same
+repositories however they are run.
+
 ### Devices (`foodshare-device`)
 
 The iOS simulators and the Android emulators, from the tools that own

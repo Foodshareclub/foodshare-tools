@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
+use foodshare_orchestrator::Workspace;
 use foodshare_wasm::{Layout, build, loader};
 
 #[derive(Parser, Debug)]
@@ -43,15 +44,14 @@ struct Cli {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let tools_dir = cli.tools_dir.unwrap_or_else(resolve_tools_dir);
-    // The web repository is a sibling of the tools repository. Resolving
-    // the tools directory first keeps a `..` out of the paths that are
-    // printed and logged.
-    let tools_dir = std::fs::canonicalize(&tools_dir).unwrap_or(tools_dir);
-    let web_dir = cli
-        .web_dir
-        .unwrap_or_else(|| tools_dir.join("..").join("foodshare-web"));
-    let web_dir = std::fs::canonicalize(&web_dir).unwrap_or(web_dir);
+    let workspace = Workspace::discover()?;
+    let tools_dir = cli.tools_dir.unwrap_or_else(|| workspace.tools());
+    let web_dir = cli.web_dir.unwrap_or_else(|| workspace.web());
+
+    let layout = Layout {
+        tools_dir: tools_dir.clone(),
+        web_dir: web_dir.clone(),
+    };
 
     let crates: Vec<loader::Crate> = match &cli.only {
         Some(name) => loader::CRATES
@@ -70,18 +70,17 @@ async fn main() -> Result<()> {
         anyhow::bail!("no crate matches `{}`", cli.only.unwrap_or_default());
     }
 
-    let layout = Layout {
-        tools_dir: tools_dir.clone(),
-        web_dir: web_dir.clone(),
-    };
-
     if !cli.json {
         println!("🦀 =========================================================");
         println!("🦀 FoodShare Rust -> WebAssembly (WASM) Build Engine");
         println!("🦀 =========================================================");
     }
 
-    let outcomes = build::build_all(&layout, &crates).await;
+    let outcomes = if cli.json {
+        build::build_all_quiet(&layout, &crates).await
+    } else {
+        build::build_all(&layout, &crates).await
+    };
 
     if cli.json {
         println!("{}", serde_json::to_string_pretty(&outcomes)?);
@@ -120,17 +119,4 @@ async fn main() -> Result<()> {
     } else {
         std::process::exit(1);
     }
-}
-
-/// The Rust workspace, from the current directory.
-fn resolve_tools_dir() -> PathBuf {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    if cwd.join("crates").is_dir() {
-        return cwd;
-    }
-    let nested = cwd.join("foodshare-tools");
-    if nested.join("crates").is_dir() {
-        return nested;
-    }
-    cwd
 }

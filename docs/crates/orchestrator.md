@@ -189,8 +189,13 @@ check is a separate command of its own.
 ## Workspace discovery
 
 The workspace root is the directory that holds `foodshare-app`. It is
-found from the current directory, or set explicitly with
-`FOODSHARE_WORKSPACE_ROOT`.
+found by walking up from the current directory, so the answer is the same
+whether the tools are run from the workspace, from a repository in it, or
+from a directory inside one. `FOODSHARE_WORKSPACE_ROOT` overrides it.
+
+Every binary in this repository uses this one answer. The tools are run
+from all sorts of directories, and five copies of the same lookup gave
+five different answers.
 
 ```rust,no_run
 use foodshare_orchestrator::Workspace;
@@ -201,6 +206,10 @@ println!("{}", workspace.root().display());
 println!("{}", workspace.web().display());
 # }
 ```
+
+A binary that takes an `--app-dir` uses `Workspace::with_app_dir`, which
+keeps the app repository where it was given and finds the other
+repositories beside it.
 
 ## Front-ends
 

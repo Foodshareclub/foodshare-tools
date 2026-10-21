@@ -65,13 +65,25 @@ impl Layout {
 /// directory, and running them one after another would serialise the
 /// whole dependency compile.
 pub async fn build_all(layout: &Layout, crates: &[Crate]) -> Vec<BuildOutcome> {
+    build_all_with(layout, crates, false).await
+}
+
+/// Build every crate, sending the build output to standard error.
+///
+/// A caller that prints the results as JSON needs standard output to
+/// hold nothing but the JSON.
+pub async fn build_all_quiet(layout: &Layout, crates: &[Crate]) -> Vec<BuildOutcome> {
+    build_all_with(layout, crates, true).await
+}
+
+async fn build_all_with(layout: &Layout, crates: &[Crate], quiet: bool) -> Vec<BuildOutcome> {
     let mut tasks = Vec::with_capacity(crates.len());
     for krate in crates {
         let krate = *krate;
         let layout = layout.clone();
-        tasks.push(tokio::spawn(
-            async move { build_one(&layout, &krate).await },
-        ));
+        tasks.push(tokio::spawn(async move {
+            build_one(&layout, &krate, quiet).await
+        }));
     }
 
     let mut outcomes = Vec::with_capacity(crates.len());
@@ -92,7 +104,7 @@ pub async fn build_all(layout: &Layout, crates: &[Crate]) -> Vec<BuildOutcome> {
 }
 
 /// Build one crate and patch its loader.
-pub async fn build_one(layout: &Layout, krate: &Crate) -> BuildOutcome {
+pub async fn build_one(layout: &Layout, krate: &Crate, quiet: bool) -> BuildOutcome {
     let started = Instant::now();
     let out_dir = layout.out_dir(krate);
     let crate_dir = layout.tools_dir.join(krate.path);
@@ -145,8 +157,8 @@ pub async fn build_one(layout: &Layout, krate: &Crate) -> BuildOutcome {
     // few lines are kept for the failure message.
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
-    let out_task = stdout.map(|stream| tokio::spawn(pump(stream, Stream::Stdout)));
-    let err_task = stderr.map(|stream| tokio::spawn(pump(stream, Stream::Stderr)));
+    let out_task = stdout.map(|stream| tokio::spawn(pump(stream, Stream::Stdout, quiet)));
+    let err_task = stderr.map(|stream| tokio::spawn(pump(stream, Stream::Stderr, quiet)));
 
     let status = child.wait().await;
     let out_tail = match out_task {
@@ -230,7 +242,7 @@ enum Stream {
 ///
 /// The build takes a while, and its progress is worth seeing while it
 /// happens. The tail is what the failure message quotes.
-async fn pump<R>(stream: R, kind: Stream) -> String
+async fn pump<R>(stream: R, kind: Stream, quiet: bool) -> String
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
@@ -238,9 +250,12 @@ where
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     let mut lines = BufReader::new(stream).lines();
     let mut tail: VecDeque<String> = VecDeque::with_capacity(TAIL_LINES);
-    let mut terminal: Box<dyn tokio::io::AsyncWrite + Send + Unpin> = match kind {
-        Stream::Stdout => Box::new(tokio::io::stdout()),
-        Stream::Stderr => Box::new(tokio::io::stderr()),
+    // A quiet build sends its output to standard error, so standard
+    // output holds nothing but the results.
+    let mut terminal: Box<dyn tokio::io::AsyncWrite + Send + Unpin> = match (kind, quiet) {
+        (Stream::Stdout, true) => Box::new(tokio::io::stderr()),
+        (Stream::Stdout, false) => Box::new(tokio::io::stdout()),
+        (Stream::Stderr, _) => Box::new(tokio::io::stderr()),
     };
 
     while let Ok(Some(line)) = lines.next_line().await {
@@ -331,7 +346,7 @@ mod tests {
     async fn test_build_without_wasm_pack_fails_cleanly() {
         // `wasm-pack` is not installed everywhere; the outcome records the
         // failure rather than panicking.
-        let outcome = build_one(&layout(), &loader::CRATES[0]).await;
+        let outcome = build_one(&layout(), &loader::CRATES[0], false).await;
         if !outcome.success {
             assert!(outcome.error.is_some());
         }

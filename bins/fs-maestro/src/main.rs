@@ -22,6 +22,7 @@ use clap::{Parser, Subcommand};
 use tokio::process::Command as Process;
 
 use foodshare_maestro::{device, flows, runner};
+use foodshare_orchestrator::Workspace;
 
 #[derive(Parser, Debug)]
 #[command(name = "fs-maestro", version, about = "FoodShare Maestro E2E runner")]
@@ -83,12 +84,15 @@ fn command_of(command: Option<Action>) -> Action {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let app_dir = resolve_app_dir(cli.app_dir.as_deref());
-    let maestro_dir = foodshare_maestro::maestro_dir(&app_dir);
+    let workspace = match cli.app_dir.as_deref() {
+        Some(app) => Workspace::with_app_dir(app),
+        None => Workspace::discover()?,
+    };
+    let maestro_dir = foodshare_maestro::maestro_dir(&workspace.app());
 
     // The disk is checked before a suite: a full volume fails the run in
     // a way that looks like a test failure.
-    if let Ok(stats) = foodshare_orchestrator::disk::workspace_stats(&app_dir).await {
+    if let Ok(stats) = foodshare_orchestrator::disk::workspace_stats(&workspace.app()).await {
         tracing::info!(avail_gb = stats.avail_gb, "disk space checked");
     }
 
@@ -306,26 +310,4 @@ async fn matrix(maestro_dir: &Path, target: Option<&str>) -> i32 {
     println!("==========================================\n");
 
     i32::from(failed > 0)
-}
-
-/// Find the app repository, the way the Bun runner did.
-fn resolve_app_dir(explicit: Option<&Path>) -> PathBuf {
-    if let Some(dir) = explicit {
-        return dir.to_path_buf();
-    }
-    let candidates = [
-        std::env::current_dir().ok(),
-        std::env::current_dir()
-            .ok()
-            .and_then(|cwd| cwd.parent().map(|p| p.join("foodshare-app"))),
-        std::env::current_dir()
-            .ok()
-            .map(|cwd| cwd.join("foodshare-app")),
-    ];
-    for candidate in candidates.into_iter().flatten() {
-        if candidate.join(".maestro").is_dir() {
-            return candidate;
-        }
-    }
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }

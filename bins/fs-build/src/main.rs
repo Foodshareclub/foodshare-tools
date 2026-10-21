@@ -21,6 +21,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
+use foodshare_orchestrator::Workspace;
 use fs_app::build::{self, Configuration, Layout, Variant};
 
 #[derive(Parser, Debug)]
@@ -44,8 +45,11 @@ struct Cli {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let args = &cli.args;
-    let app_dir = resolve_app_dir(cli.app_dir.as_deref());
-    let layout = Layout::new(app_dir);
+    let workspace = match cli.app_dir.as_deref() {
+        Some(app) => Workspace::with_app_dir(app),
+        None => Workspace::discover()?,
+    };
+    let layout = Layout::new(workspace.app());
 
     if args.iter().any(|a| a == "--help" || a == "-h") {
         print_help();
@@ -193,30 +197,4 @@ Test Modes:
   bridge                 Run Skip cross-platform bridge tests
 "
     );
-}
-
-/// Find the app repository.
-fn resolve_app_dir(explicit: Option<&std::path::Path>) -> PathBuf {
-    if let Some(dir) = explicit {
-        return dir.to_path_buf();
-    }
-    let candidates = [
-        std::env::current_dir().ok(),
-        std::env::current_dir()
-            .ok()
-            .and_then(|cwd| cwd.parent().map(|p| p.join("foodshare-app"))),
-        std::env::current_dir()
-            .ok()
-            .map(|cwd| cwd.join("foodshare-app")),
-    ];
-    for candidate in candidates.into_iter().flatten() {
-        if candidate
-            .join("Darwin")
-            .join("FoodShare.xcodeproj")
-            .is_dir()
-        {
-            return candidate;
-        }
-    }
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }

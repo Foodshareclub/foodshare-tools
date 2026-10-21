@@ -16,6 +16,7 @@ use std::time::Duration;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+use foodshare_orchestrator::Workspace;
 use foodshare_xccloud::{api, auth, diagnostics};
 
 /// How long to wait between polls when watching a build.
@@ -72,8 +73,11 @@ enum Action {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let app_dir = resolve_app_dir(cli.app_dir.as_deref());
-    let locations = auth::default_locations(&app_dir);
+    let workspace = match cli.app_dir.as_deref() {
+        Some(app) => Workspace::with_app_dir(app),
+        None => Workspace::discover()?,
+    };
+    let locations = auth::default_locations(&workspace.app());
 
     match cli.command.unwrap_or(Action::Status) {
         Action::Jwt => {
@@ -91,7 +95,7 @@ async fn main() -> Result<()> {
         Action::Status | Action::List => {
             let Some(credentials) = auth::resolve(&locations) else {
                 no_credentials();
-                show_local(&app_dir);
+                show_local(&workspace.app());
                 return Ok(());
             };
             let client = api::Client::new(&credentials)?;
@@ -132,7 +136,7 @@ async fn main() -> Result<()> {
             };
             show_logs(&client, &build_id).await?;
         }
-        Action::Local | Action::Diagnostics => show_local(&app_dir),
+        Action::Local | Action::Diagnostics => show_local(&workspace.app()),
     }
 
     Ok(())
@@ -434,27 +438,4 @@ fn show_local(app_dir: &std::path::Path) {
 /// The current time, for the watch log.
 fn now_label() -> String {
     chrono::Local::now().format("%H:%M:%S").to_string()
-}
-
-/// Find the app repository.
-fn resolve_app_dir(explicit: Option<&std::path::Path>) -> PathBuf {
-    if let Some(dir) = explicit {
-        return dir.to_path_buf();
-    }
-    let candidates = [
-        std::env::current_dir().ok(),
-        std::env::current_dir()
-            .ok()
-            .map(|cwd| cwd.join("foodshare-app")),
-    ];
-    for candidate in candidates.into_iter().flatten() {
-        if candidate
-            .join("Darwin")
-            .join("FoodShare.xcodeproj")
-            .is_dir()
-        {
-            return candidate;
-        }
-    }
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
