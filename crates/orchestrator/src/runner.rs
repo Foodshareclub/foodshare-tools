@@ -424,6 +424,42 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(5));
     }
 
+    /// The processes that are still running a command line holding `marker`.
+    ///
+    /// `ps` is asked rather than `pgrep`, and it is asked directly rather
+    /// than through a shell: on Linux `pgrep -f` matches the command line
+    /// of the process that asks it, so `pgrep -f 'sleep 37'` counts the
+    /// command that asked, and the count is never zero.
+    ///
+    /// A killed process that has not been reaped yet is a zombie, and a
+    /// zombie is gone for good — it cannot run anything, and it does not
+    /// count.
+    #[cfg(unix)]
+    fn still_running(marker: &str) -> Vec<String> {
+        let listing = std::process::Command::new("ps")
+            .arg("-A")
+            .arg("-o")
+            .arg("pid=,stat=,args=")
+            .output();
+        let Ok(listing) = listing else {
+            return Vec::new();
+        };
+        String::from_utf8_lossy(&listing.stdout)
+            .lines()
+            .filter_map(|line| {
+                let mut fields = line.split_whitespace();
+                let _pid = fields.next()?;
+                let state = fields.next()?;
+                let args = fields.collect::<Vec<_>>().join(" ");
+                if args.contains(marker) && !state.starts_with('Z') {
+                    Some(args)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn test_a_cancelled_step_stops_what_it_started() {
@@ -451,16 +487,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(800)).await;
 
         // Nothing of the step is left running.
-        let leftover = std::process::Command::new("sh")
-            .arg("-c")
-            .arg("pgrep -f 'sleep 37' | wc -l")
-            .output();
-        if let Ok(output) = leftover {
-            let count = String::from_utf8_lossy(&output.stdout)
-                .trim()
-                .parse::<u32>()
-                .unwrap_or(0);
-            assert_eq!(count, 0, "the step left processes behind");
-        }
+        let leftover = still_running("sleep 37");
+        assert!(
+            leftover.is_empty(),
+            "the step left processes behind: {leftover:?}"
+        );
     }
 }

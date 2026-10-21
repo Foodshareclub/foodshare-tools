@@ -13,7 +13,15 @@ env:
   RUST_BACKTRACE: 1
   # The canary channel, pinned to an exact build so a CI run and a local run
   # execute the same binary.
-  BUN_VERSION: "1.4.3-canary.20261019.1"
+  #
+  # NOTE: `setup-bun` downloads from the GitHub releases, and the canary
+  # builds are published to npm — there is no `bun-v<canary>` release for
+  # them. Asking it for an exact canary version is a 404; the only canary
+  # it can install is the rolling `canary` release, which is where the npm
+  # canary comes from. So the workflow names `canary` and the exact build
+  # stays pinned in mise.toml and package.json, which is what a developer
+  # runs.
+  BUN_VERSION: "canary"
   # NOTE: no global RUSTFLAGS="-D warnings" — it escalates every pedantic
   # clippy warning to a hard error and breaks plain cargo check/build.
   # Lint enforcement lives in the Lint job's scoped clippy deny-list.
@@ -34,6 +42,19 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+      - name: The Bun build is the canary
+        # The rolling canary release must still be the build the repository
+        # pins. A newer canary is fine — that is the point of a canary — but
+        # a release build is not, because the toolchain is written against
+        # the canary.
+        #
+        # `bun --version` drops the canary suffix and answers `1.4.4` for a
+        # canary build; `bun --revision` keeps it.
+        run: |
+          case "$(bun --revision)" in
+            *-canary*) ;;
+            *) echo "expected a canary build, got $(bun --revision)"; exit 1 ;;
+          esac
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: No Node.js in the toolchain

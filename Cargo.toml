@@ -1,5 +1,10 @@
 [workspace]
-resolver = "2"
+# Resolver 3 makes Cargo honour the `rust-version` below when it picks
+# dependency versions. Resolver 2 does not, and this workspace does not
+# commit a Cargo.lock, so a CI run resolved the newest `uuid` — which
+# declares `rust-version = 1.89` — and the MSRV job failed on a
+# dependency the workspace never asked for.
+resolver = "3"
 members = [
     "crates/core",
     "crates/hooks",
