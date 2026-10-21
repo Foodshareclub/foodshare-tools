@@ -30,3 +30,8 @@
 [tools]
 "npm:bun" = "1.4.3-canary.20261019.1"
 deno = "2.9.6"
+# The WebAssembly modules are committed to the web repository, so the tool
+# that shapes them is pinned. A different `wasm-pack` emits a different
+# loader, and the difference looks like work rather than like a version
+# change. `fs-wasm` checks this before it builds.
+"cargo:wasm-pack" = "0.13.1"

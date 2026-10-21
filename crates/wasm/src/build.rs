@@ -19,6 +19,63 @@ use crate::loader::{self, Crate};
 /// The target `wasm-pack` builds for.
 pub const TARGET: &str = "nodejs";
 
+/// The `wasm-pack` version the generated modules are built with.
+///
+/// The generated modules are committed to the web repository, so the tool
+/// that shapes them has to be pinned: a different `wasm-pack` emits a
+/// different loader, and the difference looks like work in a diff rather
+/// than like a version change. The version is checked before a build, and
+/// the version that built a module is recorded inside it.
+pub const WASM_PACK_VERSION: &str = "0.13.1";
+
+/// The version of `wasm-pack` that is installed.
+///
+/// `wasm-pack --version` answers `wasm-pack 0.13.1`.
+pub fn wasm_pack_version() -> Option<String> {
+    let output = std::process::Command::new("wasm-pack")
+        .arg("--version")
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_version(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Read the version out of what `wasm-pack --version` answered.
+fn parse_version(text: &str) -> Option<String> {
+    let version = text.trim().strip_prefix("wasm-pack ")?;
+    Some(version.trim().to_string())
+}
+
+/// Check that the installed `wasm-pack` is the one the modules are built with.
+///
+/// A build with a different `wasm-pack` produces different modules, and
+/// those modules are committed to another repository. That is not a
+/// difference to be discovered later, in a diff, by whoever commits it.
+pub fn check_wasm_pack() -> Result<(), String> {
+    let Some(installed) = wasm_pack_version() else {
+        return Err(
+            "wasm-pack is not installed, or it did not report a version; \
+             the generated modules need it"
+                .to_string(),
+        );
+    };
+    check_version(&installed)
+}
+
+/// Compare an installed `wasm-pack` with the one the modules are built with.
+fn check_version(installed: &str) -> Result<(), String> {
+    if installed == WASM_PACK_VERSION {
+        return Ok(());
+    }
+    Err(format!(
+        "wasm-pack {installed} is installed, but the modules are built with {WASM_PACK_VERSION}; \
+         the two produce different modules, and the modules are committed to the web repository"
+    ))
+}
+
 /// How one crate's build ended.
 #[derive(Debug, Clone, Serialize)]
 pub struct BuildOutcome {
@@ -108,6 +165,21 @@ pub async fn build_one(layout: &Layout, krate: &Crate, quiet: bool) -> BuildOutc
     let started = Instant::now();
     let out_dir = layout.out_dir(krate);
     let crate_dir = layout.tools_dir.join(krate.path);
+
+    // The tool is checked before anything is written. A build with the
+    // wrong `wasm-pack` would overwrite the modules the web repository
+    // tracks with different ones, and the difference would only be
+    // noticed when somebody committed it.
+    if let Err(e) = check_wasm_pack() {
+        return BuildOutcome {
+            crate_name: krate.name.to_string(),
+            success: false,
+            duration_ms: started.elapsed().as_millis() as u64,
+            size_kb: None,
+            out_dir,
+            error: Some(e),
+        };
+    }
 
     if let Err(e) = tokio::fs::create_dir_all(&out_dir).await {
         let error = format!("could not create {}: {e}", out_dir.display());
@@ -350,5 +422,34 @@ mod tests {
         if !outcome.success {
             assert!(outcome.error.is_some());
         }
+    }
+
+    #[test]
+    fn test_the_version_is_read_out_of_the_answer() {
+        assert_eq!(
+            parse_version("wasm-pack 0.13.1"),
+            Some("0.13.1".to_string())
+        );
+        assert_eq!(
+            parse_version("wasm-pack 0.13.1\n"),
+            Some("0.13.1".to_string())
+        );
+        // Anything else is not an answer this understands.
+        assert_eq!(parse_version("0.13.1"), None);
+        assert_eq!(parse_version(""), None);
+    }
+
+    #[test]
+    fn test_the_installed_version_has_to_match() {
+        assert!(check_version(WASM_PACK_VERSION).is_ok());
+
+        let error = check_version("0.15.0").expect_err("a different version");
+        assert!(
+            error.contains("0.15.0") && error.contains(WASM_PACK_VERSION),
+            "got: {error}"
+        );
+        // The message has to say why it matters, or it reads like a
+        // preference rather than a rule.
+        assert!(error.contains("web repository"), "got: {error}");
     }
 }

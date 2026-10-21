@@ -33,6 +33,45 @@ A file that does not hold the expected loader is left alone: a newer
 `wasm-pack` may write something else, and rewriting it blindly would
 break the build.
 
+## The toolchain is pinned
+
+The generated modules are **committed to the web repository**. That makes
+the toolchain that builds them part of the contract: a different one
+produces different modules, and the difference lands in another
+repository as a diff nobody asked for.
+
+So the versions are pinned, and the build says so rather than assuming:
+
+| What | Pinned in | Why it matters |
+| --- | --- | --- |
+| The dependency versions | `Cargo.lock`, which is committed | The modules embed the `wasm-bindgen` version, and every version renames the generated shims |
+| `wasm-pack` | `mise.toml`, and `build::WASM_PACK_VERSION` | A different `wasm-pack` emits a different loader |
+
+`fs-wasm` checks the `wasm-pack` version before it writes anything, and
+stops with an explanation when it does not match:
+
+```
+❌ [foodshare-geo] failed: wasm-pack 0.15.0 is installed, but the
+modules are built with 0.13.1; the two produce different modules, and
+the modules are committed to the web repository
+```
+
+Nothing is written when the check fails, so the modules the web
+repository tracks are never overwritten by a build that would change
+them.
+
+The version that built a module is recorded inside it — the generated
+loader opens with:
+
+```js
+// Built by wasm-pack 0.13.1. Do not edit: this file is generated.
+```
+
+so a diff in the modules says which toolchain made it.
+
+To move to a different `wasm-pack`, change `WASM_PACK_VERSION` and
+`mise.toml` together, rebuild, and commit the modules with the change.
+
 ## Usage
 
 ```rust,no_run

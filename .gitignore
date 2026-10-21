@@ -1,7 +1,12 @@
 # Rust build artifacts
 /target/
 **/*.rs.bk
-Cargo.lock
+
+# Cargo.lock is committed on purpose. The workspace ships binaries and
+# generates WebAssembly modules that are committed to the web repository,
+# so the versions those are built from have to be pinned. The published
+# libraries keep their version ranges, so committing the lockfile does
+# not constrain anyone who depends on them.
 
 # IDE
 .idea/

@@ -84,6 +84,18 @@ const wasmBytes = require('fs').readFileSync(/*turbopackIgnore: true*/ wasmPath)
     )
 }
 
+/// The header a patched loader carries.
+///
+/// The modules are committed to the web repository, so a diff in one of
+/// them should say what built it. Without this, a change in the toolchain
+/// looks like a set of changed hashes to be interpreted.
+fn toolchain_header() -> String {
+    format!(
+        "// Built by wasm-pack {}. Do not edit: this file is generated.\n",
+        crate::build::WASM_PACK_VERSION
+    )
+}
+
 /// Patch a generated JavaScript file so it can find its `.wasm` file.
 ///
 /// Returns the patched source, or `None` when the file does not hold the
@@ -97,7 +109,14 @@ pub fn patch_loader(source: &str, krate: &Crate) -> Option<String> {
         return None;
     }
     let new = universal_loader(krate.name, &wasm_name);
-    Some(source.replace(&old, new.trim()))
+    let header = toolchain_header();
+    // The header goes on once. The loader is patched on every build, and
+    // the file it is patched in is the one wasm-pack just wrote.
+    let without_header = source.strip_prefix(&header).unwrap_or(source);
+    Some(format!(
+        "{header}{}",
+        without_header.replace(&old, new.trim())
+    ))
 }
 
 /// The name of the generated JavaScript file for a crate.
@@ -150,6 +169,46 @@ mod tests {
     fn test_patch_leaves_an_unknown_loader_alone() {
         let source = "something else entirely";
         assert!(patch_loader(source, &geo()).is_none());
+    }
+
+    #[test]
+    fn test_the_patch_says_what_built_the_module() {
+        let source = format!(
+            "const x = 1;\n{}\nconst y = 2;\n",
+            old_loader("foodshare_geo_bg.wasm")
+        );
+        let patched = patch_loader(&source, &geo()).expect("patched");
+        assert!(patched.starts_with(&toolchain_header()), "got: {patched}");
+        assert!(patched.contains(crate::build::WASM_PACK_VERSION));
+    }
+
+    #[test]
+    fn test_the_header_is_added_once() {
+        let source = format!(
+            "const x = 1;\n{}\nconst y = 2;\n",
+            old_loader("foodshare_geo_bg.wasm")
+        );
+        // A file that already carries the header — a re-patch — does not
+        // end up with two of them.
+        let once =
+            patch_loader(&format!("{}{source}", toolchain_header()), &geo()).expect("patched");
+        assert_eq!(
+            once.matches("Built by wasm-pack").count(),
+            1,
+            "the header was added twice"
+        );
+    }
+
+    #[test]
+    fn test_a_patched_loader_is_not_patched_again() {
+        let source = format!(
+            "const x = 1;\n{}\nconst y = 2;\n",
+            old_loader("foodshare_geo_bg.wasm")
+        );
+        let patched = patch_loader(&source, &geo()).expect("patched");
+        // The loader `wasm-pack` writes is gone, so there is nothing left
+        // to replace.
+        assert!(patch_loader(&patched, &geo()).is_none());
     }
 
     #[test]
