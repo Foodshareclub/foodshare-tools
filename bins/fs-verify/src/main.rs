@@ -41,6 +41,10 @@ struct Cli {
     /// Print the results as JSON.
     #[arg(long)]
     json: bool,
+
+    /// Where the run history is kept. Defaults to the state directory.
+    #[arg(long)]
+    state: Option<std::path::PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -63,6 +67,16 @@ async fn main() -> Result<()> {
 
     if matches!(action, Action::NodeCheck) {
         let verifier = Verifier::new(&workspace).only_node_guard();
+        // Ctrl-C stops the verification, and the build it is running, rather
+        // than orphaning it.
+        let cancelling = verifier.clone();
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                println!("\n🛑 cancelling the verification...");
+                cancelling.cancel();
+            }
+        });
+
         let report = verifier.run(workspace.root()).await;
         for stage in &report.stages {
             let icon = if stage.success { "✅" } else { "❌" };
@@ -79,7 +93,13 @@ async fn main() -> Result<()> {
     }
 
     let config = foodshare_orchestrator::plan::PlanConfig::load(workspace.root())?;
-    let mut verifier = Verifier::with_config(&workspace, &config);
+    let history = foodshare_orchestrator::history::History::load(
+        cli.state
+            .or_else(foodshare_orchestrator::history::default_path),
+        foodshare_orchestrator::history::DEFAULT_LIMIT,
+    )?;
+    let mut verifier =
+        Verifier::with_config(&workspace, &config).with_history(std::sync::Arc::new(history));
     if cli.skip_mobile {
         verifier = verifier.without_mobile();
     }
@@ -92,6 +112,16 @@ async fn main() -> Result<()> {
         println!("🌟 FoodShare Full Domain Verification");
         println!("🌟 =========================================================");
     }
+
+    // Ctrl-C stops the verification, and the build it is running, rather
+    // than orphaning it.
+    let cancelling = verifier.clone();
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            println!("\n🛑 cancelling the verification...");
+            cancelling.cancel();
+        }
+    });
 
     let report = verifier.run(workspace.root()).await;
 

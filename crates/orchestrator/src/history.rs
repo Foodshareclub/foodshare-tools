@@ -16,11 +16,13 @@ pub const DEFAULT_LIMIT: usize = 20;
 /// The name of the file, under the state directory.
 pub const FILE_NAME: &str = "orchestrator-runs.json";
 
-/// What one domain did.
+/// What one part of a run did.
+///
+/// A part is a domain of a plan, or a stage of a verification.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DomainRecord {
-    /// The domain's name.
-    pub domain: String,
+pub struct RunPart {
+    /// The part's name.
+    pub name: String,
     /// Whether it passed.
     pub success: bool,
     /// How long it took.
@@ -38,8 +40,8 @@ pub struct RunRecord {
     pub duration_ms: u64,
     /// Whether every domain passed.
     pub success: bool,
-    /// What each domain did.
-    pub domains: Vec<DomainRecord>,
+    /// What each part of the run did.
+    pub parts: Vec<RunPart>,
 }
 
 /// The history of finished runs.
@@ -166,8 +168,8 @@ mod tests {
             finished_at: "2026-10-21T00:01:00Z".to_string(),
             duration_ms: 60_000,
             success,
-            domains: vec![DomainRecord {
-                domain: "rust".to_string(),
+            parts: vec![RunPart {
+                name: "rust".to_string(),
                 success,
                 duration_ms: 60_000,
             }],

@@ -50,7 +50,7 @@ pub mod workspace;
 
 pub use disk::{DiskStats, HealReport};
 pub use domain::{DomainKind, Step};
-pub use history::{DomainRecord, History, RunRecord};
+pub use history::{History, RunPart, RunRecord};
 pub use plan::{Options, Phase, Plan};
 pub use runner::{LogLine, StepOutcome, Stream};
 pub use state::{DomainState, State, Status};
@@ -310,10 +310,10 @@ impl Orchestrator {
             finished_at: history::now(),
             duration_ms,
             success,
-            domains: domains
+            parts: domains
                 .iter()
-                .map(|d| DomainRecord {
-                    domain: d.kind.name().to_string(),
+                .map(|d| RunPart {
+                    name: d.kind.name().to_string(),
                     success: d.success,
                     duration_ms: d.duration_ms,
                 })

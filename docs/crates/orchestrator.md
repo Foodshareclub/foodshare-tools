@@ -77,6 +77,10 @@ The file lives in the state directory, not in the workspace: the history
 belongs to the machine, not to the repository. The daemon serves it on
 `/runs`.
 
+A verification lands in the same history as a plan's run. The parts of
+a run are the domains of a plan, or the stages of a verification, so
+both read the same way.
+
 ## The plan configuration
 
 The plan has five domains, and a file at the workspace root may change
@@ -123,6 +127,11 @@ A cancellation reaches the process that is running, not only the steps
 after it. The step leads its own process group, so stopping it stops
 everything it started: `cargo test` leaves the test binaries running
 otherwise, and they keep the build directory locked.
+
+The verification's stages go through the same runner as the plan's
+steps, so they get the same timeout, the same cancellation and the same
+errors. `fs-verify` stops on Ctrl-C rather than orphaning the build it
+is running.
 
 ## Timeouts
 

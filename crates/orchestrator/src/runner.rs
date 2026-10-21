@@ -9,7 +9,6 @@ use std::time::{Duration, Instant};
 
 use foodshare_core::error::{Error, Result};
 use serde::Serialize;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -60,6 +59,95 @@ pub fn parse_step_timeout(value: Option<&str>) -> Duration {
     }
 }
 
+/// How a command ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandOutcome {
+    /// The exit code, or `-1` when the process was killed.
+    pub exit_code: i32,
+    /// Whether the command succeeded.
+    pub success: bool,
+    /// How long it took.
+    pub duration_ms: u64,
+}
+
+/// Run a command, streaming its output to `tx`.
+///
+/// This is the one place a command is run: the plan's steps and the
+/// verification's stages both come through here, so both get the same
+/// timeout, the same cancellation and the same errors.
+pub async fn run_command(
+    label: &str,
+    program: &str,
+    args: &[String],
+    cwd: &std::path::Path,
+    env: &[(String, String)],
+    tx: &UnboundedSender<LogLine>,
+    cancelled: &AtomicBool,
+    timeout: Duration,
+) -> Result<CommandOutcome> {
+    let started = Instant::now();
+
+    let mut command = Command::new(program);
+    command
+        .args(args)
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    // The child leads its own process group, so stopping it stops
+    // everything it started. `cargo test` leaves the test binaries
+    // running otherwise, and they keep the build directory locked.
+    #[cfg(unix)]
+    command.process_group(0);
+    for (key, value) in env {
+        command.env(key, value);
+    }
+
+    let mut child = command.spawn().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            Error::command_not_found(program)
+                .with_context(format!("running `{label}` in {}", cwd.display()))
+        } else {
+            Error::process(format!("Failed to spawn `{program}`: {e}"))
+                .with_context(format!("running `{label}` in {}", cwd.display()))
+        }
+    })?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let stdout_task = stdout.map(|out| pump(out, tx.clone(), Stream::Stdout));
+    let stderr_task = stderr.map(|err| pump(err, tx.clone(), Stream::Stderr));
+
+    let status = match tokio::time::timeout(timeout, wait_for(label, &mut child, cancelled)).await {
+        Ok(Ok(status)) => status,
+        Ok(Err(e)) => return Err(e),
+        Err(_) => {
+            // The command is still running, so it is stopped rather than
+            // left behind.
+            stop_process(&mut child).await;
+            return Err(Error::process(format!(
+                "`{label}` did not finish within {}s and was stopped",
+                timeout.as_secs()
+            )));
+        }
+    };
+
+    if let Some(task) = stdout_task {
+        let _ = task.await;
+    }
+    if let Some(task) = stderr_task {
+        let _ = task.await;
+    }
+
+    Ok(CommandOutcome {
+        exit_code: status.code().unwrap_or(-1),
+        success: status.success(),
+        duration_ms: started.elapsed().as_millis() as u64,
+    })
+}
+
 /// Run a step, streaming its output to `tx`.
 ///
 /// The step is not retried here; retrying belongs to the caller, which
@@ -80,83 +168,53 @@ pub async fn run_step_with_timeout(
     timeout: Duration,
     cancelled: &AtomicBool,
 ) -> Result<StepOutcome> {
-    let started = Instant::now();
+    let env: Vec<(String, String)> = step
+        .env
+        .iter()
+        .filter_map(|entry| {
+            entry
+                .split_once('=')
+                .map(|(key, value)| (key.to_string(), value.to_string()))
+        })
+        .collect();
 
-    let mut command = Command::new(&step.program);
-    command
-        .args(&step.args)
-        .current_dir(&step.cwd)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    let outcome = run_command(
+        &step.label,
+        &step.program,
+        &step.args,
+        std::path::Path::new(&step.cwd),
+        &env,
+        tx,
+        cancelled,
+        timeout,
+    )
+    .await?;
 
-    // The child leads its own process group, so stopping it stops
-    // everything it started. `cargo test` leaves the test binaries
-    // running otherwise, and they keep the build directory locked.
-    #[cfg(unix)]
-    command.process_group(0);
-    for entry in &step.env {
-        if let Some((key, value)) = entry.split_once('=') {
-            command.env(key, value);
-        }
-    }
-
-    let mut child = command.spawn().map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            Error::command_not_found(&step.program)
-                .with_context(format!("running `{}` in {}", step.label, step.cwd))
-        } else {
-            Error::process(format!("Failed to spawn `{}`: {e}", step.program))
-                .with_context(format!("running `{}` in {}", step.label, step.cwd))
-        }
-    })?;
-
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-
-    let stdout_task = stdout.map(|out| pump(out, tx.clone(), Stream::Stdout));
-    let stderr_task = stderr.map(|err| pump(err, tx.clone(), Stream::Stderr));
-
-    let status = match tokio::time::timeout(timeout, wait_for(step, &mut child, cancelled)).await {
-        Ok(Ok(status)) => status,
-        Ok(Err(e)) => return Err(e),
-        Err(_) => {
-            // The step is still running, so it is stopped rather than
-            // left behind.
-            stop_process(&mut child).await;
-            return Err(Error::process(format!(
-                "`{}` did not finish within {}s and was stopped",
-                step.label,
-                timeout.as_secs()
-            )));
-        }
-    };
-
-    if let Some(task) = stdout_task {
-        let _ = task.await;
-    }
-    if let Some(task) = stderr_task {
-        let _ = task.await;
-    }
-
-    let exit_code = status.code().unwrap_or(-1);
     Ok(StepOutcome {
         domain: step.domain,
         label: step.label.clone(),
-        exit_code,
-        success: status.success(),
-        duration_ms: started.elapsed().as_millis() as u64,
+        exit_code: outcome.exit_code,
+        success: outcome.success,
+        duration_ms: outcome.duration_ms,
     })
 }
 
-/// Read a pipe line by line, forwarding each line to the channel.
-async fn pump<R>(reader: R, tx: UnboundedSender<LogLine>, stream: Stream)
+/// Copy a process's output to a channel, line by line.
+async fn pump<R>(stream: R, tx: UnboundedSender<LogLine>, kind: Stream)
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
-    let mut lines = BufReader::new(reader).lines();
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    let mut lines = BufReader::new(stream).lines();
     while let Ok(Some(line)) = lines.next_line().await {
-        if tx.send(LogLine { stream, text: line }).is_err() {
+        if tx
+            .send(LogLine {
+                stream: kind,
+                text: line,
+            })
+            .is_err()
+        {
             // The receiver is gone; nobody is listening any more.
             break;
         }
@@ -165,22 +223,19 @@ where
 
 /// Wait for a process, watching for a cancellation.
 async fn wait_for(
-    step: &Step,
+    label: &str,
     child: &mut tokio::process::Child,
     cancelled: &AtomicBool,
 ) -> Result<std::process::ExitStatus> {
     loop {
         if cancelled.load(Ordering::SeqCst) {
             stop_process(child).await;
-            return Err(Error::process(format!("`{}` was cancelled", step.label)));
+            return Err(Error::process(format!("`{label}` was cancelled")));
         }
         match tokio::time::timeout(CANCEL_POLL, child.wait()).await {
             Ok(Ok(status)) => return Ok(status),
             Ok(Err(e)) => {
-                return Err(Error::process(format!(
-                    "Failed to wait for `{}`: {e}",
-                    step.program
-                )));
+                return Err(Error::process(format!("Failed to wait for `{label}`: {e}")));
             }
             // Still running: look again.
             Err(_) => continue,

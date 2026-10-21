@@ -520,11 +520,13 @@ fs-verify                      # every stage
 fs-verify --skip-mobile        # without the simulator smoke tests
 fs-verify --skip-node-guard    # without the toolchain policy check
 fs-verify --json               # machine-readable output
+fs-verify --state <path>       # where the run history is kept
 ```
 
 The stages, in order: the Node.js guard in every repository, the disk,
 the Rust workspace tests, the web build, the mobile smoke tests, and the
-backend edge function tests. It stops at the first failure.
+backend edge function tests. It stops at the first failure, and Ctrl-C
+stops the stage it is running.
 
 The stages after the first two are configurable, in the same file that
 configures the plan — see

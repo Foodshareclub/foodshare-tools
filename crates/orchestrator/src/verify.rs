@@ -8,7 +8,11 @@
 //! mobile domain — so it is a plan of its own.
 
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
+
+use tokio::sync::mpsc;
 
 use serde::Serialize;
 
@@ -81,6 +85,10 @@ pub struct VerifyReport {
 #[derive(Debug, Clone)]
 pub struct Verifier {
     stages: Vec<Stage>,
+    /// Set to stop the verification at the next step boundary.
+    cancelled: Arc<AtomicBool>,
+    /// Where the finished verification is recorded.
+    history: Arc<crate::history::History>,
 }
 
 impl Verifier {
@@ -183,7 +191,28 @@ impl Verifier {
             stages.splice(at..at, configured);
         }
 
-        Self { stages }
+        Self {
+            stages,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            history: Arc::new(crate::history::History::default()),
+        }
+    }
+
+    /// Give the verifier a history to record in.
+    #[must_use]
+    pub fn with_history(self, history: Arc<crate::history::History>) -> Self {
+        Self { history, ..self }
+    }
+
+    /// Ask the verification to stop.
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::SeqCst);
+    }
+
+    /// Whether a cancellation has been requested.
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst)
     }
 
     /// Leave out the toolchain policy check.
@@ -222,6 +251,7 @@ impl Verifier {
     /// Run the verification, stopping at the first failure.
     pub async fn run(&self, root: &std::path::Path) -> VerifyReport {
         let started = Instant::now();
+        let started_at = crate::history::now();
         let mut outcomes = Vec::with_capacity(self.stages.len());
 
         for stage in &self.stages {
@@ -243,9 +273,30 @@ impl Verifier {
         }
 
         let success = outcomes.iter().all(|o| o.success);
+        let duration_ms = started.elapsed().as_millis() as u64;
+
+        // The verification lands in the same history as a plan's run.
+        let record = crate::history::RunRecord {
+            started_at,
+            finished_at: crate::history::now(),
+            duration_ms,
+            success,
+            parts: outcomes
+                .iter()
+                .map(|o| crate::history::RunPart {
+                    name: o.label.clone(),
+                    success: o.success,
+                    duration_ms: o.duration_ms,
+                })
+                .collect(),
+        };
+        if let Err(e) = self.history.record(record) {
+            tracing::warn!(error = %e, "could not record the verification in the history");
+        }
+
         VerifyReport {
             success,
-            duration_ms: started.elapsed().as_millis() as u64,
+            duration_ms,
             stages: outcomes,
         }
     }
@@ -253,7 +304,7 @@ impl Verifier {
     /// Run one stage.
     async fn run_stage(&self, stage: &Stage, root: &std::path::Path) -> Result<(), String> {
         match stage {
-            Stage::NodeGuard { repos } => run_node_guard(repos).await,
+            Stage::NodeGuard { repos } => run_node_guard(repos, &self.cancelled).await,
             Stage::DiskHeal => {
                 let report = crate::disk::heal(root, crate::disk::MIN_FREE_GB, false)
                     .await
@@ -268,13 +319,13 @@ impl Verifier {
                 program,
                 args,
                 cwd,
-            } => run_command(label, program, args, cwd).await,
+            } => run_command(label, program, args, cwd, &self.cancelled).await,
         }
     }
 }
 
 /// Run the Node.js guard in every repository.
-async fn run_node_guard(repos: &[PathBuf]) -> Result<(), String> {
+async fn run_node_guard(repos: &[PathBuf], cancelled: &AtomicBool) -> Result<(), String> {
     for repo in repos {
         let script = repo.join("scripts").join("check-no-node.ts");
         if !script.is_file() {
@@ -288,6 +339,7 @@ async fn run_node_guard(repos: &[PathBuf]) -> Result<(), String> {
             "bun",
             &["scripts/check-no-node.ts".to_string()],
             repo,
+            cancelled,
         )
         .await?;
     }
@@ -295,30 +347,46 @@ async fn run_node_guard(repos: &[PathBuf]) -> Result<(), String> {
 }
 
 /// Run a command, with its output on the terminal.
+///
+/// The verification's stages go through the same runner as the plan's
+/// steps, so they get the same timeout, the same cancellation and the
+/// same errors.
 async fn run_command(
     label: &str,
     program: &str,
     args: &[String],
     cwd: &std::path::Path,
+    cancelled: &AtomicBool,
 ) -> Result<(), String> {
-    let program = program.to_string();
-    let args = args.to_vec();
-    let cwd = cwd.to_path_buf();
+    let (tx, mut rx) = mpsc::unbounded_channel::<crate::runner::LogLine>();
+    let sink = tokio::spawn(async move {
+        while rx.recv().await.is_some() {
+            // The output goes to the terminal, which the runner writes
+            // to; the channel keeps the two in step.
+        }
+    });
 
-    // The build is long and the output is wanted on the terminal, so it
-    // runs on a blocking thread rather than holding the runtime.
-    let outcome = tokio::task::spawn_blocking(move || {
-        let args: Vec<&str> = args.iter().map(String::as_str).collect();
-        foodshare_core::process::run_command_streaming_in_dir(&program, &args, &cwd)
-    })
-    .await
-    .map_err(|e| format!("{label}: the task failed: {e}"))?;
+    let outcome = crate::runner::run_command(
+        label,
+        program,
+        args,
+        cwd,
+        &[],
+        &tx,
+        cancelled,
+        crate::runner::step_timeout(),
+    )
+    .await;
+    drop(tx);
+    let _ = sink.await;
 
-    let result = outcome.map_err(|e| format!("{label}: {e}"))?;
-    if result == 0 {
-        Ok(())
-    } else {
-        Err(format!("{label} failed with exit code {result}"))
+    match outcome {
+        Ok(outcome) if outcome.success => Ok(()),
+        Ok(outcome) => Err(format!(
+            "{label} failed with exit code {}",
+            outcome.exit_code
+        )),
+        Err(e) => Err(format!("{label}: {e}")),
     }
 }
 
@@ -328,6 +396,59 @@ mod tests {
 
     fn workspace() -> Workspace {
         Workspace::with_root("/tmp/ws")
+    }
+
+    #[tokio::test]
+    async fn test_a_verification_is_recorded_in_the_history() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let history = std::sync::Arc::new(
+            crate::history::History::load(Some(dir.path().join("runs.json")), 5).expect("loaded"),
+        );
+
+        let mut verifier = Verifier::new(&workspace()).with_history(history.clone());
+        verifier.stages = vec![Stage::Command {
+            label: "trivial".to_string(),
+            program: "true".to_string(),
+            args: Vec::new(),
+            cwd: PathBuf::from("."),
+        }];
+
+        let report = verifier.run(std::path::Path::new(".")).await;
+        assert!(report.success);
+
+        let records = history.records();
+        assert_eq!(records.len(), 1);
+        assert!(records[0].success);
+        assert_eq!(records[0].parts.len(), 1);
+        assert_eq!(records[0].parts[0].name, "trivial");
+    }
+
+    #[tokio::test]
+    async fn test_a_cancelled_verification_stops_the_stage() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let history = std::sync::Arc::new(
+            crate::history::History::load(Some(dir.path().join("runs.json")), 5).expect("loaded"),
+        );
+
+        let mut verifier = Verifier::new(&workspace()).with_history(history);
+        verifier.stages = vec![Stage::Command {
+            label: "sleeper".to_string(),
+            program: "sh".to_string(),
+            args: vec!["-c".to_string(), "sleep 30".to_string()],
+            cwd: PathBuf::from("."),
+        }];
+
+        // Cancel it while the stage is under way.
+        let cancelling = verifier.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            cancelling.cancel();
+        });
+
+        let started = std::time::Instant::now();
+        let report = verifier.run(std::path::Path::new(".")).await;
+        assert!(!report.success);
+        assert!(started.elapsed() < std::time::Duration::from_secs(10));
     }
 
     #[test]
