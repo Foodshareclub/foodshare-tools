@@ -4,10 +4,10 @@
 # library — its doc-tests/unit tests contain canonical example secrets
 # (AWS docs example key, fake tokens). Exclude it from local scanning;
 # reviewers watch this file by definition.
+#
+# There is nothing else to exclude: this repository has no compose file
+# and no container build file, so the secrets are all in the source.
 [secrets]
 exclude_files = [
   "crates/hooks/src/secrets.rs",
-  # docker-compose.yml contains only ${VAR} env interpolations, never
-  # literal credentials; real secrets live in Vault/GitHub Secrets.
-  "docker-compose.yml",
 ]
