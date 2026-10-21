@@ -1,9 +1,13 @@
 //! iOS Simulator management
 //!
 //! Provides tools for managing iOS simulators.
+//!
+//! The device list comes from `foodshare-device`, which is the one
+//! place that knows what `xcrun simctl` reports.
 
 use foodshare_core::error::Result;
-use foodshare_core::process::{CommandResult, run_command};
+use foodshare_core::process::CommandResult;
+use foodshare_core::process::run_command;
 use serde::{Deserialize, Serialize};
 
 /// Information about an iOS simulator device
@@ -23,35 +27,20 @@ pub struct SimulatorDevice {
 
 /// List available simulators
 pub fn list_devices() -> Result<Vec<SimulatorDevice>> {
-    let result = run_command("xcrun", &["simctl", "list", "devices", "-j"])?;
-
-    let json: serde_json::Value = serde_json::from_str(&result.stdout)?;
-    let mut devices = Vec::new();
-
-    if let Some(device_map) = json["devices"].as_object() {
-        for (runtime, runtime_devices) in device_map {
-            if let Some(arr) = runtime_devices.as_array() {
-                for device in arr {
-                    if let (Some(udid), Some(name), Some(state)) = (
-                        device["udid"].as_str(),
-                        device["name"].as_str(),
-                        device["state"].as_str(),
-                    ) {
-                        let is_available = device["isAvailable"].as_bool().unwrap_or(false);
-                        devices.push(SimulatorDevice {
-                            udid: udid.to_string(),
-                            name: name.to_string(),
-                            state: state.to_string(),
-                            runtime: runtime.clone(),
-                            is_available,
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(devices)
+    Ok(foodshare_device::simulators()?
+        .into_iter()
+        .map(|simulator| SimulatorDevice {
+            udid: simulator.udid,
+            name: simulator.name,
+            state: match simulator.state {
+                foodshare_device::DeviceState::Booted => "Booted".to_string(),
+                foodshare_device::DeviceState::Offline => "Offline".to_string(),
+                foodshare_device::DeviceState::Shutdown => "Shutdown".to_string(),
+            },
+            runtime: simulator.runtime,
+            is_available: simulator.is_available,
+        })
+        .collect())
 }
 
 /// Boot a simulator by name or UDID

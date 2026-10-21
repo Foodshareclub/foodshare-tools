@@ -11,6 +11,7 @@ categories = ["development-tools::testing"]
 
 [dependencies]
 foodshare-core.workspace = true
+foodshare-device.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

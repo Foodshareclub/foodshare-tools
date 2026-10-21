@@ -11,6 +11,7 @@ description = "App-specific tools for Foodshare"
 foodshare-core.workspace = true
 foodshare-hooks.workspace = true
 foodshare-cli.workspace = true
+foodshare-device.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 regex.workspace = true

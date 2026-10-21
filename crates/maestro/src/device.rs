@@ -5,10 +5,19 @@
 //! simulators, `adb` for the emulators. A tool that is not installed is
 //! not an error — it just means that platform has no devices.
 
+//! Target device discovery.
+//!
+//! Maestro can drive an iOS simulator or an Android emulator. The
+//! discovery itself lives in `foodshare-device`, which is the one place
+//! that knows the output of `xcrun simctl` and `adb`. A tool that is
+//! not installed is not an error — it just means that platform has no
+//! devices.
+
 use std::path::PathBuf;
-use std::process::Stdio;
 
 use serde::{Deserialize, Serialize};
+
+use foodshare_device::{DeviceState, Emulator, Simulator};
 
 /// The platform a device runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,23 +68,6 @@ impl TargetDevice {
     }
 }
 
-/// The `simctl` device list, as far as this crate needs it.
-#[derive(Debug, Deserialize)]
-struct SimctlDevices {
-    #[serde(default)]
-    devices: std::collections::HashMap<String, Vec<SimctlDevice>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SimctlDevice {
-    udid: String,
-    name: String,
-    state: String,
-    #[serde(default)]
-    #[allow(dead_code)]
-    isavailable: Option<bool>,
-}
-
 /// Every booted iOS simulator and connected Android device.
 #[must_use]
 pub fn discover() -> Vec<TargetDevice> {
@@ -88,64 +80,44 @@ pub fn discover() -> Vec<TargetDevice> {
 /// The booted iOS simulators.
 #[must_use]
 pub fn discover_ios() -> Vec<TargetDevice> {
-    let Some(output) = run("xcrun", &["simctl", "list", "devices", "-j"]) else {
-        return Vec::new();
-    };
-    let Ok(parsed) = serde_json::from_str::<SimctlDevices>(&output) else {
-        return Vec::new();
-    };
-
-    let mut devices = Vec::new();
-    for (runtime, list) in parsed.devices {
-        if !runtime.contains("iOS") {
-            continue;
-        }
-        for device in list {
-            if device.state != "Booted" {
-                continue;
-            }
-            devices.push(TargetDevice {
-                platform: Platform::Ios,
-                id: device.udid,
-                name: device.name,
-            });
-        }
-    }
-    devices
+    foodshare_device::booted_simulators()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|simulator| TargetDevice {
+            platform: Platform::Ios,
+            id: simulator.udid,
+            name: simulator.name,
+        })
+        .collect()
 }
 
 /// The connected Android devices.
 #[must_use]
 pub fn discover_android() -> Vec<TargetDevice> {
-    let Some(output) = run("adb", &["devices", "-l"]) else {
-        return Vec::new();
-    };
-
-    let mut devices = Vec::new();
-    for line in output.lines().skip(1) {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || !trimmed.contains("device") || trimmed.contains("offline") {
-            continue;
-        }
-        let Some(serial) = trimmed.split_whitespace().next() else {
-            continue;
-        };
-        if serial == "List" {
-            continue;
-        }
-        // `adb devices -l` appends `model:Pixel_7` to the device line.
-        let name = trimmed
-            .split_whitespace()
-            .find_map(|field| field.strip_prefix("model:"))
-            .unwrap_or(serial)
-            .to_string();
-        devices.push(TargetDevice {
+    foodshare_device::emulators()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|emulator| emulator.state == DeviceState::Booted)
+        .map(|emulator| TargetDevice {
             platform: Platform::Android,
-            id: serial.to_string(),
-            name,
-        });
-    }
-    devices
+            id: emulator.serial,
+            name: emulator.model.unwrap_or_default(),
+        })
+        .collect()
+}
+
+/// The simulators, for callers that need the whole device rather than a
+/// target.
+#[must_use]
+pub fn simulators() -> Vec<Simulator> {
+    foodshare_device::simulators().unwrap_or_default()
+}
+
+/// The emulators, for callers that need the whole device rather than a
+/// target.
+#[must_use]
+pub fn emulators() -> Vec<Emulator> {
+    foodshare_device::emulators().unwrap_or_default()
 }
 
 /// The single device to target, preferring an explicitly requested one.
@@ -156,21 +128,6 @@ pub fn resolve(requested: Option<&str>) -> Option<TargetDevice> {
         Some(id) => devices.into_iter().find(|d| d.id == id),
         None => devices.into_iter().next(),
     }
-}
-
-/// Run a command and capture its output, or `None` if it could not run.
-fn run(program: &str, args: &[&str]) -> Option<String> {
-    let output = std::process::Command::new(program)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 /// The reports directory for a Maestro directory.

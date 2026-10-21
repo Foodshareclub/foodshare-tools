@@ -1,0 +1,19 @@
+[package]
+name = "foodshare-device"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Device discovery for the Foodshare app: iOS simulators and Android emulators"
+keywords = ["simulator", "emulator", "ios", "android"]
+categories = ["development-tools::testing"]
+
+[dependencies]
+foodshare-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -18,6 +18,7 @@ members = [
     "crates/quadlet",
     "crates/orchestrator",
     "crates/maestro",
+    "crates/device",
     "crates/wasm",
     "crates/xccloud",
     "bins/fs-app",
@@ -184,6 +185,7 @@ foodshare-api-client = { path = "crates/api-client" }
 foodshare-migrate = { path = "crates/migrate" }
 foodshare-orchestrator = { path = "crates/orchestrator" }
 foodshare-maestro = { path = "crates/maestro" }
+foodshare-device = { path = "crates/device" }
 foodshare-wasm = { path = "crates/wasm" }
 foodshare-xccloud = { path = "crates/xccloud" }
 
