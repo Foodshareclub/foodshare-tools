@@ -10,9 +10,10 @@ The Rust in this repository is the toolchain; Bun runs everything around it —
 the package manager, the script runner, the TypeScript executor, the test
 runner and the type checker. Type checking is `tsrs`, the Rust port of the
 TypeScript 7 compiler from the Oxc project, incubated with Cloudflare
-and VoidZero. It is the only checker here: a bug in it would be a bug in
-the gate, and a second compiler is a second thing to maintain and a
-second thing to disagree.
+and VoidZero. It is the only type checker in the estate, and it has been
+since the beginning: a `tsc` parity script sat beside it here and in
+the other repositories, and it was a second opinion that nothing read
+rather than a gate. A bug in the checker is therefore a bug in the gate.
 
 Node.js is not part of it. `bun scripts/check-no-node.ts` fails the build if
 it creeps back in. `bunx` is the one exception to `[run] bun = true` — it
