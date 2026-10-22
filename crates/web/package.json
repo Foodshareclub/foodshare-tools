@@ -8,7 +8,6 @@
     "build": "bun --bun next build",
     "start": "bun --bun next start",
     "type-check": "bun run tsrs --noEmit",
-    "type-check:tsc": "bun run tsc --noEmit",
     "lint": "bunx --bun oxlint --ignore-pattern=.next/** --ignore-pattern=node_modules/**",
     "test": "bun test",
     "sentry:init": "sentry-cli init",

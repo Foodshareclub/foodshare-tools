@@ -87,7 +87,7 @@ pre-commit:
       priority: 2
       run: |
         if [ -f tsconfig.json ]; then
-          bun run tsc --noEmit
+          bun run type-check
         fi
 
     backend-type-check:
@@ -237,7 +237,7 @@ pre-push:
       run: |
         if [ -f tsconfig.json ]; then
           echo "🔍 Verifying Web TypeScript types before push..."
-          bun run tsc --noEmit
+          bun run type-check
         fi
 
     web-oxlint-full:
