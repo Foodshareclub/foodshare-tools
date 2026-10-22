@@ -12,7 +12,7 @@
 //
 // Usage: bun scripts/check-json.ts
 
-import { readdirSync, readFileSync, statSync } from "bun:fs";
+import { readFileSync, readdirSync, statSync } from "bun:fs";
 import { join } from "bun:path";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -45,7 +45,7 @@ function jsonFiles(directory: string): string[] {
     if (SKIPPED_DIRS.has(entry)) continue;
 
     const path = join(directory, entry);
-    let stats;
+    let stats: ReturnType<typeof statSync>;
     try {
       stats = statSync(path);
     } catch {
@@ -78,9 +78,8 @@ for (const file of files) {
   try {
     JSON.parse(readFileSync(file, "utf8"));
   } catch (error) {
-    failures.push(
-      `${file.slice(ROOT.length)}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    const message = error instanceof Error ? error.message : String(error);
+    failures.push(`${file.slice(ROOT.length)}: ${message}`);
   }
 }
 
