@@ -116,6 +116,21 @@ pub fn scan_swift_files(root: &Path) -> Result<Vec<PathBuf>> {
         .scan()
 }
 
+/// Scan for Swift files in a directory, with more paths excluded.
+///
+/// The extra exclusions are the ones the repository's configuration
+/// names. A repository that excludes its build directories should not
+/// have them scanned, whatever the scanner's own defaults are.
+pub fn scan_swift_files_excluding(root: &Path, excludes: &[String]) -> Result<Vec<PathBuf>> {
+    let mut scanner = FileScanner::new(root)
+        .with_extensions(&["swift"])
+        .exclude(&["**/Tests/**", "**/DerivedData/**", "**/.build/**"]);
+    for pattern in excludes {
+        scanner = scanner.exclude(&[pattern.as_str()]);
+    }
+    scanner.scan()
+}
+
 /// Scan for Kotlin files in a directory
 pub fn scan_kotlin_files(root: &Path) -> Result<Vec<PathBuf>> {
     FileScanner::new(root)

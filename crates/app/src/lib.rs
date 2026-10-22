@@ -11,6 +11,9 @@
 
 #![warn(missing_docs)]
 
+// Cross-platform modules
+pub mod analyze;
+
 // iOS modules
 pub mod build;
 pub mod code_protection;

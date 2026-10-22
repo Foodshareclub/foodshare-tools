@@ -151,9 +151,28 @@ fn cmd_detect(all: bool, format: &str) -> Result<()> {
     Ok(())
 }
 
+/// The Swift version the project declares.
+///
+/// The command line wins, then the repository's own configuration, then
+/// the version this tool was built for. A repository that says which
+/// Swift it wants should be checked against that.
+fn required_version(required: Option<&str>) -> String {
+    if let Some(version) = required {
+        return version.to_string();
+    }
+
+    if let Ok(config) = foodshare_core::config::Config::load(None) {
+        if let Some(version) = config.schema.general.swift_version {
+            return version;
+        }
+    }
+
+    REQUIRED_SWIFT_VERSION.to_string()
+}
+
 fn cmd_verify(project_root: &PathBuf, required: Option<&str>, format: &str) -> Result<()> {
-    let required_version = required.unwrap_or(REQUIRED_SWIFT_VERSION);
-    let report = VerificationReport::generate(project_root, required_version)?;
+    let required_version = required_version(required);
+    let report = VerificationReport::generate(project_root, &required_version)?;
 
     if format == "json" {
         println!("{}", report.to_json()?);

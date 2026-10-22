@@ -120,7 +120,6 @@ fn the_keys_the_tools_act_on_are_read() {
     assert_eq!(schema.format.paths, vec!["Sources/FoodShare".to_string()]);
 
     assert!(!schema.lint.strict);
-    assert_eq!(schema.lint.reporter.as_deref(), Some("default"));
 
     assert_eq!(schema.analyze.paths, vec!["Sources/FoodShare".to_string()]);
 
@@ -140,7 +139,9 @@ fn the_keys_the_tools_do_not_act_on_are_reported() {
         .expect("the configuration should be inspectable");
 
     // The sections no tool reads.
-    for section in ["android", "build", "clean", "deps", "docs", "version"] {
+    for section in [
+        "android", "build", "clean", "deps", "docs", "test", "version",
+    ] {
         assert!(
             unknown.contains(&section.to_string()),
             "the section {section} was not reported: {unknown:?}"
@@ -156,9 +157,15 @@ fn the_keys_the_tools_do_not_act_on_are_reported() {
         unknown.contains(&"pre_push.quick_checks".to_string()),
         "the check lists were not reported: {unknown:?}"
     );
+    // A section with no consumer is named as a whole, so the keys inside
+    // it are not listed one by one.
     assert!(
-        unknown.contains(&"test.unit_target".to_string()),
-        "the test target was not reported: {unknown:?}"
+        !unknown.contains(&"test.unit_target".to_string()),
+        "the section should be named, not its keys: {unknown:?}"
+    );
+    assert!(
+        unknown.contains(&"lint.reporter".to_string()),
+        "the reporter was not reported: {unknown:?}"
     );
 }
 

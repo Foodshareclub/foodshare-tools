@@ -20,13 +20,12 @@ keys](#unknown-keys) below.
 
 | Section      | What it does                                              |
 | ------------ | --------------------------------------------------------- |
-| `general`    | The scheme, destination, device, bundle identifier and package name the builds use, and the paths to exclude |
+| `general`    | The project name, the scheme, the destination, the device, the bundle identifier, the package name, the Swift version, the source directory, and the paths to exclude |
 | `commit_msg` | The commit-message format: the types, the length bounds, and the merge and revert skips |
 | `analyze`    | The thresholds for TODOs, FIXMEs and force unwraps, and the paths to analyze |
-| `test`       | The coverage threshold                                     |
 | `secrets`    | The extra patterns to look for, the patterns to excuse, and the files to skip |
 | `format`     | Whether to stage what was formatted, and the paths to format |
-| `lint`       | Whether warnings are failures, the reporter, and the paths to lint |
+| `lint`       | Whether warnings are failures, and the paths to lint           |
 | `migrations` | Where the migration files live                             |
 | `pre_push`   | Whether to stop at the first failure, the build configuration, and the deadlines |
 
@@ -100,9 +99,15 @@ does not read should still be able to run the tool; it should just
 learn that the section does nothing.
 
 The sections the estate writes that no tool reads today are `[android]`,
-`[build]`, `[clean]`, `[deps]`, `[docs]` and `[version]`. They are in
-the report on purpose: they are the ones somebody would otherwise
+`[build]`, `[clean]`, `[deps]`, `[docs]`, `[test]` and `[version]`. They
+are in the report on purpose: they are the ones somebody would otherwise
 believe were doing something.
+
+There is a test that keeps this honest: `crates/core/tests/schema_is_read.rs`
+fails when the schema declares a key that nothing reads. A key that is
+declared but never read is invisible to the report — the report would
+say the key is implemented, and it would not be — so the schema and the
+implementation have to be kept in step by something.
 
 ## Environment Variables
 

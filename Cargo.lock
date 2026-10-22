@@ -1158,6 +1158,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "colored",
+ "foodshare-core",
  "foodshare-swift-toolchain",
  "owo-colors",
  "predicates",

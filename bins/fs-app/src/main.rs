@@ -102,6 +102,13 @@ enum Commands {
         fix: bool,
     },
 
+    /// Count the TODOs, the FIXMEs and the force unwraps
+    Analyze {
+        /// The paths to analyze (defaults to the configuration)
+        #[arg(long)]
+        paths: Vec<String>,
+    },
+
     /// Validate commit message
     #[command(name = "commit-msg")]
     CommitMsg {
@@ -447,54 +454,54 @@ enum DepsAction {
 enum ProjectAction {
     /// Show project status (missing files, broken refs, duplicates)
     Status {
-        /// Path to .xcodeproj
-        #[arg(long, default_value = "FoodShare.xcodeproj")]
-        project: PathBuf,
-        /// Target name
-        #[arg(long, default_value = "FoodShare")]
-        target: String,
-        /// Source directory
-        #[arg(long, default_value = "FoodShare")]
-        source_dir: String,
+        /// Path to .xcodeproj (defaults to the configuration)
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Target name (defaults to the configuration)
+        #[arg(long)]
+        target: Option<String>,
+        /// Source directory (defaults to the configuration)
+        #[arg(long)]
+        source_dir: Option<String>,
     },
     /// Find missing files (on disk but not in build phase)
     Missing {
-        /// Path to .xcodeproj
-        #[arg(long, default_value = "FoodShare.xcodeproj")]
-        project: PathBuf,
-        /// Target name
-        #[arg(long, default_value = "FoodShare")]
-        target: String,
-        /// Source directory
-        #[arg(long, default_value = "FoodShare")]
-        source_dir: String,
+        /// Path to .xcodeproj (defaults to the configuration)
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Target name (defaults to the configuration)
+        #[arg(long)]
+        target: Option<String>,
+        /// Source directory (defaults to the configuration)
+        #[arg(long)]
+        source_dir: Option<String>,
     },
     /// Find broken references (in project but file doesn't exist)
     Broken {
-        /// Path to .xcodeproj
-        #[arg(long, default_value = "FoodShare.xcodeproj")]
-        project: PathBuf,
+        /// Path to .xcodeproj (defaults to the configuration)
+        #[arg(long)]
+        project: Option<PathBuf>,
     },
     /// Find duplicate build file references
     Duplicates {
-        /// Path to .xcodeproj
-        #[arg(long, default_value = "FoodShare.xcodeproj")]
-        project: PathBuf,
-        /// Target name
-        #[arg(long, default_value = "FoodShare")]
-        target: String,
+        /// Path to .xcodeproj (defaults to the configuration)
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Target name (defaults to the configuration)
+        #[arg(long)]
+        target: Option<String>,
     },
     /// Add files to the Xcode project
     Add {
         /// Files to add to the project
         #[arg(required = true)]
         files: Vec<PathBuf>,
-        /// Path to .xcodeproj
-        #[arg(long, default_value = "FoodShare.xcodeproj")]
-        project: PathBuf,
-        /// Target name to add source files to
-        #[arg(long, default_value = "FoodShare")]
-        target: String,
+        /// Path to .xcodeproj (defaults to the configuration)
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Target name to add source files to (defaults to the configuration)
+        #[arg(long)]
+        target: Option<String>,
         /// Group path (e.g., "FoodShare/Core/Design")
         #[arg(long)]
         group: Option<String>,
@@ -602,6 +609,7 @@ fn main() -> Result<()> {
             fix,
             lang,
         } => run_lint(&files, strict, fix, &lang, &config),
+        Commands::Analyze { paths } => run_analyze(&paths, &config),
         Commands::CommitMsg { file } => run_commit_msg(&file, &config),
         Commands::Secrets { all } => run_secrets(all, &config),
         Commands::Migrations { dir } => run_migrations(&dir, &config),
@@ -622,7 +630,7 @@ fn main() -> Result<()> {
             run_simulator(&action, device.as_deref(), &config)
         }
         Commands::Doctor { json } => run_doctor(json),
-        Commands::Project { action } => run_project(action),
+        Commands::Project { action } => run_project(action, &config),
         Commands::Verify => run_verify(),
         Commands::PrePush {
             fail_fast,
@@ -639,7 +647,7 @@ fn main() -> Result<()> {
             target,
             configuration,
         } => run_swift_build(&target, &configuration),
-        Commands::SwiftJava { action } => run_swift_java(&action),
+        Commands::SwiftJava { action } => run_swift_java(&action, &config),
         Commands::SwiftCore { action } => run_swift_core(action),
         Commands::Supabase { action } => run_supabase(action),
     };
@@ -711,11 +719,15 @@ fn run_format(
             // The configuration is what a repository writes; the directory
             // that used to be hardcoded here is only the fallback.
             let paths = paths_or_default(&config.schema.format.paths, "FoodShare");
+            let excludes = &config.schema.general.exclude_paths;
             let mut scanned = Vec::new();
             for path in paths {
                 scanned.extend(
-                    foodshare_core::file_scanner::scan_swift_files(std::path::Path::new(&path))
-                        .unwrap_or_default(),
+                    foodshare_core::file_scanner::scan_swift_files_excluding(
+                        std::path::Path::new(&path),
+                        excludes,
+                    )
+                    .unwrap_or_default(),
                 );
             }
             scanned
@@ -734,7 +746,7 @@ fn run_format(
                 }
             } else {
                 // Enterprise-grade safe format
-                let config = SafeFormatConfig {
+                let format_config = SafeFormatConfig {
                     preview,
                     backup,
                     show_diff,
@@ -743,7 +755,7 @@ fn run_format(
                     ..Default::default()
                 };
 
-                let safe_format = match SafeFormat::new(config) {
+                let safe_format = match SafeFormat::new(format_config) {
                     Ok(sf) => sf,
                     Err(e) => {
                         Status::error(&format!("Failed to initialize SafeFormat: {}", e));
@@ -773,6 +785,29 @@ fn run_format(
                 match safe_format.format(&target_files) {
                     Ok(result) => {
                         print_format_summary(&result);
+
+                        // The repository may ask for what was formatted to
+                        // be staged. A repository that says so and does
+                        // not get it would find the change unstaged and
+                        // wonder why.
+                        if config.schema.format.stage_fixed && !result.formatted_files.is_empty() {
+                            match foodshare_core::git::GitRepo::open_current() {
+                                Ok(repo) => match repo.stage_files(&result.formatted_files) {
+                                    Ok(()) => Status::success(&format!(
+                                        "Staged {} formatted file(s)",
+                                        result.formatted_files.len()
+                                    )),
+                                    Err(e) => {
+                                        Status::error(&format!("Could not stage the files: {e}"));
+                                        exit_code = exit_codes::FAILURE;
+                                    }
+                                },
+                                Err(e) => {
+                                    Status::error(&format!("Could not stage the files: {e}"));
+                                    exit_code = exit_codes::FAILURE;
+                                }
+                            }
+                        }
 
                         if !result.failed_files.is_empty() {
                             exit_code = exit_codes::FAILURE;
@@ -919,6 +954,70 @@ fn lint_path(
     }
 }
 
+/// Count the markers, and check them against the thresholds.
+///
+/// The thresholds are limits. A limit that only prints a warning is a
+/// limit that gets ignored, so the command fails when one is passed.
+fn run_analyze(paths: &[String], config: &Config) -> i32 {
+    use fs_app::analyze;
+
+    let settings = &config.schema.analyze;
+    let paths = if paths.is_empty() {
+        paths_or_default(&settings.paths, ".")
+    } else {
+        paths.to_vec()
+    };
+
+    let mut totals = analyze::Analysis::default();
+
+    for path in &paths {
+        let found = analyze::analyze(std::path::Path::new(path));
+        totals.files_scanned += found.files_scanned;
+        totals.lines_scanned += found.lines_scanned;
+        totals.todos += found.todos;
+        totals.fixmes += found.fixmes;
+        totals.force_unwraps += found.force_unwraps;
+    }
+
+    println!("Analysis");
+    println!("  files:   {}", totals.files_scanned);
+    println!("  lines:   {}", totals.lines_scanned);
+    println!("  TODOs:   {}", totals.todos);
+    println!("  FIXMEs:  {}", totals.fixmes);
+    println!("  unwraps: {}", totals.force_unwraps);
+    println!();
+
+    let mut over = Vec::new();
+    if totals.todos > settings.threshold_todos {
+        over.push(format!(
+            "{} TODO(s) over the limit of {}",
+            totals.todos, settings.threshold_todos
+        ));
+    }
+    if totals.fixmes > settings.threshold_fixmes {
+        over.push(format!(
+            "{} FIXME(s) over the limit of {}",
+            totals.fixmes, settings.threshold_fixmes
+        ));
+    }
+    if totals.force_unwraps > settings.threshold_force {
+        over.push(format!(
+            "{} force unwrap(s) over the limit of {}",
+            totals.force_unwraps, settings.threshold_force
+        ));
+    }
+
+    if over.is_empty() {
+        Status::success("Every count is within its limit");
+        exit_codes::SUCCESS
+    } else {
+        for line in &over {
+            Status::error(line);
+        }
+        exit_codes::VALIDATION_ERROR
+    }
+}
+
 fn run_commit_msg(file: &PathBuf, config: &Config) -> i32 {
     use foodshare_hooks::commit_msg;
 
@@ -947,8 +1046,11 @@ fn run_secrets(all: bool, config: &Config) -> i32 {
     use foodshare_hooks::secrets;
 
     let files = if all {
-        foodshare_core::file_scanner::scan_swift_files(std::path::Path::new("."))
-            .unwrap_or_default()
+        foodshare_core::file_scanner::scan_swift_files_excluding(
+            std::path::Path::new("."),
+            &config.schema.general.exclude_paths,
+        )
+        .unwrap_or_default()
     } else {
         match foodshare_core::git::GitRepo::open_current().and_then(|r| r.staged_files()) {
             Ok(files) => files,
@@ -1548,7 +1650,28 @@ fn run_deps(action: DepsAction) -> i32 {
     }
 }
 
-fn run_project(action: ProjectAction) -> i32 {
+/// The Xcode project to work on, from the configuration.
+fn project_path_of(project: &Option<PathBuf>, config: &Config) -> PathBuf {
+    project.clone().unwrap_or_else(|| {
+        PathBuf::from(format!("{}.xcodeproj", config.schema.general.project_name))
+    })
+}
+
+/// The build target to work on, from the configuration.
+fn project_target_of(target: &Option<String>, config: &Config) -> String {
+    target
+        .clone()
+        .unwrap_or_else(|| config.schema.general.project_name.clone())
+}
+
+/// The source directory to work on, from the configuration.
+fn project_source_dir_of(source_dir: &Option<String>, config: &Config) -> String {
+    source_dir
+        .clone()
+        .unwrap_or_else(|| config.schema.general.source_dir.clone())
+}
+
+fn run_project(action: ProjectAction, config: &Config) -> i32 {
     use fs_app::xcodeproj::XcodeProject;
     use owo_colors::OwoColorize;
 
@@ -1558,6 +1681,10 @@ fn run_project(action: ProjectAction) -> i32 {
             target,
             source_dir,
         } => {
+            let project = project_path_of(&project, config);
+            let target = project_target_of(&target, config);
+            let source_dir = project_source_dir_of(&source_dir, config);
+
             Status::info(&format!("Analyzing {}...", project.display()));
 
             match XcodeProject::open(&project) {
@@ -1591,86 +1718,98 @@ fn run_project(action: ProjectAction) -> i32 {
             project,
             target,
             source_dir,
-        } => match XcodeProject::open(&project) {
-            Ok(proj) => match proj.find_missing_files(&target, &source_dir) {
-                Ok(missing) => {
-                    if missing.is_empty() {
-                        Status::success("No missing files found");
+        } => {
+            let project = project_path_of(&project, config);
+            let target = project_target_of(&target, config);
+            let source_dir = project_source_dir_of(&source_dir, config);
+            match XcodeProject::open(&project) {
+                Ok(proj) => match proj.find_missing_files(&target, &source_dir) {
+                    Ok(missing) => {
+                        if missing.is_empty() {
+                            Status::success("No missing files found");
+                        } else {
+                            println!(
+                                "{}",
+                                "Missing files (on disk but not in build phase):".bold()
+                            );
+                            println!();
+                            for path in &missing {
+                                println!("  {} {}", "+".green(), path.display());
+                            }
+                            println!();
+                            println!("Total: {} file(s)", missing.len());
+                        }
+                        exit_codes::SUCCESS
+                    }
+                    Err(e) => {
+                        Status::error(&format!("Scan failed: {}", e));
+                        exit_codes::FAILURE
+                    }
+                },
+                Err(e) => {
+                    Status::error(&format!("Failed to open project: {}", e));
+                    exit_codes::FAILURE
+                }
+            }
+        }
+
+        ProjectAction::Broken { project } => {
+            let project = project_path_of(&project, config);
+            match XcodeProject::open(&project) {
+                Ok(proj) => {
+                    let broken = proj.find_broken_references();
+                    if broken.is_empty() {
+                        Status::success("No broken references found");
                     } else {
                         println!(
                             "{}",
-                            "Missing files (on disk but not in build phase):".bold()
+                            "Broken references (in project but file doesn't exist):".bold()
                         );
                         println!();
-                        for path in &missing {
-                            println!("  {} {}", "+".green(), path.display());
+                        for fr in &broken {
+                            println!("  {} {}", "✗".red(), fr.path);
                         }
                         println!();
-                        println!("Total: {} file(s)", missing.len());
+                        println!("Total: {} reference(s)", broken.len());
                     }
                     exit_codes::SUCCESS
                 }
                 Err(e) => {
-                    Status::error(&format!("Scan failed: {}", e));
+                    Status::error(&format!("Failed to open project: {}", e));
                     exit_codes::FAILURE
                 }
-            },
-            Err(e) => {
-                Status::error(&format!("Failed to open project: {}", e));
-                exit_codes::FAILURE
             }
-        },
+        }
 
-        ProjectAction::Broken { project } => match XcodeProject::open(&project) {
-            Ok(proj) => {
-                let broken = proj.find_broken_references();
-                if broken.is_empty() {
-                    Status::success("No broken references found");
-                } else {
-                    println!(
-                        "{}",
-                        "Broken references (in project but file doesn't exist):".bold()
-                    );
-                    println!();
-                    for fr in &broken {
-                        println!("  {} {}", "✗".red(), fr.path);
+        ProjectAction::Duplicates { project, target } => {
+            let project = project_path_of(&project, config);
+            let target = project_target_of(&target, config);
+            match XcodeProject::open(&project) {
+                Ok(proj) => {
+                    let duplicates = proj.find_duplicate_build_files(&target);
+                    if duplicates.is_empty() {
+                        Status::success("No duplicate references found");
+                    } else {
+                        println!("{}", "Duplicate build file references:".bold());
+                        println!();
+                        for (file_ref_id, build_files) in &duplicates {
+                            println!(
+                                "  File ref {}: {} duplicates",
+                                file_ref_id,
+                                build_files.len()
+                            );
+                        }
+                        println!();
+                        println!("Total: {} file(s) with duplicates", duplicates.len());
                     }
-                    println!();
-                    println!("Total: {} reference(s)", broken.len());
+                    exit_codes::SUCCESS
                 }
-                exit_codes::SUCCESS
-            }
-            Err(e) => {
-                Status::error(&format!("Failed to open project: {}", e));
-                exit_codes::FAILURE
-            }
-        },
-
-        ProjectAction::Duplicates { project, target } => match XcodeProject::open(&project) {
-            Ok(proj) => {
-                let duplicates = proj.find_duplicate_build_files(&target);
-                if duplicates.is_empty() {
-                    Status::success("No duplicate references found");
-                } else {
-                    println!("{}", "Duplicate build file references:".bold());
-                    println!();
-                    for (file_ref_id, build_files) in &duplicates {
-                        println!(
-                            "  File ref {}: {} duplicates",
-                            file_ref_id,
-                            build_files.len()
-                        );
-                    }
-                    println!();
-                    println!("Total: {} file(s) with duplicates", duplicates.len());
+                Err(e) => {
+                    Status::error(&format!("Failed to open project: {}", e));
+                    exit_codes::FAILURE
                 }
-                exit_codes::SUCCESS
             }
-            Err(e) => {
-                Status::error(&format!("Failed to open project: {}", e));
-                exit_codes::FAILURE
-            }
-        },
+        }
 
         ProjectAction::Add {
             files,
@@ -1679,6 +1818,9 @@ fn run_project(action: ProjectAction) -> i32 {
             group,
             dry_run,
         } => {
+            let project = project_path_of(&project, config);
+            let target = project_target_of(&target, config);
+
             if dry_run {
                 Status::info("Dry run mode - no changes will be made");
             }
@@ -2582,7 +2724,7 @@ fn run_swift_build(target: &str, configuration: &str) -> i32 {
     }
 }
 
-fn run_swift_java(action: &str) -> i32 {
+fn run_swift_java(action: &str, config: &Config) -> i32 {
     use fs_app::swift_android;
 
     match action {
@@ -2597,10 +2739,19 @@ fn run_swift_java(action: &str) -> i32 {
         }
         "generate" => {
             Status::info("Generating bindings...");
+            // The bindings are named after the package the configuration
+            // names, so the generated Java is in the package the app
+            // declares.
+            let package = config
+                .schema
+                .general
+                .package_name
+                .clone()
+                .unwrap_or_else(|| "com.foodshare.swift".to_string());
             match swift_android::generate_bindings(
                 std::path::Path::new("swift-core/Sources"),
                 std::path::Path::new("app/src/main/java"),
-                "com.foodshare.swift",
+                &package,
             ) {
                 Ok(result) => {
                     if result.success {

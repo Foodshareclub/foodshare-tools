@@ -25,10 +25,6 @@ pub struct ConfigSchema {
     #[serde(default)]
     pub analyze: AnalyzeConfig,
 
-    /// Test configuration
-    #[serde(default)]
-    pub test: TestConfig,
-
     /// Secrets scanning configuration
     #[serde(default)]
     pub secrets: SecretsConfig,
@@ -53,7 +49,9 @@ pub struct ConfigSchema {
 /// General project configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeneralConfig {
-    /// Project name
+    /// The name of the project.
+    ///
+    /// The Xcode project file and the build target are named after it.
     #[serde(default = "default_project_name")]
     pub project_name: String,
 
@@ -220,26 +218,6 @@ fn default_threshold_force() -> usize {
     20
 }
 
-/// Test configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestConfig {
-    /// Minimum coverage threshold (percentage)
-    #[serde(default = "default_coverage_threshold")]
-    pub coverage_threshold: u8,
-}
-
-impl Default for TestConfig {
-    fn default() -> Self {
-        Self {
-            coverage_threshold: default_coverage_threshold(),
-        }
-    }
-}
-
-fn default_coverage_threshold() -> u8 {
-    70
-}
-
 /// Secrets scanning configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SecretsConfig {
@@ -285,10 +263,6 @@ pub struct LintConfig {
     /// Treat warnings as failures
     #[serde(default)]
     pub strict: bool,
-
-    /// Reporter format
-    #[serde(default)]
-    pub reporter: Option<String>,
 
     /// Paths to lint
     #[serde(default)]

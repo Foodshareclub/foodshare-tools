@@ -22,6 +22,7 @@ Usage: fs-app [OPTIONS] <COMMAND>
 Commands:
   format       Format Swift code with enterprise-grade safety features
   lint         Lint Swift code
+  analyze      Count the TODOs, the FIXMEs and the force unwraps
   commit-msg   Validate commit message
   secrets      Scan for secrets
   migrations   Check migrations status
@@ -96,6 +97,22 @@ Options:
                          false]
   -v, --verbose...       Increase output verbosity
       --fix              Auto-fix violations
+  -q, --quiet            Suppress non-error output
+      --no-color         Disable colored output
+  -h, --help             Print help
+```
+
+### fs-app analyze
+
+```
+Count the TODOs, the FIXMEs and the force unwraps
+
+Usage: fs-app analyze [OPTIONS]
+
+Options:
+  -c, --config <CONFIG>  Config file path
+      --paths <PATHS>    The paths to analyze (defaults to the configuration)
+  -v, --verbose...       Increase output verbosity
   -q, --quiet            Suppress non-error output
       --no-color         Disable colored output
   -h, --help             Print help
