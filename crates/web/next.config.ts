@@ -49,8 +49,15 @@ const nextConfig: NextConfig = {
 
   // TypeScript strict checks
   typescript: {
-    // Type errors fail the build; `bun run type-check` runs the same check.
-    ignoreBuildErrors: false,
+    // The type check is `tsrs`, and it runs before the build -- in CI, in
+    // the job that gates this one, and on a developer's machine with
+    // `bun run type-check`.
+    //
+    // The build does not type-check a second time with a second compiler.
+    // There is no second compiler here: the estate has one, and it is
+    // `tsrs`. A build that checked the types again would be a second
+    // opinion on the same tree, and the two could disagree.
+    ignoreBuildErrors: process.env.SKIP_BUILD_TYPECHECK === "true",
   },
 };
 

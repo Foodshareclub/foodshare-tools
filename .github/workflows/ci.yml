@@ -72,6 +72,19 @@ jobs:
         run: bun run check:no-node
       - name: Type-check with tsrs
         run: bun run type-check
+      - name: Lint the scripts
+        # The `lint` job below is Rust's: `cargo fmt` and `cargo clippy`. The
+        # ten TypeScript files at the root of this repository -- the CLI, the
+        # scripts, the runners -- were linted by the pre-commit hook and by
+        # nothing else, so a lint error in them could only ever be found by
+        # the person who wrote it, and only if they had the hook installed.
+        run: bun run lint
+      - name: The workflow files are valid YAML
+        # The same check the pre-commit hook runs, over every workflow
+        # rather than over the staged ones. A workflow that does not parse
+        # is a workflow that does not run, and nothing else here would say
+        # so.
+        run: bun scripts/check-yaml.ts .github/workflows/*.yml
 
   web:
     name: The web app
@@ -101,6 +114,21 @@ jobs:
       - name: Test
         run: bun run test
         working-directory: crates/web
+      - name: Build
+        # The application is the one thing here that is a deployable
+        # artifact, and the build is the only check that sees it whole: a
+        # prerender that refuses an unstable value, a route whose types
+        # never resolve, a page that cannot be rendered at all. The type
+        # check above cannot see any of that -- it reads the sources, and
+        # the build reads the sources *and* renders them.
+        run: bun run build
+        working-directory: crates/web
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          # The type check is `tsrs`, and it ran above. The build does not
+          # type-check a second time with a second compiler: there is no
+          # second compiler here.
+          SKIP_BUILD_TYPECHECK: "true"
 
   lint:
     name: Lint

@@ -2,9 +2,9 @@
  * Ambient declarations for Bun's `bun:`-prefixed builtin modules.
  *
  * `@types/bun` declares `bun:test`, `bun:ffi`, `bun:jsc`, `bun:sqlite` and
- * `bun:bundle` — but not the filesystem, path, os and crypto modules, even
- * though Bun implements every one of them. Without these declarations an
- * import of `bun:path` fails the type-check with
+ * `bun:bundle` — but not the filesystem, path, os, util, crypto and DNS
+ * modules, even though Bun implements every one of them. Without these
+ * declarations an import of `bun:path` fails the type-check with
  *
  *     error TS2307: Cannot find module 'bun:path' or its corresponding type
  *                  declarations.
@@ -25,6 +25,11 @@
  * The types come from `@types/node`, which `@types/bun` depends on
  * transitively. That is a types-only dependency: it contributes no runtime
  * code and no Node.js binary.
+ *
+ * The same file is carried by the backend, the app and the tools
+ * repositories. It is a copy rather than a shared package because each of
+ * them is checked on its own, and a checker that cannot resolve `bun:path`
+ * cannot see the rest of the tree either.
  */
 
 /**
@@ -143,6 +148,7 @@ declare module "bun:fs" {
  * for it, so the import fails to type-check without this declaration.
  */
 declare module "bun:fs/promises" {
+  export const appendFile: typeof import("node:fs/promises").appendFile;
   export const chmod: typeof import("node:fs/promises").chmod;
   export const chown: typeof import("node:fs/promises").chown;
   export const copyFile: typeof import("node:fs/promises").copyFile;
@@ -171,6 +177,42 @@ declare module "bun:fs/promises" {
   export type FileHandle = import("node:fs/promises").FileHandle;
   export type RmDirOptions = import("node:fs/promises").RmDirOptions;
   export type RmOptions = import("node:fs/promises").RmOptions;
+}
+
+/**
+ * Bun's util module. Mirrors `node:util`.
+ *
+ * Bun implements this module itself; `@types/bun` declares no ambient module
+ * for it, so the import fails to type-check without this declaration.
+ */
+declare module "bun:util" {
+  export const parseArgs: typeof import("node:util").parseArgs;
+  export const inspect: typeof import("node:util").inspect;
+  export const format: typeof import("node:util").format;
+  export const promisify: typeof import("node:util").promisify;
+  export const types: typeof import("node:util").types;
+}
+
+/**
+ * Bun's promise-based DNS module. Mirrors `node:dns/promises`.
+ *
+ * The guard in `scripts/check-no-node.ts` maps `node:dns/promises` to this
+ * spelling, so a file that follows the guard has to be able to resolve it.
+ */
+declare module "bun:dns/promises" {
+  export const lookup: typeof import("node:dns/promises").lookup;
+  export const resolve: typeof import("node:dns/promises").resolve;
+  export const resolve4: typeof import("node:dns/promises").resolve4;
+  export const resolve6: typeof import("node:dns/promises").resolve6;
+  export const resolveAny: typeof import("node:dns/promises").resolveAny;
+  export const resolveCname: typeof import("node:dns/promises").resolveCname;
+  export const resolveMx: typeof import("node:dns/promises").resolveMx;
+  export const resolveNaptr: typeof import("node:dns/promises").resolveNaptr;
+  export const resolveNs: typeof import("node:dns/promises").resolveNs;
+  export const resolveSrv: typeof import("node:dns/promises").resolveSrv;
+  export const resolveTxt: typeof import("node:dns/promises").resolveTxt;
+  export const reverse: typeof import("node:dns/promises").reverse;
+  export const setServers: typeof import("node:dns/promises").setServers;
 }
 
 /**
@@ -218,6 +260,8 @@ declare module "bun:os" {
 declare module "bun:crypto" {
   export const createHash: typeof import("node:crypto").createHash;
   export const createHmac: typeof import("node:crypto").createHmac;
+  export const createPrivateKey: typeof import("node:crypto").createPrivateKey;
+  export const createPublicKey: typeof import("node:crypto").createPublicKey;
   export const createSign: typeof import("node:crypto").createSign;
   export const createVerify: typeof import("node:crypto").createVerify;
   export const getRandomValues: typeof import("node:crypto").getRandomValues;
