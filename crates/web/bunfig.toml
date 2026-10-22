@@ -5,11 +5,10 @@
 # parent's `bunfig.toml` does not apply here.
 #
 # Bun looks for `bunfig.toml` in the working directory and does NOT walk up
-# to the repository root. Without this file, `bun run tsrs` and
-# `bun run tsc` execute their binaries through their own
-# `#!/usr/bin/env node` shebang — the process becomes Node.js, which is not
-# part of this project's toolchain. The failure is silent: the command
-# succeeds, on the wrong runtime.
+# to the repository root. Without this file, `bun run tsrs` executes its
+# binary through its own `#!/usr/bin/env node` shebang — the process
+# becomes Node.js, which is not part of this project's toolchain. The
+# failure is silent: the command succeeds, on the wrong runtime.
 
 [run]
 # Execute `node_modules/.bin/*` scripts on Bun's runtime, not Node's.
