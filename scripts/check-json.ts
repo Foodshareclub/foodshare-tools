@@ -23,6 +23,7 @@ const SKIPPED_DIRS = new Set([
   ".git",
   ".next",
   "DerivedData",
+  "artifacts",
   "dist",
   "node_modules",
   "target",
@@ -64,12 +65,11 @@ function jsonFiles(directory: string): string[] {
 /**
  * The files whose format is JSONC, not JSON.
  *
- * A `tsconfig.json` is JSON with comments by specification: TypeScript
- * defines it that way, and the comment is how a file explains itself.
- * Everything else that is called JSON is JSON, and a strict parser is
- * what the other tools use.
+ * A `tsconfig.json` is JSON with comments by specification, and so is a
+ * `deno.json`. Everything else that is called JSON is JSON, and a strict
+ * parser is what the other tools use.
  */
-const JSONC_FILES = new Set(["tsconfig.json", "jsconfig.json"]);
+const JSONC_FILES = new Set(["tsconfig.json", "jsconfig.json", "deno.json", "deno.jsonc"]);
 
 const files = jsonFiles(ROOT).filter((file) => !JSONC_FILES.has(file.split("/").pop() ?? ""));
 const failures: string[] = [];
