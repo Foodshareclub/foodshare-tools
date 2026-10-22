@@ -34,6 +34,8 @@
   },
   "include": [
     "next.config.ts",
+    "sentry.client.config.ts",
+    "sentry.server.config.ts",
     "tsconfig.json",
     "src",
     "postcss.config.mjs",

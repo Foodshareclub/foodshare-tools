@@ -6,16 +6,20 @@ Sentry.init({
   tracesSampleRate: 0.5,
   debug: process.env.NEXT_PUBLIC_SENTRY_DEBUG === 'true',
 
-  // Set better titles for issues automatically
+  // Keep only the frames from the application. The deployment's own stack is
+  // what a reader needs, and the framework's frames bury it.
+  //
+  // Sentry 8 removed `stacktrace.top` — the topmost frame is `frames[0]` —
+  // and the frames are optional, so the check has to be for the frames
+  // rather than for a frame that is no longer part of the type.
   beforeSend(event) {
-    // Enhance error titles for better categorization
-    if (event.exception?.values?.[0]?.stacktrace) {
-      const stackTop = event.exception.values[0].stacktrace.top;
-      if (stackTop) {
-        event.exception.values[0].stacktrace.frames = event.exception.values[0].stacktrace.frames
-          .filter((frame: any) => frame.file?.includes('/app/') || frame.file?.includes('/src/'))
-          .slice(0, 5);
-      }
+    const exception = event.exception?.values?.[0];
+    const stacktrace = exception?.stacktrace;
+    const frames = stacktrace?.frames;
+    if (stacktrace && frames?.length) {
+      stacktrace.frames = frames
+        .filter((frame) => frame.filename?.includes('/app/') || frame.filename?.includes('/src/'))
+        .slice(0, 5);
     }
     return event;
   },

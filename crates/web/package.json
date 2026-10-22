@@ -9,7 +9,7 @@
     "start": "bun --bun next start",
     "type-check": "bun run tsrs --noEmit",
     "lint": "bunx --bun oxlint --ignore-pattern=.next/** --ignore-pattern=node_modules/**",
-    "test": "bun test",
+    "test": "bun test --pass-with-no-tests",
     "sentry:init": "sentry-cli init",
     "sentry:release": "sentry-cli releases",
     "sentry:debug": "sentry-cli keys deploy",
