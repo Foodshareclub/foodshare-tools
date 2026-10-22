@@ -255,6 +255,38 @@ jobs:
           ./target/${{ matrix.target }}/release-service/fs-orchestrator --help > /dev/null
           echo "ok"
 
+      # The Bun CLI is the other front door: `cli.ts` dispatches to the
+      # orchestrator and to the per-repository commands that are not Rust
+      # yet. It is type-checked, but a type check does not bundle a
+      # program and does not start one, and `bun build --compile` can
+      # fail where the type check passed -- a module that does not exist
+      # at runtime, an import that does not bundle, a binary that will
+      # not start.
+      #
+      # It is built and started here for the same reason the Rust
+      # binaries are: a binary that cannot print its own help is broken.
+      #
+      # It is not uploaded with them. The Rust binaries are the ones that
+      # ship; this one is compiled from source by whoever wants it, and
+      # it shares its name with the `foodshare-cli` crate, which is a
+      # library the other binaries link rather than a program of its own.
+      - uses: oven-sh/setup-bun@v2
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install dependencies
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        run: bun install --frozen-lockfile
+      - name: Build the Bun CLI
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        run: bun run build:cli
+      - name: The Bun CLI starts
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        run: |
+          printf '%-20s' "bun cli.ts"
+          ./dist/foodshare-cli --help > /dev/null
+          echo "ok"
+
       - uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.target }}

@@ -8,7 +8,7 @@
   "scripts": {
     "build": "bun run build:wasm && bun run build:cli",
     "dev": "bun run dev:web",
-    "test": "bun test --pass-with-no-tests",
+    "test": "bun test",
     "lint": "bun run lint:oxlint",
     "type-check": "bun run tsrs --noEmit",
     "clean": "bun run clean:web",
