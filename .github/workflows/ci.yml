@@ -70,6 +70,13 @@ jobs:
         run: bun install --frozen-lockfile
       - name: No Node.js in the toolchain
         run: bun run check:no-node
+      - name: The guard and the type declarations agree
+        # The guard rewrites a Node builtin to its `bun:` spelling, and
+        # the type check rejects a spelling the declarations do not
+        # cover. The two files are copies that drift, and nothing
+        # noticed: the guard grew a mapping, the declarations did not, and
+        # the next file that used it did not compile.
+        run: bun run check:bun-modules
       - name: Type-check with tsrs
         run: bun run type-check
       - name: Lint the scripts
@@ -84,7 +91,7 @@ jobs:
         # rather than over the staged ones. A workflow that does not parse
         # is a workflow that does not run, and nothing else here would say
         # so.
-        run: bun scripts/check-yaml.ts .github/workflows/*.yml
+        run: bun run check:yaml
 
   web:
     name: The web app

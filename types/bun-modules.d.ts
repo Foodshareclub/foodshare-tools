@@ -275,3 +275,22 @@ declare module "bun:crypto" {
   export type Hash = import("node:crypto").Hash;
   export type Hmac = import("node:crypto").Hmac;
 }
+
+/**
+ * Every other `bun:` spelling.
+ *
+ * The guard in `scripts/check-no-node.ts` rewrites a Node builtin to its
+ * `bun:` spelling, and its table is an exception list rather than the
+ * rule: anything outside the table becomes `bun:<name>` as well. So the
+ * declarations have to cover the general case, or the guard's advice
+ * fails the type check for every builtin that is not in the table --
+ * `bun:zlib`, `bun:http`, `bun:stream`, and the rest.
+ *
+ * This declaration is the general case. It gives the module the type
+ * `any`, which is what an undeclared import would have failed the build
+ * over; the precise declarations above win over it, so a module that is
+ * declared properly keeps its real types. TypeScript prefers an exact
+ * module match over a pattern match, and `bun:path` still rejects
+ * `join(1, 2)`.
+ */
+declare module "bun:*";

@@ -32,9 +32,11 @@
     "auto:quick": "bun cli.ts auto --quick",
     "auto:keep": "bun cli.ts auto --keep",
     "check:no-node": "bun scripts/check-no-node.ts",
+    "check:bun-modules": "bun scripts/check-bun-modules.ts",
+    "check:yaml": "bun scripts/check-yaml.ts .github/workflows/*.yml",
     "docs:cli-reference": "bun scripts/generate-cli-reference.ts",
     "check:cli-reference": "bun scripts/generate-cli-reference.ts --check",
-    "verify": "bun run check:no-node && bun run lint && bun run type-check && bun run test",
+    "verify": "bun run check:no-node && bun run check:bun-modules && bun run lint && bun run type-check && bun run test",
     "auto:headless": "cargo run --bin fs-auto -- --quick",
     "build:cli": "bun build --compile --outfile dist/foodshare-cli cli.ts"
   },

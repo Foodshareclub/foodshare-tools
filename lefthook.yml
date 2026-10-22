@@ -131,6 +131,16 @@ pre-commit:
       run: |
         for f in {staged_files}; do bun scripts/check-yaml.ts "$f" > /dev/null || exit 1; done
 
+    # The guard rewrites a Node builtin to its `bun:` spelling, and the
+    # type check rejects a spelling the type declarations do not cover.
+    # The two files are copies that drift, and nothing noticed -- until a
+    # file followed the guard's advice and did not compile.
+    bun-module-declarations:
+      priority: 1
+      glob: "scripts/check-no-node.ts"
+      run: |
+        bun scripts/check-bun-modules.ts > /dev/null || exit 1
+
     # -------------------------------------------------------------------------
     # 3. LINTING & FORMATTING (Priority 3 - Mandated Toolchain: Oxlint, Biome)
     # -------------------------------------------------------------------------
