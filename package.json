@@ -34,16 +34,17 @@
     "check:no-node": "bun scripts/check-no-node.ts",
     "check:bun-modules": "bun scripts/check-bun-modules.ts",
     "check:yaml": "bun scripts/check-yaml.ts .github/workflows/*.yml",
+    "check:json": "bun scripts/check-json.ts",
     "docs:cli-reference": "bun scripts/generate-cli-reference.ts",
     "check:cli-reference": "bun scripts/generate-cli-reference.ts --check",
-    "verify": "bun run check:no-node && bun run check:bun-modules && bun run lint && bun run type-check && bun run test",
+    "verify": "bun run check:no-node && bun run check:bun-modules && bun run check:json && bun run lint && bun run type-check && bun run test",
     "auto:headless": "cargo run --bin fs-auto -- --quick",
     "build:cli": "bun build --compile --outfile dist/foodshare-cli cli.ts"
   },
   "devDependencies": {
     "@types/bun": "1.4.0",
     "oxlint": "1.80.0",
-    "tsrs": "0.18.0-ts7.1.0-dev.20260929",
+    "tsrs": "0.18.0-ts7.1.0-dev.20260929"
   },
   "engines": {
     "bun": ">=1.4.3-canary.20261019.1"

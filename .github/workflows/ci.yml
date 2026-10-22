@@ -92,6 +92,12 @@ jobs:
         # is a workflow that does not run, and nothing else here would say
         # so.
         run: bun run check:yaml
+      - name: The JSON the repository ships is JSON
+        # Bun's reader for `package.json` accepts a trailing comma and a
+        # comment, where a strict parser does not. The guard in the
+        # sibling repositories reads every `package.json` in the tree, and
+        # it crashed on one.
+        run: bun run check:json
 
   web:
     name: The web app

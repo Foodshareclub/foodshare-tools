@@ -141,6 +141,15 @@ pre-commit:
       run: |
         bun scripts/check-bun-modules.ts > /dev/null || exit 1
 
+    # Bun's reader for `package.json` accepts a trailing comma and a
+    # comment. Another tool will not, and the guard in the sibling
+    # repositories reads every package.json in the tree.
+    json-files:
+      priority: 1
+      glob: "**/*.json"
+      run: |
+        bun scripts/check-json.ts > /dev/null || exit 1
+
     # -------------------------------------------------------------------------
     # 3. LINTING & FORMATTING (Priority 3 - Mandated Toolchain: Oxlint, Biome)
     # -------------------------------------------------------------------------
