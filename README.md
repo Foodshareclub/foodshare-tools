@@ -182,7 +182,9 @@ cargo clippy --workspace --all-targets -- -D warnings  # Lint
 The Rust in this repository is the toolchain; Bun runs everything around it —
 the package manager, the script runner, the TypeScript executor, the test
 runner and the type checker. Type checking is `tsrs`, the Rust port of the
-TypeScript 7 compiler, with `tsc` on TypeScript 7.1 kept as a parity gate.
+TypeScript 7 compiler. It is the only checker here: a bug in it would be
+a bug in the gate, and a second compiler is a second thing to maintain
+and a second thing to disagree.
 
 Node.js is not part of it. `bun scripts/check-no-node.ts` fails the build if
 it creeps back in. `bunx` is the one exception to `[run] bun = true` — it
