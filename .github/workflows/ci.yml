@@ -86,6 +86,8 @@ jobs:
         # nothing else, so a lint error in them could only ever be found by
         # the person who wrote it, and only if they had the hook installed.
         run: bun run lint
+      - name: Test TypeScript tooling
+        run: bun run test
       - name: The workflow files are valid YAML
         # The same check the pre-commit hook runs, over every workflow
         # rather than over the staged ones. A workflow that does not parse

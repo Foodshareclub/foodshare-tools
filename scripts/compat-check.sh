@@ -2,7 +2,7 @@
 # Cross-repo compatibility checker.
 # Verifies: vendored supabase drift, production health endpoints, latest CI
 # conclusions across the Foodshareclub repos. Writes a markdown matrix to
-# $GITHUB_STEP_SUMMARY when available. Exits non-zero on any FAIL unless
+# $GITHUB_STEP_SUMMARY when available. Exits non-zero on failed or unverified checks unless
 # SOFT_FAIL=1.
 #
 # Env / args:
@@ -29,12 +29,23 @@ row() { ROWS+=("| $1 | $2 | $3 |"); }
 
 # 1. Vendored supabase drift -----------------------------------------------
 if [ -n "$WEB_DIR" ] && [ -n "$BACKEND_DIR" ]; then
-  if diff_out="$(diff -rq --exclude=node_modules --exclude=.DS_Store \
-      "$WEB_DIR/supabase" "$BACKEND_DIR/supabase" 2>/dev/null)"; then
-    row "Vendored copy drift" "PASS" "web \`supabase/\` matches backend"
+  # These are the paths explicitly vendored by foodshare-web/.gitignore.
+  # Backend-only oracle data, SQL test harnesses and runtime files are not
+  # part of the web snapshot and must not create permanent false drift.
+  drift=0
+  for path in config.toml seed.sql migrations functions; do
+    if [ ! -e "$WEB_DIR/supabase/$path" ] || [ ! -e "$BACKEND_DIR/supabase/$path" ]; then
+      row "Vendored copy drift" "FAIL" "Missing required vendored path: $path"
+      drift=1
+    elif ! diff -rq --exclude=node_modules --exclude=.DS_Store \
+      "$WEB_DIR/supabase/$path" "$BACKEND_DIR/supabase/$path" >/dev/null 2>&1; then
+      row "Vendored copy drift" "FAIL" "web supabase/$path diverged from backend; re-sync required"
+      drift=1
+    fi
+  done
+  if [ "$drift" = 0 ]; then
+    row "Vendored copy drift" "PASS" "All declared web Supabase paths match backend"
   else
-    count="$(printf '%s\n' "$diff_out" | grep -c 'differ\|Only in' || true)"
-    row "Vendored copy drift" "FAIL" "\`web/supabase\` diverged from backend ($count paths). Re-sync required."
     FAIL=1
   fi
 else
@@ -60,42 +71,24 @@ else
   FAIL=1
 fi
 
-# 3. Latest CI conclusion on main per repo ---------------------------------
-# Prefer gh when available; fall back to curl + GH_TOKEN (self-hosted
-# runners may not ship the gh CLI).
-gh_api() {
-  local path="$1" jq_expr="$2"
-  if command -v gh >/dev/null 2>&1; then
-    gh api "$path" --jq "$jq_expr" 2>/dev/null
-  elif [ -n "${GH_TOKEN:-}" ]; then
-    curl -sS --max-time 20 -H "Authorization: Bearer $GH_TOKEN" \
-      -H "Accept: application/vnd.github+json" \
-      "https://api.github.com$path" |
-      jq -r "$jq_expr" 2>/dev/null
-  fi
-}
-
-for repo in $CHECK_REPOS; do
-  # event=push: judge repos by their deploy pipelines, not by sibling
-  # nightly runs (otherwise one red nightly marks every other repo red).
-  if conclusion="$(gh_api "repos/$repo/actions/runs?branch=main&event=push&per_page=1" '.workflow_runs[0].conclusion // "none"')"; then
-    if [ "$conclusion" = "success" ] || [ "$conclusion" = "skipped" ]; then
-      row "CI: \`$repo\`" "PASS" "latest main run: $conclusion"
-    elif [ "$conclusion" = "none" ]; then
-      row "CI: \`$repo\`" "WARN" "no runs found on main"
-    elif [ "$conclusion" = "cancelled" ]; then
-      # superseded by a newer run — not evidence of breakage
-      row "CI: \`$repo\`" "WARN" "latest main run cancelled (superseded)"
-    elif echo "$IGNORE_CI_FAIL" | tr ' ' '\n' | grep -qx "$repo"; then
-      row "CI: \`$repo\`" "WARN" "known external failure (ignored): ${conclusion:-unknown}"
-    else
-      row "CI: \`$repo\`" "FAIL" "latest main run: ${conclusion:-unknown}"
-      [ "$conclusion" != "none" ] && FAIL=1
-    fi
-  else
-    row "CI: \`$repo\`" "WARN" "gh api unavailable or repo unreachable"
-  fi
-done
+# 3. Required pipeline at each repository's current main commit ------------
+# The Bun helper selects the canonical workflow and exact commit. An unrelated
+# successful API probe cannot turn a failed deployment pipeline green.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export CHECK_REPOS
+export IGNORE_CI_FAIL="${IGNORE_CI_FAIL:-}"
+if ci_rows="$(bun "$script_dir/compat-ci.ts")"; then
+  ci_status=0
+else
+  ci_status=$?
+fi
+if [ -n "$ci_rows" ]; then
+  while IFS= read -r line; do ROWS+=("$line"); done <<< "$ci_rows"
+else
+  row "CI inspection" "FAIL" "No pipeline inspection results; Bun is required"
+  FAIL=1
+fi
+if [ "$ci_status" -ne 0 ]; then FAIL=1; fi
 
 # Report -------------------------------------------------------------------
 report() {
@@ -108,6 +101,6 @@ report() {
 report | tee "${summary_file:-/dev/null}"
 
 if [ "$FAIL" -eq 1 ] && [ "${SOFT_FAIL:-0}" != "1" ]; then
-  echo "::error::Compatibility check failed — see matrix above"
+  echo "::error::Compatibility failed or is not yet verified — see matrix above"
   exit 1
 fi
