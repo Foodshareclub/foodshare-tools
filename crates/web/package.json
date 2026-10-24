@@ -18,18 +18,18 @@
     "logs": "supabase functions logs"
   },
   "dependencies": {
-    "next": "16.5.0-canary.19",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "@sentry/nextjs": "10.71.0",
-    "@sentry/react": "10.71.0",
-    "@sentry/browser": "10.71.0",
-    "@sentry/feedback": "10.71.0",
-    "@sentry/replay": "10.71.0",
+    "@sentry/browser": "10.75.2",
+    "@sentry/feedback": "10.75.2",
+    "@sentry/nextjs": "10.75.2",
+    "@sentry/react": "10.75.2",
+    "@sentry/replay": "10.75.2",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "date-fns": "4.1.0",
     "lucide-react": "0.577.0",
-    "date-fns": "4.1.0"
+    "next": "16.5.0-canary.19",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
