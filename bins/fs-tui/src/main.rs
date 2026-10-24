@@ -397,7 +397,7 @@ fn ui(f: &mut Frame, app: &App) {
             .borders(Borders::ALL)
             .title(" Domains (j/k select, r run, v verify) "),
     )
-    .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+    .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
 
     f.render_widget(table, chunks[1]);
 
@@ -461,7 +461,10 @@ fn ui(f: &mut Frame, app: &App) {
     f.render_widget(footer, chunks[3]);
 }
 
-async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
+async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()>
+where
+    B::Error: Send + Sync + 'static,
+{
     let mut tick = tokio::time::interval(TICK);
 
     loop {

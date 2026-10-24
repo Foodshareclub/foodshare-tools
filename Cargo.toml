@@ -173,7 +173,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 brotli = "6.0"
 
 # TUI
-ratatui = "0.28"
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm_0_28", "underline-color", "layout-cache"] }
 crossterm = { version = "0.28", features = ["event-stream"] }
 
 # Text processing
