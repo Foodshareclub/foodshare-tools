@@ -63,13 +63,8 @@ jobs:
         run: bun run check:bun-modules
       - name: Type-check with tsrs
         run: bun run type-check
-      - name: Lint the scripts
-        # The `lint` job below is Rust's: `cargo fmt` and `cargo clippy`. The
-        # ten TypeScript files at the root of this repository -- the CLI, the
-        # scripts, the runners -- were linted by the pre-commit hook and by
-        # nothing else, so a lint error in them could only ever be found by
-        # the person who wrote it, and only if they had the hook installed.
-        run: bun run lint
+      - name: Check changed source formatting
+        run: bun run format:check
       - name: Test TypeScript tooling
         run: bun run test
       - name: The workflow files are valid YAML
@@ -107,9 +102,8 @@ jobs:
       - name: Type-check with tsrs
         run: bun run type-check
         working-directory: crates/web
-      - name: Lint
-        run: bun run lint
-        working-directory: crates/web
+      - name: Check changed source formatting
+        run: bun run format:check
       - name: Test
         run: bun run test
         working-directory: crates/web

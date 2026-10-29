@@ -1,10 +1,10 @@
 # Workspace Rules (`foodshare-tools`)
 
-- **Core Toolchain Mandate (Bun, Oxlint, Biome):** This repo owns the shared
+- **Core Toolchain Mandate (Bun, TSRS):** This repo owns the shared
   toolchain (lefthook hooks, CLIs, simulators, builders).
+  - **TSRS:** Use the pinned TSRS compiler for TypeScript static checks.
+  - **Formatting:** Use Bun 1.4.4 native `bun fmt`; removed lint/format packages must not be reintroduced.
   - **Bun:** For all package management and script execution tasks, ALWAYS use `bun` instead of `npm`, `npx`, `yarn`, or `pnpm`.
-  - **Oxlint:** Enforce Rust-based fast linting (`oxlint` / `bunx oxlint`) across JS/TS/JSON code.
-  - **Biome:** Enforce Rust-based fast formatting & linting (`biome` / `bunx biome check`).
 - **No container runtime:** Nothing in this repository needs Docker, Podman, or
   any other container runtime — no image is built, no container is run, no
   container socket is opened. Do not add a dependency on one, and do not

@@ -51,3 +51,7 @@ minimumReleaseAge = 3600
 # Keep the lockfile in sync with package.json on every install. A lockfile
 # that only CI regenerates is a lockfile nobody reviews.
 save = true
+
+[fmt]
+printWidth = 120
+ignorePatterns = ["**/*.yml", "**/*.yaml", "**/*.md", "**/*.toml", "**/*.lock", "node_modules/**", "supabase/**", "tools/**", "artifacts/**", "public/**", "src/wasm/**", ".build/**", ".next/**", "coverage/**"]

@@ -75,7 +75,7 @@ impl DomainKind {
         match self {
             Self::Rust => "cargo test --workspace, benches, clippy",
             Self::Wasm => "5 WASM modules: search/geo/crypto/compression/image",
-            Self::Web => "Next.js Turbopack build, tsrs, oxlint, biome",
+            Self::Web => "Next.js Turbopack build, TSRS and Bun formatting",
             Self::Backend => "Deno edge function tests, pgvector",
             Self::Mobile => "Skip transpile, Maestro flows, Gradle",
         }

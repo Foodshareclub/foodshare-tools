@@ -9,7 +9,7 @@
     "build": "bun run build:wasm && bun run build:cli",
     "dev": "bun run dev:web",
     "test": "bun test",
-    "lint": "bun run lint:oxlint",
+    "lint": "bun run type-check",
     "type-check": "bun run tsrs --noEmit",
     "clean": "bun run clean:web",
     "sim:run": "cargo run --bin fs-sim",
@@ -23,7 +23,6 @@
     "build:wasm": "cargo run --bin fs-wasm",
     "clean:web": "rm -rf crates/web/.next crates/web/node_modules/.cache",
     "dev:web": "bun --cwd crates/web --bun next dev",
-    "lint:oxlint": "bunx --bun oxlint --ignore-pattern=crates/** --ignore-pattern=packages/** --ignore-pattern=node_modules/**",
     "bench": "cargo bench --workspace",
     "cli": "bun cli.ts",
     "tui": "cargo run --bin fs-tui",
@@ -37,13 +36,15 @@
     "check:json": "bun scripts/check-json.ts",
     "docs:cli-reference": "bun scripts/generate-cli-reference.ts",
     "check:cli-reference": "bun scripts/generate-cli-reference.ts --check",
-    "verify": "bun run check:no-node && bun run check:bun-modules && bun run check:json && bun run lint && bun run type-check && bun run test",
+    "verify": "bun run check:no-node && bun run check:bun-modules && bun run check:json && bun run lint && bun run format:check && bun run test",
     "auto:headless": "cargo run --bin fs-auto -- --quick",
-    "build:cli": "bun build --compile --outfile dist/foodshare-cli cli.ts"
+    "build:cli": "bun build --compile --outfile dist/foodshare-cli cli.ts",
+    "format": "bun fmt --no-script",
+    "format:check": "bun scripts/check-changed-format.ts",
+    "lint:fix": "bun run format"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
-    "oxlint": "1.80.0",
     "tsrs": "0.18.0-ts7.1.0-dev.20260929"
   },
   "engines": {

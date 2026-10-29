@@ -151,54 +151,12 @@ pre-commit:
         bun scripts/check-json.ts > /dev/null || exit 1
 
     # -------------------------------------------------------------------------
-    # 3. LINTING & FORMATTING (Priority 3 - Mandated Toolchain: Oxlint, Biome)
+    # 3. LINTING & FORMATTING (Priority 3 - TSRS and Bun)
     # -------------------------------------------------------------------------
-    web-oxlint:
+    bun-format:
       priority: 3
-      glob: "*.{ts,tsx,js,jsx}"
-      run: |
-        if [ -f package.json ]; then
-          FILES=""
-          for f in {staged_files}; do
-            case "$f" in supabase/*) continue ;; esac
-            FILES="$FILES $f"
-          done
-          if [ -n "$FILES" ]; then bunx --bun oxlint --fix $FILES; fi
-        fi
-      stage_fixed: true
-
-    web-biome:
-      priority: 3
-      glob: "*.{ts,tsx,js,jsx,json}"
-      # vendored backend code must stay byte-identical to foodshare-backend:
-      # biome/prettier ignore configs don't apply to explicitly-passed paths,
-      # so filter supabase/* here.
-      run: |
-        if [ -f package.json ]; then
-          FILES=""
-          for f in {staged_files}; do
-            case "$f" in supabase/*) continue ;; esac
-            FILES="$FILES $f"
-          done
-          [ -n "$FILES" ] && bunx --bun biome check --write $FILES 2>/dev/null || true
-          true
-        fi
-      stage_fixed: true
-
-    web-format:
-      priority: 3
-      # Biome 1.9 formats TypeScript, JavaScript, JSON and CSS. It does not
-      # format Markdown, YAML or SCSS, so those are not in the glob — Prettier
-      # used to cover them and is no longer part of the toolchain.
       glob: "*.{ts,tsx,js,jsx,json,css}"
-      exclude:
-        # vendored backend code must stay byte-identical to foodshare-backend
-        - "^supabase/"
-      run: |
-        if [ -f bun.lock ] || [ -f bun.lockb ]; then
-          bunx --bun @biomejs/biome@1.9.4 format --write {staged_files} 2>/dev/null || true
-        fi
-      stage_fixed: true
+      run: bun fmt --no-script --staged
 
     backend-format:
       priority: 3
@@ -259,20 +217,11 @@ pre-push:
           bun run type-check
         fi
 
-    web-oxlint-full:
+    bun-format-check:
       priority: 1
       run: |
-        if [ -f package.json ] && [ -d src ]; then
-          echo "⚡ Verifying Oxlint zero-warning baseline before push..."
-          bunx --bun oxlint src/
-        fi
-
-    web-biome-full:
-      priority: 1
-      run: |
-        if [ -f package.json ] && [ -d src ]; then
-          echo "🎨 Verifying Biome linting and formatting before push..."
-          bunx --bun biome check src/
+        if [ -f scripts/check-changed-format.ts ]; then
+          FORMAT_BASE_REF=HEAD~1 FORMAT_COMMITTED_ONLY=true bun run format:check
         fi
 
     # This was `bun run translations:sync || true`, which despite the name was
