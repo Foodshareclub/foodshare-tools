@@ -83,3 +83,17 @@ test("CI ignores generated workspace files outside the committed range", async (
   expect(check(root, { GITHUB_ACTIONS: "true", GITHUB_EVENT_PATH: event })).toBe(0);
   expect(check(root)).toBe(1);
 });
+
+test("CI fetches a base commit absent from a shallow checkout", async () => {
+  const source = await fixture();
+  const before = git(source, "rev-parse", "HEAD");
+  await Bun.write(join(source, "sample file.ts"), "const value = 2;\n");
+  git(source, "add", ".");
+  git(source, "commit", "-qm", "formatted push");
+  const clone = await mkdtemp(join(tmpdir(), "fs-format-shallow-"));
+  roots.push(clone);
+  git(clone, "clone", "--depth=1", "file://" + source, ".");
+  expect(command(clone, ["git", "cat-file", "-e", before + "^{tree}"]).exitCode).not.toBe(0);
+  expect(check(clone, { GITHUB_ACTIONS: "true", FORMAT_BASE_REF: before })).toBe(0);
+  expect(command(clone, ["git", "cat-file", "-e", before + "^{tree}"]).exitCode).toBe(0);
+});

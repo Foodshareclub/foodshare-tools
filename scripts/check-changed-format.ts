@@ -12,8 +12,10 @@ function git(args: string[], input?: string): string {
 }
 function resolves(ref: string): boolean {
   return (
-    Bun.spawnSync(["git", "rev-parse", "--verify", "--end-of-options", ref], { stdout: "ignore", stderr: "ignore" })
-      .exitCode === 0
+    Bun.spawnSync(["git", "rev-parse", "--verify", "--end-of-options", `${ref}^{tree}`], {
+      stdout: "ignore",
+      stderr: "ignore",
+    }).exitCode === 0
   );
 }
 let base = process.env.FORMAT_BASE_REF;
