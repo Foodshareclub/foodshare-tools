@@ -42,12 +42,12 @@
     "build:cli": "bun build --compile --outfile dist/foodshare-cli cli.ts"
   },
   "devDependencies": {
-    "@types/bun": "1.4.0",
+    "@types/bun": "1.4.4",
     "oxlint": "1.80.0",
     "tsrs": "0.18.0-ts7.1.0-dev.20260929"
   },
   "engines": {
-    "bun": ">=1.4.3-canary.20261019.1"
+    "bun": ">=1.4.4"
   },
-  "packageManager": "bun@1.4.3-canary.20261019.1"
+  "packageManager": "bun@1.4.4"
 }

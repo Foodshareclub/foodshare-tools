@@ -1,34 +1,7 @@
-# Toolchain pinned for this repository.
-#
-# Bun is the only runtime for this project's own code: package manager,
-# script runner, TypeScript executor and test runner.
-#
-# Deno is pinned alongside it for one reason only: this repo's CLI runs the
-# Supabase Edge Functions' test suite, and those functions live in
-# `foodshare-backend/supabase/functions/` and run on the Edge Runtime, which
-# is Deno. `Deno.serve`, `Deno.env` and `Deno.test` are load-bearing there
-# and cannot be ported. Everything this repo itself runs is on Bun.
-#
-# The *exact* build is pinned in two places, and both have to name the
-# same one:
-#
-#   mise.toml                 ->  "npm:bun" = "<version>"
-#   package.json              ->  "packageManager": "bun@<version>"
-#
-# The version is the newest canary published to npm. It is what a developer
-# runs, so it is pinned exactly.
-#
-# CI cannot pin it. `oven-sh/setup-bun` downloads from the GitHub releases,
-# and the canary builds are published to npm — there is no
-# `bun-v1.4.3-canary.20261019.1` release to download, so asking for that
-# exact version is a 404. The only canary the action can install is the
-# rolling `canary` release, which is where the npm canary comes from, so
-# the workflow names `canary` and checks that what it installed really is a
-# canary build.
-#
-# Keep the two in step when the canary is refreshed.
+# Bun stable 1.4.4 is pinned across local tooling, manifests and CI.
+# Use mise's native Bun backend; no npm bootstrap is required.
 [tools]
-"npm:bun" = "1.4.3-canary.20261019.1"
+bun = "1.4.4"
 deno = "2.9.6"
 # The WebAssembly modules are committed to the web repository, so the tool
 # that shapes them is pinned. A different `wasm-pack` emits a different
