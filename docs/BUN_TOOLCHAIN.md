@@ -36,3 +36,18 @@ FoodShare's existing database-test, secret-scan, backend-deployment or store gat
 
 Sources: [Bun 1.4.4 release notes](https://bun.com/blog/release-notes/bun-v1.4.4)
 and [mise Bun support](https://mise.jdx.dev/lang/bun.html).
+
+## Remaining framework compatibility dependency
+
+The web app and `crates/web` retain the direct `typescript` package because
+the installed Next.js release resolves its package metadata and compiler CLI
+for framework setup and route-type generation. TSRS remains the project checker;
+it does not expose Next.js's expected `typescript` package contract. Remove this
+compatibility dependency only after validating a supported replacement through
+Next.js setup, type generation, development and production builds. Do not alias
+TSRS as TypeScript or disable validation to make the manifest appear smaller.
+
+The app previously tracked retired Oxlint/Biome files in `node_modules`; removing
+manifest entries alone did not remove those files from Git. Retired packages
+and launchers must also be removed from the tracked tree. Bun pruning removes
+unreferenced installed versions without replacing required current dependencies.
