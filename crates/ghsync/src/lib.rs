@@ -20,3 +20,4 @@
 //! that records the last-written field values for change detection.
 
 pub mod cli;
+pub mod config;
