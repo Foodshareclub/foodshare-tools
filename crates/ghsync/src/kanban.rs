@@ -361,7 +361,7 @@ impl Kanban for RealKanban {
             })?;
         let tmp_path = tmp.path().to_path_buf();
         let body_file = tmp_path.to_string_lossy().into_owned();
-        let args = vec![
+        let mut args: Vec<&str> = vec![
             "create",
             title,
             "--body-file",
@@ -370,9 +370,14 @@ impl Kanban for RealKanban {
             assignee,
             "--idempotency-key",
             idempotency_key,
-            "--initial-status",
-            initial_status,
         ];
+        // `ready` is the board's default; the CLI has no `--initial-status
+        // ready`, so it is expressed by omitting the flag (Q1: intake
+        // cards default to ready).
+        if initial_status != "ready" {
+            args.push("--initial-status");
+            args.push(initial_status);
+        }
         let v = self.run_json(&args).await?;
         let card = task_to_card(&v);
         drop(tmp);

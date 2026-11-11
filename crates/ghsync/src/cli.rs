@@ -206,7 +206,37 @@ pub async fn run(args: Vec<String>) -> Result<()> {
             );
             Ok(())
         }
-        Command::Intake { dry_run } => bail!("intake {dry_run}: not implemented yet"),
+        Command::Intake { dry_run } => {
+            let cfg = crate::config::Config::load(&cli.config_path())?;
+            let token = cfg.token.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no token configured; set it in {}",
+                    cli.config_path().display()
+                )
+            })?;
+            let mut kb = crate::kanban::RealKanban::new(&cfg.board);
+            let mut gh = crate::github::RealGitHub::new(&cfg.api, &cfg.org, &token);
+            let report = crate::intake::intake_issues(&mut kb, &mut gh, &cfg, dry_run).await?;
+            for i in &report.would_create {
+                println!("would create card for {i}");
+            }
+            for c in &report.created {
+                println!(
+                    "created card {} for {} ({}, {})",
+                    c.card, c.issue, c.profile, c.phase
+                );
+            }
+            for (issue, why) in &report.skipped {
+                println!("skipped {issue}: {why}");
+            }
+            println!(
+                "intake: {} created, {} would-create, {} skipped",
+                report.created.len(),
+                report.would_create.len(),
+                report.skipped.len()
+            );
+            Ok(())
+        }
         Command::Status { json } => bail!("status {json}: not implemented yet"),
     }
 }

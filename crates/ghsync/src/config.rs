@@ -221,6 +221,9 @@ pub struct Config {
     pub repos: Vec<RepoConfig>,
     pub default_assignee: String,
     pub project: Option<ProjConfig>,
+    /// Agent profiles that an intake form may name; an unknown profile
+    /// is a loud intake error naming this list.
+    pub profiles: Vec<String>,
     pub token: Option<String>,
     pub state_path: PathBuf,
 }
@@ -255,6 +258,7 @@ impl Default for Config {
                 },
             ],
             default_assignee: "default".into(),
+            profiles: vec!["default".into()],
             project: Some(ProjConfig {
                 number: 1,
                 project_id: String::new(),
@@ -348,6 +352,7 @@ struct Raw {
     repos: Vec<RawRepo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     default_assignee: Option<String>,
+    profiles: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     project: Option<RawProj>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -405,6 +410,7 @@ impl From<&Config> for Raw {
                 })
                 .collect(),
             default_assignee: Some(c.default_assignee.clone()),
+            profiles: c.profiles.clone(),
             project: c.project.as_ref().map(|p| RawProj {
                 number: Some(p.number),
                 project_id: Some(p.project_id.clone()),
@@ -486,6 +492,11 @@ impl Config {
                     .collect::<Result<Vec<RepoConfig>, ConfigError>>()?
             },
             default_assignee: raw.default_assignee.unwrap_or(d.default_assignee),
+            profiles: if raw.profiles.is_empty() {
+                d.profiles
+            } else {
+                raw.profiles
+            },
             project,
             token: raw.token,
             state_path: raw

@@ -260,13 +260,28 @@ async fn real_kanban_create_parses_task_json() {
         .unwrap();
     assert_eq!(card.id, "t_new");
 
-    let args = std::fs::read_to_string(args_file).unwrap();
+    let args = std::fs::read_to_string(&args_file).unwrap();
     assert!(
         args.starts_with("kanban --board foodshare create"),
         "argv was: {args}"
     );
     assert!(args.contains("--idempotency-key"), "argv was: {args}");
-    assert!(args.contains("--initial-status"), "argv was: {args}");
+    // Q1: intake cards default to `ready`, which is the board default —
+    // the CLI has no `--initial-status ready`, so ready omits the flag.
+    assert!(
+        !args.contains("--initial-status"),
+        "ready must omit --initial-status; argv was: {args}"
+    );
+
+    // A non-default initial status is passed through.
+    kb.create("New card", "b", "default", "key2", "running")
+        .await
+        .unwrap();
+    let args = std::fs::read_to_string(&args_file).unwrap();
+    assert!(
+        args.contains("--initial-status running"),
+        "argv was: {args}"
+    );
 }
 
 #[tokio::test]
