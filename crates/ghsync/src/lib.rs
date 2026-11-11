@@ -30,3 +30,4 @@ pub mod link;
 pub mod pr;
 pub mod push;
 pub mod setup;
+pub mod status;

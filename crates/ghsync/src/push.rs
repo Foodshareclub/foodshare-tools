@@ -560,7 +560,7 @@ pub async fn push_project_fields(
 /// vocabulary: single-select readbacks are option names (labels) and map
 /// to their option id; anything else (text values, already-id values)
 /// compares as-is.
-fn normalize_value(field: &str, raw: &str, proj: &ProjConfig) -> String {
+pub fn normalize_value(field: &str, raw: &str, proj: &ProjConfig) -> String {
     let ids = match field {
         "Status" => Some(&proj.status_option_ids),
         "Phase" => Some(&proj.phase_option_ids),

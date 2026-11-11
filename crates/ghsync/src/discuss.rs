@@ -55,7 +55,7 @@ pub struct FeedReport {
 /// The verdict a card currently carries, if any: the latest
 /// `sync:github <verdict>` comment, else an `escalation:` block reason
 /// on a blocked card.
-fn verdict_for(view: &CardView) -> Option<&'static str> {
+pub fn verdict_for(view: &CardView) -> Option<&'static str> {
     if let Some(v) = view
         .comments
         .iter()

@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::kanban::Kanban;
@@ -277,7 +277,32 @@ pub async fn run(args: Vec<String>) -> Result<()> {
             );
             Ok(())
         }
-        Command::Status { json } => bail!("status {json}: not implemented yet"),
+        Command::Status { json } => {
+            let cfg = crate::config::Config::load(&cli.config_path())?;
+            let token = cfg.token.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no token configured; set it in {}",
+                    cli.config_path().display()
+                )
+            })?;
+            let mut kb = crate::kanban::RealKanban::new(&cfg.board);
+            let mut gh = crate::github::RealGitHub::new(&cfg.api, &cfg.org, &token);
+            let cursor = crate::push::Cursor::load(&cfg.state_path);
+            let report = crate::status::run_status(&mut kb, &mut gh, &cfg, &cursor).await?;
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "clean": report.clean,
+                        "rows": report.rows,
+                    }))
+                    .map_err(|e| anyhow::anyhow!("serialize status: {e}"))?
+                );
+            } else {
+                print!("{}", report.display());
+            }
+            Ok(())
+        }
     }
 }
 
