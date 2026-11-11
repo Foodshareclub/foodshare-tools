@@ -112,12 +112,10 @@ pub const CARD_LINK_PREFIX: &str = "ghsync ";
 pub const CARD_FOOTER_PREFIX: &str = "kanban:";
 
 /// A GitHub issue reference: `owner/repo#number`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IssueRef {
-    pub owner: String,
-    pub repo: String,
-    pub number: u32,
-}
+pub use crate::kanban::LinkedIssue;
+
+/// Alias kept for the mapping helpers in this module.
+pub type IssueRef = LinkedIssue;
 
 /// The issue-side link comment: `ghsync <owner>/<repo>#<n>`.
 pub fn issue_link_comment(owner: &str, repo: &str, number: u32) -> String {

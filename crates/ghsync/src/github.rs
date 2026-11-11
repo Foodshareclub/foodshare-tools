@@ -1,0 +1,482 @@
+//! The GitHub seam: what ghsync can do to the org.
+//!
+//! [`GitHub`] is the interface for both the REST endpoints (issues,
+//! milestones, comments) and the GraphQL endpoint (Project v2,
+//! discussions). [`RealGitHub`] implements it over `reqwest`;
+//! [`crate::fakes::FakeGitHub`] is the in-memory stand-in used by the
+//! tests.
+//!
+//! The request surface is built from pure path builders, which are
+//! snapshot-tested here; the live wire format is exercised in the E2E.
+
+use thiserror::Error;
+
+/// A GitHub issue (not a PR).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Issue {
+    pub owner: String,
+    pub repo: String,
+    pub number: u32,
+    pub title: String,
+    pub body: String,
+    /// `open` or `closed`.
+    pub state: String,
+    pub labels: Vec<String>,
+    pub url: String,
+}
+
+/// A milestone.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Milestone {
+    pub number: u32,
+    pub title: String,
+    pub open_issues: u32,
+    pub closed_issues: u32,
+}
+
+/// An issue comment.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Comment {
+    pub id: u64,
+    pub user: String,
+    pub body: String,
+    pub created_at: String,
+}
+
+/// Failure of a GitHub operation.
+#[derive(Debug, Error)]
+pub enum GitHubError {
+    #[error("github http {status} for {url}: {message}")]
+    Http {
+        status: u16,
+        url: String,
+        message: String,
+    },
+    #[error("github graphql error for {url}: {message}")]
+    Graphql { url: String, message: String },
+    #[error("github io: {0}")]
+    Io(String),
+}
+
+/// The GitHub surface ghsync talks to.
+///
+/// `async_fn_in_trait` is allowed deliberately: this is an internal trait
+/// (the crate's own implementations and tests are the only callers), and
+/// every implementation returns a `Send` future anyway.
+#[allow(async_fn_in_trait)]
+pub trait GitHub: Send + Sync {
+    /// Create an issue in `repo` (the org from the config).
+    async fn create_issue(
+        &mut self,
+        repo: &str,
+        title: &str,
+        body: &str,
+        labels: &[String],
+    ) -> Result<Issue, GitHubError>;
+    /// Fetch one issue.
+    async fn get_issue(&mut self, repo: &str, number: u32) -> Result<Issue, GitHubError>;
+    /// All comments on an issue.
+    async fn issue_comments(
+        &mut self,
+        repo: &str,
+        number: u32,
+    ) -> Result<Vec<Comment>, GitHubError>;
+    /// Create a milestone in `repo`.
+    async fn create_milestone(&mut self, repo: &str, title: &str)
+    -> Result<Milestone, GitHubError>;
+    /// All milestones in `repo` (open and closed).
+    async fn list_milestones(&mut self, repo: &str) -> Result<Vec<Milestone>, GitHubError>;
+    /// Set the milestone on an issue.
+    async fn set_milestone(
+        &mut self,
+        repo: &str,
+        number: u32,
+        milestone: u32,
+    ) -> Result<(), GitHubError>;
+    /// Replace the label set on an issue.
+    async fn set_labels(
+        &mut self,
+        repo: &str,
+        number: u32,
+        labels: &[String],
+    ) -> Result<(), GitHubError>;
+    /// Close an issue (never reopen).
+    async fn close_issue(&mut self, repo: &str, number: u32) -> Result<(), GitHubError>;
+    /// Post a comment on an issue.
+    async fn comment(&mut self, repo: &str, number: u32, body: &str) -> Result<(), GitHubError>;
+    /// Run a GraphQL query; `data` of the response is returned. A
+    /// response with `errors` is a [`GitHubError::Graphql`].
+    async fn graphql(
+        &mut self,
+        query: &str,
+        variables: serde_json::Value,
+    ) -> Result<serde_json::Value, GitHubError>;
+}
+
+// ---------- pure path builders (snapshot-tested) ----------
+
+/// `/repos/{org}/{repo}`
+pub fn path_repo(org: &str, repo: &str) -> String {
+    format!("/repos/{org}/{repo}")
+}
+
+/// `/repos/{org}/{repo}/issues/{n}`
+pub fn path_issue(org: &str, repo: &str, number: u32) -> String {
+    format!("/repos/{org}/{repo}/issues/{number}")
+}
+
+/// `/repos/{org}/{repo}/issues/{n}/comments?per_page=100&page={p}`
+pub fn path_issue_comments(org: &str, repo: &str, number: u32, page: u32) -> String {
+    format!("/repos/{org}/{repo}/issues/{number}/comments?per_page=100&page={page}")
+}
+
+/// `/repos/{org}/{repo}/milestones?state=all&per_page=100`
+pub fn path_milestones(org: &str, repo: &str) -> String {
+    format!("/repos/{org}/{repo}/milestones?state=all&per_page=100")
+}
+
+/// The GraphQL endpoint.
+pub fn path_graphql(api: &str) -> String {
+    format!("{api}/graphql")
+}
+
+// ---------- the real client ----------
+
+/// A GitHub client over `reqwest` (REST + GraphQL).
+pub struct RealGitHub {
+    client: reqwest::Client,
+    pub api: String,
+    pub org: String,
+    token: String,
+}
+
+impl RealGitHub {
+    pub fn new(api: &str, org: &str, token: &str) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            api: api.trim_end_matches('/').to_string(),
+            org: org.to_string(),
+            token: token.to_string(),
+        }
+    }
+
+    fn authed(&self) -> reqwest::header::HeaderMap {
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert(
+            reqwest::header::AUTHORIZATION,
+            format!("Bearer {}", self.token)
+                .parse()
+                .expect("ascii token"),
+        );
+        h.insert(
+            reqwest::header::ACCEPT,
+            "application/vnd.github+json".parse().expect("static"),
+        );
+        h.insert(
+            reqwest::header::HeaderName::from_static("x-github-api-version"),
+            "2022-11-28".parse().expect("static"),
+        );
+        h
+    }
+
+    async fn rest(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> Result<reqwest::Response, GitHubError> {
+        let url = format!("{}{}", self.api, path);
+        let mut req = self.client.request(method, &url).headers(self.authed());
+        if let Some(body) = body {
+            req = req.json(&body);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let message = resp
+                .text()
+                .await
+                .map_err(|e| GitHubError::Io(e.to_string()))?;
+            return Err(GitHubError::Http {
+                status,
+                url,
+                message,
+            });
+        }
+        Ok(resp)
+    }
+
+    fn issue_from(&self, repo: &str, v: &serde_json::Value) -> Issue {
+        Issue {
+            owner: self.org.clone(),
+            repo: repo.to_string(),
+            number: v.get("number").and_then(|n| n.as_u64()).unwrap_or(0) as u32,
+            title: v
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            body: v
+                .get("body")
+                .and_then(|b| b.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            state: v
+                .get("state")
+                .and_then(|s| s.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            labels: v
+                .get("labels")
+                .and_then(|l| l.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|l| l.get("name").and_then(|n| n.as_str()).map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            url: v
+                .get("url")
+                .and_then(|u| u.as_str())
+                .unwrap_or_default()
+                .to_string(),
+        }
+    }
+}
+
+impl GitHub for RealGitHub {
+    async fn create_issue(
+        &mut self,
+        repo: &str,
+        title: &str,
+        body: &str,
+        labels: &[String],
+    ) -> Result<Issue, GitHubError> {
+        let payload = serde_json::json!({
+            "title": title,
+            "body": body,
+            "labels": labels,
+        });
+        let resp = self
+            .rest(
+                reqwest::Method::POST,
+                &path_repo(&self.org, repo),
+                Some(payload),
+            )
+            .await?;
+        let v = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        Ok(self.issue_from(repo, &v))
+    }
+
+    async fn get_issue(&mut self, repo: &str, number: u32) -> Result<Issue, GitHubError> {
+        let resp = self
+            .rest(
+                reqwest::Method::GET,
+                &path_issue(&self.org, repo, number),
+                None,
+            )
+            .await?;
+        let v = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        Ok(self.issue_from(repo, &v))
+    }
+
+    async fn issue_comments(
+        &mut self,
+        repo: &str,
+        number: u32,
+    ) -> Result<Vec<Comment>, GitHubError> {
+        let mut out = Vec::new();
+        for page in 1..=10u32 {
+            let resp = self
+                .rest(
+                    reqwest::Method::GET,
+                    &path_issue_comments(&self.org, repo, number, page),
+                    None,
+                )
+                .await?;
+            let arr = resp
+                .json::<Vec<serde_json::Value>>()
+                .await
+                .map_err(|e| GitHubError::Io(e.to_string()))?;
+            for c in &arr {
+                out.push(Comment {
+                    id: c.get("id").and_then(|i| i.as_u64()).unwrap_or(0),
+                    user: c
+                        .pointer("/login")
+                        .and_then(|u| u.as_str())
+                        .or_else(|| c.pointer("/user/login").and_then(|u| u.as_str()))
+                        .unwrap_or_default()
+                        .to_string(),
+                    body: c
+                        .get("body")
+                        .and_then(|b| b.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    created_at: c
+                        .get("created_at")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                });
+            }
+            if arr.len() < 100 {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    async fn create_milestone(
+        &mut self,
+        repo: &str,
+        title: &str,
+    ) -> Result<Milestone, GitHubError> {
+        let resp = self
+            .rest(
+                reqwest::Method::POST,
+                &format!("{}/milestones", path_repo(&self.org, repo)),
+                Some(serde_json::json!({ "title": title })),
+            )
+            .await?;
+        let v = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        Ok(Milestone {
+            number: v.get("number").and_then(|n| n.as_u64()).unwrap_or(0) as u32,
+            title: v
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            open_issues: v.get("open_issues").and_then(|n| n.as_u64()).unwrap_or(0) as u32,
+            closed_issues: v.get("closed_issues").and_then(|n| n.as_u64()).unwrap_or(0) as u32,
+        })
+    }
+
+    async fn list_milestones(&mut self, repo: &str) -> Result<Vec<Milestone>, GitHubError> {
+        let resp = self
+            .rest(
+                reqwest::Method::GET,
+                &path_milestones(&self.org, repo),
+                None,
+            )
+            .await?;
+        let arr = resp
+            .json::<Vec<serde_json::Value>>()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        Ok(arr
+            .into_iter()
+            .map(|v| Milestone {
+                number: v.get("number").and_then(|n| n.as_u64()).unwrap_or(0) as u32,
+                title: v
+                    .get("title")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                open_issues: v.get("open_issues").and_then(|n| n.as_u64()).unwrap_or(0) as u32,
+                closed_issues: v.get("closed_issues").and_then(|n| n.as_u64()).unwrap_or(0) as u32,
+            })
+            .collect())
+    }
+
+    async fn set_milestone(
+        &mut self,
+        repo: &str,
+        number: u32,
+        milestone: u32,
+    ) -> Result<(), GitHubError> {
+        self.rest(
+            reqwest::Method::PATCH,
+            &path_issue(&self.org, repo, number),
+            Some(serde_json::json!({ "milestone": milestone })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn set_labels(
+        &mut self,
+        repo: &str,
+        number: u32,
+        labels: &[String],
+    ) -> Result<(), GitHubError> {
+        self.rest(
+            reqwest::Method::PUT,
+            &format!("{}{}", path_issue(&self.org, repo, number), "/labels"),
+            Some(serde_json::json!({ "labels": labels })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn close_issue(&mut self, repo: &str, number: u32) -> Result<(), GitHubError> {
+        self.rest(
+            reqwest::Method::PATCH,
+            &path_issue(&self.org, repo, number),
+            Some(serde_json::json!({ "state": "closed" })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn comment(&mut self, repo: &str, number: u32, body: &str) -> Result<(), GitHubError> {
+        self.rest(
+            reqwest::Method::POST,
+            &format!("{}{}", path_issue(&self.org, repo, number), "/comments"),
+            Some(serde_json::json!({ "body": body })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn graphql(
+        &mut self,
+        query: &str,
+        variables: serde_json::Value,
+    ) -> Result<serde_json::Value, GitHubError> {
+        let url = path_graphql(&self.api);
+        let payload = serde_json::json!({ "query": query, "variables": variables });
+        let resp = self
+            .client
+            .post(&url)
+            .headers(self.authed())
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        let status = resp.status();
+        let v = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        if let Some(errors) = v.get("errors").and_then(|e| e.as_array()) {
+            let messages: Vec<&str> = errors
+                .iter()
+                .filter_map(|e| e.get("message").and_then(|m| m.as_str()))
+                .collect();
+            return Err(GitHubError::Graphql {
+                url,
+                message: messages.join("; "),
+            });
+        }
+        if !status.is_success() {
+            return Err(GitHubError::Http {
+                status: status.as_u16(),
+                url,
+                message: v.to_string(),
+            });
+        }
+        Ok(v.get("data").cloned().unwrap_or(serde_json::Value::Null))
+    }
+}
