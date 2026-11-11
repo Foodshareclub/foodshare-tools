@@ -16,11 +16,18 @@
 //!
 //! A dry run records what would happen and writes nothing.
 
-use crate::config::{Config, Status, card_link_comment, issue_link_comment, labels_for};
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+
+use crate::config::{
+    Config, ProjConfig, Status, card_link_comment, issue_link_comment, labels_for, phase_from_card,
+};
 use crate::github::{GitHub, Milestone};
 use crate::kanban::{CardView, Kanban};
 use crate::link::{LinkMap, card_repo};
-use anyhow::Result;
 
 /// The exact reason push blocks a card when a human closes its issue.
 pub const CLOSED_REASON: &str = "issue closed on GitHub (ghsync)";
@@ -266,4 +273,298 @@ async fn ensure_milestone(gh: &mut impl GitHub, repo: &str, title: &str) -> Resu
         return Ok(m);
     }
     Ok(gh.create_milestone(repo, title).await?)
+}
+
+// ---------- part 2: project fields ----------
+
+/// Last-written project field values, per issue. The only on-disk state
+/// ghsync keeps. A missing or corrupt file degrades to "first sight" for
+/// every pair (one extra idempotent read each), never to a wrong write.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Cursor {
+    /// "owner/repo#n" -> field name -> last written value (the single-
+    /// select option id, or the text value).
+    #[serde(default)]
+    pub fields: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+impl Cursor {
+    /// Load from `path`; missing or corrupt files start empty.
+    pub fn load(path: &Path) -> Cursor {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default()
+    }
+
+    /// Save atomically (temp file + rename) so a killed run can never
+    /// leave a torn cursor behind.
+    pub fn save(&self, path: &Path) -> Result<()> {
+        if let Some(dir) = path.parent()
+            && !dir.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(dir)?;
+        }
+        let tmp = path.with_extension("tmp");
+        std::fs::write(&tmp, serde_json::to_string_pretty(self)?)?;
+        std::fs::rename(&tmp, path)?;
+        Ok(())
+    }
+
+    /// The last written value for (issue, field), if any.
+    pub fn written(&self, issue_key: &str, field: &str) -> Option<&str> {
+        self.fields
+            .get(issue_key)
+            .and_then(|f| f.get(field))
+            .map(String::as_str)
+    }
+
+    /// Record a last-written value.
+    pub fn set(&mut self, issue_key: &str, field: &str, value: &str) {
+        self.fields
+            .entry(issue_key.to_string())
+            .or_default()
+            .insert(field.to_string(), value.to_string());
+    }
+}
+
+/// One project field transition.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldWrite {
+    /// "owner/repo#n".
+    pub issue: String,
+    /// "Status" | "Assignee" | "Phase".
+    pub field: String,
+    /// The value before this run's write; `None` on first sight when the
+    /// project had no value.
+    pub from: Option<String>,
+    /// The value written (option id or text).
+    pub to: String,
+}
+
+/// The outcome of the project-fields half of a push.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ProjectReport {
+    /// Field writes actually applied.
+    pub writes: Vec<FieldWrite>,
+    /// Transitions a dry run would apply.
+    pub would_write: Vec<FieldWrite>,
+    /// Issues added to the project this run ("owner/repo#n").
+    pub items_added: Vec<String>,
+    /// Drift rows: `setup-required`, `unknown-status-option`,
+    /// `unknown-assignee`, `unknown-phase-option`.
+    pub drift: Vec<Drift>,
+    /// Cards not processed: (task_id, reason).
+    pub skipped: Vec<(String, String)>,
+}
+
+/// Push the project fields (Status/Assignee/Phase) for every linked card
+/// (part 2).
+///
+/// Dedupe: a field is written only when the computed value differs from
+/// the cursor's last-written value. First sight of a pair (no cursor
+/// entry) reads the current value once via the GraphQL node query and
+/// records it — a matching read costs no write. Steady state therefore
+/// costs zero GraphQL calls at all.
+pub async fn push_project_fields(
+    gh: &mut impl GitHub,
+    cfg: &Config,
+    views: &[CardView],
+    links: &LinkMap,
+    cursor: &mut Cursor,
+    dry_run: bool,
+) -> Result<ProjectReport> {
+    let mut report = ProjectReport::default();
+    let Some(proj) = cfg.project.as_ref() else {
+        return Ok(report);
+    };
+    // Without discovered option ids (T8 setup) no field can be written.
+    let setup_done = !proj.status_option_ids.is_empty() && !proj.phase_option_ids.is_empty();
+    let project_id = proj.number.to_string();
+
+    let mut sorted: Vec<&CardView> = views.iter().collect();
+    sorted.sort_by(|a, b| a.card.id.cmp(&b.card.id));
+
+    for view in sorted {
+        let card = &view.card;
+        let Some(linked) = links.issue_for_card(&card.id) else {
+            report.skipped.push((card.id.clone(), "unlinked".into()));
+            continue;
+        };
+        let status = match Status::from_kanban(&card.status) {
+            Some(s) => s,
+            None => {
+                report
+                    .skipped
+                    .push((card.id.clone(), "unknown-status".into()));
+                continue;
+            }
+        };
+        if status == Status::Archived {
+            report.skipped.push((card.id.clone(), "archived".into()));
+            continue;
+        }
+        let issue_key = linked.key();
+        if !setup_done {
+            report.drift.push(Drift {
+                card: card.id.clone(),
+                kind: "setup-required".into(),
+                detail: format!("{issue_key}: no option ids in config; run `ghsync setup`"),
+            });
+            continue;
+        }
+
+        // Desired values: field name -> (cursor value, GraphQL value).
+        let mut desired: BTreeMap<String, (String, serde_json::Value)> = BTreeMap::new();
+        let status_label = status.project_status();
+        match proj.status_option_ids.get(status_label) {
+            Some(opt) => {
+                desired.insert(
+                    "Status".into(),
+                    (
+                        opt.clone(),
+                        serde_json::json!({ "singleSelectOptionId": opt }),
+                    ),
+                );
+            }
+            None => report.drift.push(Drift {
+                card: card.id.clone(),
+                kind: "unknown-status-option".into(),
+                detail: format!("{issue_key}: no option id for `{status_label}`"),
+            }),
+        }
+        let profile = card
+            .assignee
+            .clone()
+            .unwrap_or_else(|| cfg.default_assignee.clone());
+        match proj
+            .assignee_options
+            .iter()
+            .find(|(_, p)| p.as_str() == profile)
+        {
+            Some((label, _)) => {
+                desired.insert(
+                    "Assignee".into(),
+                    (label.clone(), serde_json::json!({ "text": label })),
+                );
+            }
+            None => report.drift.push(Drift {
+                card: card.id.clone(),
+                kind: "unknown-assignee".into(),
+                detail: format!("{issue_key}: no project option for profile `{profile}`"),
+            }),
+        }
+        let phase_slug = phase_from_card(status, card.assignee.as_deref());
+        let phase_ok = proj
+            .phase_options
+            .iter()
+            .find(|(_, s)| s.as_str() == phase_slug)
+            .and_then(|(label, _)| proj.phase_option_ids.get(label))
+            .map(|opt| {
+                desired.insert(
+                    "Phase".into(),
+                    (
+                        opt.clone(),
+                        serde_json::json!({ "singleSelectOptionId": opt }),
+                    ),
+                )
+            })
+            .is_some();
+        if !phase_ok {
+            report.drift.push(Drift {
+                card: card.id.clone(),
+                kind: "unknown-phase-option".into(),
+                detail: format!("{issue_key}: no option id for phase `{phase_slug}`"),
+            });
+        }
+
+        let mut item_id: Option<String> = None;
+        for (field_name, (stored, value)) in &desired {
+            let field_id = match field_name.as_str() {
+                "Status" => proj.status_field.as_str(),
+                "Assignee" => proj.assignee_field.as_str(),
+                _ => proj.phase_field.as_str(),
+            };
+            let last = cursor.written(&issue_key, field_name);
+            if last == Some(stored.as_str()) {
+                // Steady state: no read, no write.
+                continue;
+            }
+            if dry_run {
+                report.would_write.push(FieldWrite {
+                    issue: issue_key.clone(),
+                    field: field_name.clone(),
+                    from: last.map(str::to_string),
+                    to: stored.clone(),
+                });
+                continue;
+            }
+            let item = match &item_id {
+                Some(id) => id.clone(),
+                None => {
+                    let id = match gh
+                        .project_item_for_issue(&project_id, &linked.repo, linked.number)
+                        .await?
+                    {
+                        Some(id) => id,
+                        None => {
+                            // Not in the project yet: fetch the issue for
+                            // its node id, then add it.
+                            let issue = gh.get_issue(&linked.repo, linked.number).await?;
+                            let id = gh.add_project_item(&project_id, &issue.node_id).await?;
+                            report.items_added.push(issue_key.clone());
+                            id
+                        }
+                    };
+                    item_id = Some(id.clone());
+                    id
+                }
+            };
+            let from = if last.is_none() {
+                // First sight: read the current value once.
+                let current = gh.project_field_value(&item, field_id).await?;
+                match current {
+                    Some(c) => {
+                        let normalized = normalize_value(field_name, &c, proj);
+                        if normalized == *stored {
+                            // Board and project already agree; record
+                            // without a write.
+                            cursor.set(&issue_key, field_name, stored);
+                            continue;
+                        }
+                        Some(normalized)
+                    }
+                    // The project has no value yet: write it.
+                    None => None,
+                }
+            } else {
+                last.map(str::to_string)
+            };
+            gh.set_project_field(&item, field_id, value).await?;
+            cursor.set(&issue_key, field_name, stored);
+            report.writes.push(FieldWrite {
+                issue: issue_key.clone(),
+                field: field_name.clone(),
+                from,
+                to: stored.clone(),
+            });
+        }
+    }
+    Ok(report)
+}
+
+/// A field value read back from the project, normalized to the cursor's
+/// vocabulary: single-select readbacks are option names (labels) and map
+/// to their option id; anything else (text values, already-id values)
+/// compares as-is.
+fn normalize_value(field: &str, raw: &str, proj: &ProjConfig) -> String {
+    let ids = match field {
+        "Status" => Some(&proj.status_option_ids),
+        "Phase" => Some(&proj.phase_option_ids),
+        _ => None,
+    };
+    match ids.and_then(|m| m.get(raw)) {
+        Some(id) => id.clone(),
+        None => raw.to_string(),
+    }
 }

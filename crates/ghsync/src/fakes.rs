@@ -179,12 +179,22 @@ pub struct FakeGitHub {
     pub closed_calls: Vec<(String, u32)>,
     /// Recorded `set_issue_body` calls: (repo, issue) -> body.
     pub bodies_set: HashMap<(String, u32), String>,
+    /// Project items: "repo#number" -> item id.
+    pub project_items: HashMap<String, String>,
+    /// Project field values: (item_id, field_id) -> value.
+    pub project_fields: HashMap<(String, String), String>,
+    /// Recorded project field reads: (item_id, field_id), in order.
+    pub project_field_reads: Vec<(String, String)>,
+    /// Recorded project field writes: (item_id, field_id, value input),
+    /// in order.
+    pub project_field_writes: Vec<(String, String, serde_json::Value)>,
     /// GraphQL calls in order: (query, variables).
     pub graphql_calls: Vec<(String, serde_json::Value)>,
     /// Queued GraphQL responses, popped one per call.
     pub graphql_responses: Vec<serde_json::Value>,
     next_issue_number: u32,
     next_milestone_number: u32,
+    next_item_id: u32,
     next_comment_id: u64,
 }
 
@@ -211,6 +221,7 @@ impl GitHub for FakeGitHub {
             number: self.next_issue_number,
             title: title.to_string(),
             body: body.to_string(),
+            node_id: format!("GH_ISSUE_{}", self.next_issue_number),
             state: "open".into(),
             labels: labels.to_vec(),
             milestone: None,
@@ -320,6 +331,65 @@ impl GitHub for FakeGitHub {
         }
         self.bodies_set
             .insert(self.key(repo, number), body.to_string());
+        Ok(())
+    }
+
+    async fn project_item_for_issue(
+        &mut self,
+        _project_id: &str,
+        repo: &str,
+        number: u32,
+    ) -> Result<Option<String>, GitHubError> {
+        Ok(self.project_items.get(&format!("{repo}#{number}")).cloned())
+    }
+
+    async fn add_project_item(
+        &mut self,
+        _project_id: &str,
+        node_id: &str,
+    ) -> Result<String, GitHubError> {
+        let (repo, number) = self
+            .issues
+            .iter()
+            .find(|(_, i)| i.node_id == node_id)
+            .map(|((r, n), _)| (r.clone(), *n))
+            .ok_or_else(|| GitHubError::Io(format!("fake: unknown issue node {node_id}")))?;
+        self.next_item_id += 1;
+        let id = format!("PRI_{}", self.next_item_id);
+        self.project_items
+            .insert(format!("{repo}#{number}"), id.clone());
+        Ok(id)
+    }
+
+    async fn project_field_value(
+        &mut self,
+        item_id: &str,
+        field_id: &str,
+    ) -> Result<Option<String>, GitHubError> {
+        self.project_field_reads
+            .push((item_id.to_string(), field_id.to_string()));
+        Ok(self
+            .project_fields
+            .get(&(item_id.to_string(), field_id.to_string()))
+            .cloned())
+    }
+
+    async fn set_project_field(
+        &mut self,
+        item_id: &str,
+        field_id: &str,
+        value: &serde_json::Value,
+    ) -> Result<(), GitHubError> {
+        let stored = value
+            .get("singleSelectOptionId")
+            .and_then(|v| v.as_str())
+            .or_else(|| value.get("text").and_then(|v| v.as_str()))
+            .unwrap_or_default()
+            .to_string();
+        self.project_fields
+            .insert((item_id.to_string(), field_id.to_string()), stored);
+        self.project_field_writes
+            .push((item_id.to_string(), field_id.to_string(), value.clone()));
         Ok(())
     }
 

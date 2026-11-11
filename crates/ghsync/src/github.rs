@@ -19,6 +19,8 @@ pub struct Issue {
     pub number: u32,
     pub title: String,
     pub body: String,
+    /// GitHub's node id (`GH_ISSUE_…`); the content id for project items.
+    pub node_id: String,
     /// `open` or `closed`.
     pub state: String,
     pub labels: Vec<String>,
@@ -124,7 +126,103 @@ pub trait GitHub: Send + Sync {
         query: &str,
         variables: serde_json::Value,
     ) -> Result<serde_json::Value, GitHubError>;
+    /// The id of the project item for the issue `repo`/`number`, if the
+    /// issue is in the project `project_id`.
+    async fn project_item_for_issue(
+        &mut self,
+        project_id: &str,
+        repo: &str,
+        number: u32,
+    ) -> Result<Option<String>, GitHubError>;
+    /// Add the issue (by node id) to the project; returns the new item id.
+    async fn add_project_item(
+        &mut self,
+        project_id: &str,
+        node_id: &str,
+    ) -> Result<String, GitHubError>;
+    /// The current value of an item's field: the option name for
+    /// single-select fields, the text for text fields; `None` if unset.
+    async fn project_field_value(
+        &mut self,
+        item_id: &str,
+        field_id: &str,
+    ) -> Result<Option<String>, GitHubError>;
+    /// Set an item's field. `value` is the GraphQL field-value input,
+    /// e.g. `{"singleSelectOptionId": "…"}` or `{"text": "…"}`.
+    async fn set_project_field(
+        &mut self,
+        item_id: &str,
+        field_id: &str,
+        value: &serde_json::Value,
+    ) -> Result<(), GitHubError>;
 }
+
+// ---------- Project v2 GraphQL (snapshot-pinned) ----------
+//
+// Project v2 is GraphQL-only and the strings below are the contract with
+// the live API: the pinned tests in `tests` fail on any drift.
+
+/// List a project's items, paged.
+pub const GHSYNC_ITEMS_QUERY: &str = r#"query GhsyncProjectItems($projectId: ID!, $cursor: String) {
+  node(id: $projectId) {
+    ... on ProjectV2 {
+      projectItems(first: 100, after: $cursor) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          content {
+            ... on Issue {
+              number
+              nodeId
+              repository {
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}"#;
+
+/// Read the current value of one project item field.
+pub const GHSYNC_FIELD_VALUE_QUERY: &str = r#"query GhsyncFieldValue($itemId: ID!, $fieldId: ID!) {
+  node(id: $itemId) {
+    ... on ProjectV2Item {
+      fieldValues(first: 5, fieldId: $fieldId) {
+        nodes {
+          ... on ProjectV2ItemFieldSingleSelectValue {
+            name
+          }
+          ... on ProjectV2ItemFieldTextValue {
+            text
+          }
+        }
+      }
+    }
+  }
+}"#;
+
+/// Set a project item field value.
+pub const GHSYNC_SET_FIELD_MUTATION: &str = r#"mutation GhsyncSetField($itemId: ID!, $fieldId: ID!, $value: ProjectV2ItemFieldItemValueUpdate!) {
+  updateProjectV2ItemFieldValue(input: {itemId: $itemId, fieldId: $fieldId, value: $value}) {
+    projectV2Item {
+      id
+    }
+  }
+}"#;
+
+/// Add an issue to a project by its node id.
+pub const GHSYNC_ADD_ITEM_MUTATION: &str = r#"mutation GhsyncAddItem($projectId: ID!, $contentId: ID!) {
+  addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+    item {
+      id
+    }
+  }
+}"#;
 
 // ---------- pure path builders (snapshot-tested) ----------
 
@@ -256,6 +354,11 @@ impl RealGitHub {
                         .collect()
                 })
                 .unwrap_or_default(),
+            node_id: v
+                .get("node_id")
+                .and_then(|n| n.as_str())
+                .unwrap_or_default()
+                .to_string(),
             milestone: v
                 .pointer("/milestone/title")
                 .and_then(|t| t.as_str())
@@ -541,5 +644,152 @@ impl GitHub for RealGitHub {
             });
         }
         Ok(v.get("data").cloned().unwrap_or(serde_json::Value::Null))
+    }
+
+    async fn project_item_for_issue(
+        &mut self,
+        project_id: &str,
+        repo: &str,
+        number: u32,
+    ) -> Result<Option<String>, GitHubError> {
+        let mut after: Option<String> = None;
+        for _page in 0..10 {
+            let data = self
+                .graphql(
+                    GHSYNC_ITEMS_QUERY,
+                    serde_json::json!({ "projectId": project_id, "cursor": after }),
+                )
+                .await?;
+            let items = data
+                .pointer("/node/projectItems")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            let nodes = items
+                .get("nodes")
+                .and_then(|n| n.as_array())
+                .cloned()
+                .unwrap_or_default();
+            for n in nodes {
+                let Some(content) = n.get("content") else {
+                    continue;
+                };
+                let is_match = content.get("number").and_then(|v| v.as_u64())
+                    == Some(u64::from(number))
+                    && content.pointer("/repository/name").and_then(|v| v.as_str()) == Some(repo);
+                if is_match {
+                    return Ok(n.get("id").and_then(|v| v.as_str()).map(str::to_string));
+                }
+            }
+            if !items
+                .pointer("/pageInfo/hasNextPage")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                break;
+            }
+            after = items
+                .pointer("/pageInfo/endCursor")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+        }
+        Ok(None)
+    }
+
+    async fn add_project_item(
+        &mut self,
+        project_id: &str,
+        node_id: &str,
+    ) -> Result<String, GitHubError> {
+        let data = self
+            .graphql(
+                GHSYNC_ADD_ITEM_MUTATION,
+                serde_json::json!({ "projectId": project_id, "contentId": node_id }),
+            )
+            .await?;
+        data.pointer("/addProjectV2ItemById/item/id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .ok_or_else(|| GitHubError::Io("addProjectV2ItemById: missing item id".into()))
+    }
+
+    async fn project_field_value(
+        &mut self,
+        item_id: &str,
+        field_id: &str,
+    ) -> Result<Option<String>, GitHubError> {
+        let data = self
+            .graphql(
+                GHSYNC_FIELD_VALUE_QUERY,
+                serde_json::json!({ "itemId": item_id, "fieldId": field_id }),
+            )
+            .await?;
+        let Some(node) = data
+            .pointer("/node/fieldValues/nodes")
+            .and_then(|n| n.get(0))
+        else {
+            return Ok(None);
+        };
+        Ok(node
+            .get("name")
+            .and_then(|v| v.as_str())
+            .or_else(|| node.get("text").and_then(|v| v.as_str()))
+            .map(str::to_string))
+    }
+
+    async fn set_project_field(
+        &mut self,
+        item_id: &str,
+        field_id: &str,
+        value: &serde_json::Value,
+    ) -> Result<(), GitHubError> {
+        self.graphql(
+            GHSYNC_SET_FIELD_MUTATION,
+            serde_json::json!({ "itemId": item_id, "fieldId": field_id, "value": value }),
+        )
+        .await?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The Project v2 strings are the contract with the live API; pin the
+    /// load-bearing parts so any drift fails CI, not the live run.
+    #[test]
+    fn project_graphql_strings_are_pinned() {
+        assert!(
+            GHSYNC_ITEMS_QUERY
+                .contains("query GhsyncProjectItems($projectId: ID!, $cursor: String)")
+        );
+        assert!(GHSYNC_ITEMS_QUERY.contains("projectItems(first: 100, after: $cursor)"));
+        assert!(GHSYNC_ITEMS_QUERY.contains("... on ProjectV2 {"));
+        assert!(GHSYNC_ITEMS_QUERY.contains("... on Issue {"));
+        assert!(GHSYNC_ITEMS_QUERY.contains("number"));
+        assert!(GHSYNC_ITEMS_QUERY.contains("nodeId"));
+        assert!(GHSYNC_ITEMS_QUERY.contains("repository {"));
+
+        assert!(
+            GHSYNC_FIELD_VALUE_QUERY
+                .contains("query GhsyncFieldValue($itemId: ID!, $fieldId: ID!)")
+        );
+        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("... on ProjectV2Item {"));
+        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("fieldValues(first: 5, fieldId: $fieldId)"));
+        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("ProjectV2ItemFieldSingleSelectValue"));
+        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("ProjectV2ItemFieldTextValue"));
+
+        assert!(GHSYNC_SET_FIELD_MUTATION.contains(
+            "mutation GhsyncSetField($itemId: ID!, $fieldId: ID!, $value: ProjectV2ItemFieldItemValueUpdate!)"
+        ));
+        assert!(GHSYNC_SET_FIELD_MUTATION.contains("updateProjectV2ItemFieldValue(input: {itemId: $itemId, fieldId: $fieldId, value: $value})"));
+
+        assert!(
+            GHSYNC_ADD_ITEM_MUTATION
+                .contains("mutation GhsyncAddItem($projectId: ID!, $contentId: ID!)")
+        );
+        assert!(GHSYNC_ADD_ITEM_MUTATION.contains(
+            "addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId})"
+        ));
     }
 }

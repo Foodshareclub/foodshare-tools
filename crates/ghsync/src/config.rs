@@ -166,7 +166,7 @@ pub struct RepoConfig {
 }
 
 /// The org Project v2 board.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ProjConfig {
     pub number: u32,
     pub status_field: String,
@@ -178,6 +178,13 @@ pub struct ProjConfig {
     pub phase_options: BTreeMap<String, String>,
     /// Project option label -> assignee profile name.
     pub assignee_options: BTreeMap<String, String>,
+    /// Project option label -> single-select option id, for the Status
+    /// field. Discovered by `ghsync setup` and written back into the
+    /// config; empty until setup has run.
+    pub status_option_ids: BTreeMap<String, String>,
+    /// Project option label -> single-select option id, for the Phase
+    /// field. Discovered by `ghsync setup`.
+    pub phase_option_ids: BTreeMap<String, String>,
 }
 
 /// Where the ghsync state (cursor) file lives.
@@ -259,6 +266,8 @@ impl Default for Config {
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
+                status_option_ids: BTreeMap::new(),
+                phase_option_ids: BTreeMap::new(),
             }),
             token: None,
             state_path: default_state_path(),
@@ -321,6 +330,8 @@ struct RawProj {
     status_options: Option<BTreeMap<String, String>>,
     phase_options: Option<BTreeMap<String, String>>,
     assignee_options: Option<BTreeMap<String, String>>,
+    status_option_ids: Option<BTreeMap<String, String>>,
+    phase_option_ids: Option<BTreeMap<String, String>>,
 }
 
 impl Config {
@@ -354,6 +365,8 @@ impl Config {
                     assignee_options: p
                         .assignee_options
                         .unwrap_or_else(|| dp.assignee_options.clone()),
+                    status_option_ids: p.status_option_ids.unwrap_or_default(),
+                    phase_option_ids: p.phase_option_ids.unwrap_or_default(),
                 })
             }
             None => d.project.clone(),

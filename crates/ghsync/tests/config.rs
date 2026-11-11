@@ -203,3 +203,35 @@ fn triage_status_maps_to_backlog_and_open_issue() {
     // The triage column has no phase of its own.
     assert_eq!(phase_from_card(Status::Triage, Some("default")), "backlog");
 }
+
+#[test]
+fn load_project_option_ids() {
+    // setup (T8) writes the discovered option ids back into the config.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
+    std::fs::write(
+        &path,
+        "[project]\n\
+         number = 1\n\
+         status_option_ids = { Backlog = \"opt-backlog\", \"In progress\" = \"opt-inprog\" }\n\
+         phase_option_ids = { Backlog = \"ph-backlog\" }\n",
+    )
+    .unwrap();
+    let c = Config::load(&path).unwrap();
+    let p = c.project.unwrap();
+    assert_eq!(
+        p.status_option_ids.get("Backlog").map(String::as_str),
+        Some("opt-backlog")
+    );
+    assert_eq!(
+        p.status_option_ids.get("In progress").map(String::as_str),
+        Some("opt-inprog")
+    );
+    assert_eq!(
+        p.phase_option_ids.get("Backlog").map(String::as_str),
+        Some("ph-backlog")
+    );
+    // Absent maps default to empty.
+    assert!(!p.status_option_ids.contains_key("Done"));
+    assert_eq!(p.phase_option_ids.len(), 1);
+}

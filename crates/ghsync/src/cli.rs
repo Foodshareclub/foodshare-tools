@@ -99,6 +99,19 @@ pub async fn run(args: Vec<String>) -> Result<()> {
                     .await?;
             let report =
                 crate::push::push_issues(&mut kb, &mut gh, &cfg, &views, &links, dry_run).await?;
+            let mut cursor = crate::push::Cursor::load(&cfg.state_path);
+            let proj_report = crate::push::push_project_fields(
+                &mut gh,
+                &cfg,
+                &views,
+                &links,
+                &mut cursor,
+                dry_run,
+            )
+            .await?;
+            if !dry_run {
+                cursor.save(&cfg.state_path)?;
+            }
             for id in &report.would_create {
                 println!("would create issue for {id}");
             }
@@ -114,12 +127,31 @@ pub async fn run(args: Vec<String>) -> Result<()> {
             for (id, why) in &report.skipped {
                 println!("skipped {id}: {why}");
             }
+            for w in &proj_report.writes {
+                println!(
+                    "project {}: {} {} -> {}",
+                    w.issue,
+                    w.field,
+                    w.from.as_deref().unwrap_or("<unset>"),
+                    w.to
+                );
+            }
+            for w in &proj_report.would_write {
+                println!("would set project {}: {} -> {}", w.issue, w.field, w.to);
+            }
+            for id in &proj_report.items_added {
+                println!("added to project: {id}");
+            }
+            for d in &proj_report.drift {
+                println!("drift {}: {} ({})", d.kind, d.card, d.detail);
+            }
             println!(
-                "push: {} created, {} verified, {} gestured, {} drift, {} skipped",
+                "push: {} created, {} verified, {} gestured, {} field writes, {} drift, {} skipped",
                 report.created.len(),
                 report.verified.len(),
                 report.gestures.len(),
-                report.drift.len(),
+                proj_report.writes.len(),
+                report.drift.len() + proj_report.drift.len(),
                 report.skipped.len()
             );
             Ok(())
