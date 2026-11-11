@@ -262,7 +262,7 @@ pub trait GitHub: Send + Sync {
 pub const GHSYNC_ITEMS_QUERY: &str = r#"query GhsyncProjectItems($projectId: ID!, $cursor: String) {
   node(id: $projectId) {
     ... on ProjectV2 {
-      projectItems(first: 100, after: $cursor) {
+      items(first: 100, after: $cursor) {
         pageInfo {
           hasNextPage
           endCursor
@@ -288,14 +288,12 @@ pub const GHSYNC_ITEMS_QUERY: &str = r#"query GhsyncProjectItems($projectId: ID!
 pub const GHSYNC_FIELD_VALUE_QUERY: &str = r#"query GhsyncFieldValue($itemId: ID!, $fieldId: ID!) {
   node(id: $itemId) {
     ... on ProjectV2Item {
-      fieldValues(first: 5, fieldId: $fieldId) {
-        nodes {
-          ... on ProjectV2ItemFieldSingleSelectValue {
-            name
-          }
-          ... on ProjectV2ItemFieldTextValue {
-            text
-          }
+      fieldValueByFieldId(fieldId: $fieldId) {
+        ... on ProjectV2ItemFieldSingleSelectValue {
+          name
+        }
+        ... on ProjectV2ItemFieldTextValue {
+          text
         }
       }
     }
@@ -342,8 +340,8 @@ pub const GHSYNC_LIST_PROJECTS_QUERY: &str = r#"query GhsyncListProjects($org: S
 }"#;
 
 /// Create the org project (org-wide content).
-pub const GHSYNC_CREATE_PROJECT_MUTATION: &str = r#"mutation GhsyncCreateProject($org: ID!, $title: String!) {
-  createProjectV2(owner: $org, title: $title, contentKind: ORGANIZATION) {
+pub const GHSYNC_CREATE_PROJECT_MUTATION: &str = r#"mutation GhsyncCreateProject($input: CreateProjectV2Input!) {
+  createProjectV2(input: $input) {
     project {
       id
       title
@@ -373,7 +371,7 @@ pub const GHSYNC_FIELDS_QUERY: &str = r#"query GhsyncProjectFields($projectId: I
 
 /// Create a single-select field.
 pub const GHSYNC_CREATE_SINGLE_SELECT_MUTATION: &str = r#"mutation GhsyncCreateSingleSelect($projectId: ID!, $name: String!) {
-  createProjectV2Field(projectId: $projectId, dataType: SINGLE_SELECT, name: $name) {
+  createProjectV2Field(input: {projectId: $projectId, dataType: SINGLE_SELECT, name: $name}) {
     field {
       ... on ProjectV2FieldSingleSelect {
         id
@@ -384,7 +382,7 @@ pub const GHSYNC_CREATE_SINGLE_SELECT_MUTATION: &str = r#"mutation GhsyncCreateS
 
 /// Create a text field.
 pub const GHSYNC_CREATE_TEXT_FIELD_MUTATION: &str = r#"mutation GhsyncCreateTextField($projectId: ID!, $name: String!) {
-  createProjectV2Field(projectId: $projectId, dataType: TEXT, name: $name) {
+  createProjectV2Field(input: {projectId: $projectId, dataType: TEXT, name: $name}) {
     field {
       id
     }
@@ -393,7 +391,7 @@ pub const GHSYNC_CREATE_TEXT_FIELD_MUTATION: &str = r#"mutation GhsyncCreateText
 
 /// Create a single-select option.
 pub const GHSYNC_CREATE_OPTION_MUTATION: &str = r#"mutation GhsyncCreateOption($fieldId: ID!, $name: String!) {
-  createProjectV2FieldSingleSelectOption(fieldId: $fieldId, name: $name) {
+  createProjectV2FieldSingleSelectOption(input: {fieldId: $fieldId, name: $name}) {
     option {
       id
       name
@@ -415,9 +413,19 @@ pub const GHSYNC_VIEWS_QUERY: &str = r#"query GhsyncProjectViews($projectId: ID!
   }
 }"#;
 
-/// Create a grid view grouped by a field.
-pub const GHSYNC_CREATE_VIEW_MUTATION: &str = r#"mutation GhsyncCreateView($projectId: ID!, $name: String!, $fieldId: ID!) {
-  createProjectV2View(projectId: $projectId, view: {type: GRID, name: $name, fieldId: $fieldId}) {
+/// Create the kanban "Board" view (columns follow the project's first
+/// single-select field — Status, which setup creates first).
+pub const GHSYNC_CREATE_KANBAN_VIEW_MUTATION: &str = r#"mutation GhsyncCreateKanbanView($projectId: ID!, $name: String!) {
+  createProjectV2View(input: {projectId: $projectId, viewName: $name, viewType: KANBAN}) {
+    view {
+      id
+    }
+  }
+}"#;
+
+/// Create the "Phases" view over the Phase single-select field.
+pub const GHSYNC_CREATE_PHASES_VIEW_MUTATION: &str = r#"mutation GhsyncCreatePhasesView($projectId: ID!, $name: String!, $fieldId: ID!) {
+  createProjectV2View(input: {projectId: $projectId, viewName: $name, viewType: PHASES, fieldConfigs: [{fieldId: $fieldId}]}) {
     view {
       id
     }
@@ -440,7 +448,7 @@ pub const GHSYNC_DISCUSSIONS_QUERY: &str = r#"query GhsyncDiscussions($owner: St
 
 /// Create the fixed-enum `OTHER` category (renamed afterwards via REST).
 pub const GHSYNC_CREATE_CATEGORY_MUTATION: &str = r#"mutation GhsyncCreateCategory($repositoryId: ID!) {
-  addDiscussionCategory(input: {repositoryId: $repositoryId, categoryId: OTHER}) {
+  addDiscussionCategory(input: {repositoryId: $repositoryId, name: OTHER}) {
     discussionCategory {
       id
       name
@@ -974,7 +982,7 @@ impl GitHub for RealGitHub {
                 )
                 .await?;
             let items = data
-                .pointer("/node/projectItems")
+                .pointer("/node/items")
                 .cloned()
                 .unwrap_or(serde_json::Value::Null);
             let nodes = items
@@ -1036,16 +1044,17 @@ impl GitHub for RealGitHub {
                 serde_json::json!({ "itemId": item_id, "fieldId": field_id }),
             )
             .await?;
-        let Some(node) = data
-            .pointer("/node/fieldValues/nodes")
-            .and_then(|n| n.get(0))
+        let Some(value) = data
+            .pointer("/node/fieldValueByFieldId")
+            .cloned()
+            .filter(|v| !v.is_null())
         else {
             return Ok(None);
         };
-        Ok(node
+        Ok(value
             .get("name")
             .and_then(|v| v.as_str())
-            .or_else(|| node.get("text").and_then(|v| v.as_str()))
+            .or_else(|| value.get("text").and_then(|v| v.as_str()))
             .map(str::to_string))
     }
 
@@ -1418,7 +1427,7 @@ mod tests {
             GHSYNC_ITEMS_QUERY
                 .contains("query GhsyncProjectItems($projectId: ID!, $cursor: String)")
         );
-        assert!(GHSYNC_ITEMS_QUERY.contains("projectItems(first: 100, after: $cursor)"));
+        assert!(GHSYNC_ITEMS_QUERY.contains("items(first: 100, after: $cursor)"));
         assert!(GHSYNC_ITEMS_QUERY.contains("... on ProjectV2 {"));
         assert!(GHSYNC_ITEMS_QUERY.contains("... on Issue {"));
         assert!(GHSYNC_ITEMS_QUERY.contains("number"));
@@ -1430,7 +1439,7 @@ mod tests {
                 .contains("query GhsyncFieldValue($itemId: ID!, $fieldId: ID!)")
         );
         assert!(GHSYNC_FIELD_VALUE_QUERY.contains("... on ProjectV2Item {"));
-        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("fieldValues(first: 5, fieldId: $fieldId)"));
+        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("fieldValueByFieldId(fieldId: $fieldId)"));
         assert!(GHSYNC_FIELD_VALUE_QUERY.contains("ProjectV2ItemFieldSingleSelectValue"));
         assert!(GHSYNC_FIELD_VALUE_QUERY.contains("ProjectV2ItemFieldTextValue"));
 
@@ -1455,12 +1464,9 @@ mod tests {
 
         assert!(
             GHSYNC_CREATE_PROJECT_MUTATION
-                .contains("mutation GhsyncCreateProject($org: ID!, $title: String!)")
+                .contains("mutation GhsyncCreateProject($input: CreateProjectV2Input!)")
         );
-        assert!(
-            GHSYNC_CREATE_PROJECT_MUTATION
-                .contains("createProjectV2(owner: $org, title: $title, contentKind: ORGANIZATION)")
-        );
+        assert!(GHSYNC_CREATE_PROJECT_MUTATION.contains("createProjectV2(input: $input)"));
 
         assert!(GHSYNC_FIELDS_QUERY.contains("query GhsyncProjectFields($projectId: ID!)"));
         assert!(GHSYNC_FIELDS_QUERY.contains("fields(first: 100)"));
@@ -1472,7 +1478,7 @@ mod tests {
                 .contains("mutation GhsyncCreateSingleSelect($projectId: ID!, $name: String!)")
         );
         assert!(GHSYNC_CREATE_SINGLE_SELECT_MUTATION.contains(
-            "createProjectV2Field(projectId: $projectId, dataType: SINGLE_SELECT, name: $name)"
+            "createProjectV2Field(input: {projectId: $projectId, dataType: SINGLE_SELECT, name: $name})"
         ));
 
         assert!(
@@ -1485,21 +1491,25 @@ mod tests {
             GHSYNC_CREATE_OPTION_MUTATION
                 .contains("mutation GhsyncCreateOption($fieldId: ID!, $name: String!)")
         );
-        assert!(
-            GHSYNC_CREATE_OPTION_MUTATION
-                .contains("createProjectV2FieldSingleSelectOption(fieldId: $fieldId, name: $name)")
-        );
+        assert!(GHSYNC_CREATE_OPTION_MUTATION.contains(
+            "createProjectV2FieldSingleSelectOption(input: {fieldId: $fieldId, name: $name})"
+        ));
 
         assert!(GHSYNC_VIEWS_QUERY.contains("query GhsyncProjectViews($projectId: ID!)"));
         assert!(GHSYNC_VIEWS_QUERY.contains("views(first: 100)"));
 
         assert!(
-            GHSYNC_CREATE_VIEW_MUTATION.contains(
-                "mutation GhsyncCreateView($projectId: ID!, $name: String!, $fieldId: ID!)"
-            )
+            GHSYNC_CREATE_KANBAN_VIEW_MUTATION
+                .contains("mutation GhsyncCreateKanbanView($projectId: ID!, $name: String!)")
         );
-        assert!(GHSYNC_CREATE_VIEW_MUTATION.contains(
-            "createProjectV2View(projectId: $projectId, view: {type: GRID, name: $name, fieldId: $fieldId})"
+        assert!(GHSYNC_CREATE_KANBAN_VIEW_MUTATION.contains(
+            "createProjectV2View(input: {projectId: $projectId, viewName: $name, viewType: KANBAN})"
+        ));
+        assert!(GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains(
+            "mutation GhsyncCreatePhasesView($projectId: ID!, $name: String!, $fieldId: ID!)"
+        ));
+        assert!(GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains(
+            "createProjectV2View(input: {projectId: $projectId, viewName: $name, viewType: PHASES, fieldConfigs: [{fieldId: $fieldId}]})"
         ));
 
         assert!(
@@ -1513,9 +1523,11 @@ mod tests {
             GHSYNC_CREATE_CATEGORY_MUTATION
                 .contains("mutation GhsyncCreateCategory($repositoryId: ID!)")
         );
-        assert!(GHSYNC_CREATE_CATEGORY_MUTATION.contains(
-            "addDiscussionCategory(input: {repositoryId: $repositoryId, categoryId: OTHER})"
-        ));
+        assert!(
+            GHSYNC_CREATE_CATEGORY_MUTATION.contains(
+                "addDiscussionCategory(input: {repositoryId: $repositoryId, name: OTHER})"
+            )
+        );
 
         assert!(GHSYNC_DISCUSSION_LIST_QUERY.contains(
             "query GhsyncDiscussionList($owner: String!, $name: String!, $category: String, $label: String)"

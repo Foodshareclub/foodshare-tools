@@ -18,9 +18,10 @@ use thiserror::Error;
 
 use crate::config::Config;
 use crate::github::{
-    GHSYNC_CREATE_CATEGORY_MUTATION, GHSYNC_CREATE_OPTION_MUTATION, GHSYNC_CREATE_PROJECT_MUTATION,
-    GHSYNC_CREATE_SINGLE_SELECT_MUTATION, GHSYNC_CREATE_TEXT_FIELD_MUTATION,
-    GHSYNC_CREATE_VIEW_MUTATION, GHSYNC_DISCUSSIONS_QUERY, GHSYNC_FIELDS_QUERY,
+    GHSYNC_CREATE_CATEGORY_MUTATION, GHSYNC_CREATE_KANBAN_VIEW_MUTATION,
+    GHSYNC_CREATE_OPTION_MUTATION, GHSYNC_CREATE_PHASES_VIEW_MUTATION,
+    GHSYNC_CREATE_PROJECT_MUTATION, GHSYNC_CREATE_SINGLE_SELECT_MUTATION,
+    GHSYNC_CREATE_TEXT_FIELD_MUTATION, GHSYNC_DISCUSSIONS_QUERY, GHSYNC_FIELDS_QUERY,
     GHSYNC_LIST_PROJECTS_QUERY, GHSYNC_VIEWS_QUERY, GitHub, GitHubError,
 };
 
@@ -157,7 +158,13 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
             let data = gh
                 .graphql(
                     GHSYNC_CREATE_PROJECT_MUTATION,
-                    serde_json::json!({ "org": cfg.org, "title": PROJECT_TITLE }),
+                    serde_json::json!({
+                        "input": {
+                            "owner": cfg.org,
+                            "title": PROJECT_TITLE,
+                            "contentKind": "ORGANIZATION"
+                        }
+                    }),
                 )
                 .await?;
             report.project_created = true;
@@ -361,22 +368,25 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
                 .collect()
         })
         .unwrap_or_default();
-    for (name, group_field) in [
-        (VIEW_BOARD, status_field.as_str()),
-        (VIEW_PHASES, report.phase_field.as_str()),
-    ] {
-        if !views.iter().any(|v| v == name) {
-            gh.graphql(
-                GHSYNC_CREATE_VIEW_MUTATION,
-                serde_json::json!({
-                    "projectId": project_id,
-                    "name": name,
-                    "fieldId": group_field,
-                }),
-            )
-            .await?;
-            report.views_created.push(name.into());
-        }
+    if !views.iter().any(|v| v == VIEW_BOARD) {
+        gh.graphql(
+            GHSYNC_CREATE_KANBAN_VIEW_MUTATION,
+            serde_json::json!({ "projectId": project_id, "name": VIEW_BOARD }),
+        )
+        .await?;
+        report.views_created.push(VIEW_BOARD.into());
+    }
+    if !views.iter().any(|v| v == VIEW_PHASES) {
+        gh.graphql(
+            GHSYNC_CREATE_PHASES_VIEW_MUTATION,
+            serde_json::json!({
+                "projectId": project_id,
+                "name": VIEW_PHASES,
+                "fieldId": report.phase_field.as_str(),
+            }),
+        )
+        .await?;
+        report.views_created.push(VIEW_PHASES.into());
     }
 
     Ok(report)
