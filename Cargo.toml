@@ -26,6 +26,7 @@ members = [
     "crates/device",
     "crates/wasm",
     "crates/xccloud",
+    "crates/ghsync",
     "bins/fs-app",
     "bins/lefthook-rs",
     "bins/fs-image",
