@@ -24,9 +24,29 @@ pub struct Issue {
     /// `open` or `closed`.
     pub state: String,
     pub labels: Vec<String>,
-    /// The milestone title, if one is set.
+    /// The issue's milestone title, if one is set.
     pub milestone: Option<String>,
     pub url: String,
+}
+
+/// Pull request info (merge state + head sha).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pull {
+    pub number: u32,
+    /// Whether the PR has been merged.
+    pub merged: bool,
+    /// The head commit's sha (the CI rollup is read against it).
+    pub head_sha: String,
+    pub url: String,
+}
+
+/// One check run against a commit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckRun {
+    /// `completed` or `in_progress` (and friends).
+    pub status: String,
+    /// `None` while running; then `success`, `failure`, `cancelled`, ...
+    pub conclusion: Option<String>,
 }
 
 /// A milestone.
@@ -174,6 +194,10 @@ pub trait GitHub: Send + Sync {
         category_id: &str,
         name: &str,
     ) -> Result<(), GitHubError>;
+    /// Pull request info (merge state + head sha).
+    async fn get_pull(&mut self, repo: &str, number: u32) -> Result<Pull, GitHubError>;
+    /// The check runs recorded against a commit.
+    async fn check_runs(&mut self, repo: &str, sha: &str) -> Result<Vec<CheckRun>, GitHubError>;
 }
 
 // ---------- Project v2 GraphQL (snapshot-pinned) ----------
@@ -387,6 +411,16 @@ pub fn path_milestones(org: &str, repo: &str) -> String {
 /// `/repos/{org}/{repo}/issues?labels={label}&state=all&per_page=100&page={p}`
 pub fn path_issues_labeled(org: &str, repo: &str, label: &str, page: u32) -> String {
     format!("/repos/{org}/{repo}/issues?labels={label}&state=all&per_page=100&page={page}")
+}
+
+/// A single pull request.
+pub fn path_pull(org: &str, repo: &str, number: u32) -> String {
+    format!("/repos/{org}/{repo}/pulls/{number}")
+}
+
+/// The check runs against a commit.
+pub fn path_check_runs(org: &str, repo: &str, sha: &str) -> String {
+    format!("/repos/{org}/{repo}/commits/{sha}/check-runs?per_page=100")
 }
 
 /// The GraphQL endpoint.
@@ -952,6 +986,67 @@ impl GitHub for RealGitHub {
         )
         .await?;
         Ok(())
+    }
+
+    async fn get_pull(&mut self, repo: &str, number: u32) -> Result<Pull, GitHubError> {
+        let resp = self
+            .rest(
+                reqwest::Method::GET,
+                &path_pull(&self.org, repo, number),
+                None,
+            )
+            .await?;
+        let v = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        let merged = v.get("merged").and_then(|m| m.as_bool()).unwrap_or(false);
+        let head_sha = v
+            .pointer("/head/sha")
+            .and_then(|s| s.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let url = v
+            .get("html_url")
+            .and_then(|u| u.as_str())
+            .unwrap_or_default()
+            .to_string();
+        Ok(Pull {
+            number,
+            merged,
+            head_sha,
+            url,
+        })
+    }
+
+    async fn check_runs(&mut self, repo: &str, sha: &str) -> Result<Vec<CheckRun>, GitHubError> {
+        let resp = self
+            .rest(
+                reqwest::Method::GET,
+                &path_check_runs(&self.org, repo, sha),
+                None,
+            )
+            .await?;
+        let v = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        Ok(v.get("check_runs")
+            .and_then(|c| c.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|r| {
+                        Some(CheckRun {
+                            status: r.get("status")?.as_str()?.to_string(),
+                            conclusion: r
+                                .get("conclusion")
+                                .and_then(|c| c.as_str())
+                                .map(str::to_string),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
     }
 }
 

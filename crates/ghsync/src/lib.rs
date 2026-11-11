@@ -26,5 +26,6 @@ pub mod github;
 pub mod intake;
 pub mod kanban;
 pub mod link;
+pub mod pr;
 pub mod push;
 pub mod setup;

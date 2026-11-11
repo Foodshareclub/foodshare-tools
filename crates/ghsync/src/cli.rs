@@ -195,6 +195,17 @@ pub async fn run(args: Vec<String>) -> Result<()> {
             for d in &proj_report.drift {
                 println!("drift {}: {} ({})", d.kind, d.card, d.detail);
             }
+            let pr_report =
+                crate::pr::post_pr_evidence(&mut gh, &cfg, &views, &links, dry_run).await?;
+            for issue in &pr_report.would_post {
+                println!("would post PR evidence on {issue}");
+            }
+            for issue in &pr_report.posted {
+                println!("posted PR evidence on {issue}");
+            }
+            for (issue, why) in &pr_report.skipped {
+                println!("pr evidence skipped {issue}: {why}");
+            }
             println!(
                 "push: {} created, {} verified, {} gestured, {} field writes, {} drift, {} skipped",
                 report.created.len(),

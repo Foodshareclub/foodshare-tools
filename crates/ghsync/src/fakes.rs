@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::github::{Comment, GitHub, GitHubError, Issue, Milestone};
+use crate::github::{CheckRun, Comment, GitHub, GitHubError, Issue, Milestone, Pull};
 use crate::kanban::{Card, CardView, Kanban, KanbanError, links_from_comments};
 
 /// In-memory kanban board.
@@ -206,6 +206,10 @@ pub struct FakeGitHub {
     pub created_categories: Vec<String>,
     /// Recorded category renames: (repo, category_id, name), in order.
     pub renamed_categories: Vec<(String, String, String)>,
+    /// Pull requests: (repo, number) -> Pull.
+    pub pulls: HashMap<(String, u32), Pull>,
+    /// Check runs keyed by commit sha.
+    pub check_runs: HashMap<String, Vec<CheckRun>>,
     next_issue_number: u32,
     next_milestone_number: u32,
     next_item_id: u32,
@@ -450,6 +454,21 @@ impl GitHub for FakeGitHub {
         self.renamed_categories
             .push((repo.to_string(), category_id.to_string(), name.to_string()));
         Ok(())
+    }
+
+    async fn get_pull(&mut self, repo: &str, number: u32) -> Result<Pull, GitHubError> {
+        self.pulls
+            .get(&self.key(repo, number))
+            .cloned()
+            .ok_or_else(|| GitHubError::Http {
+                status: 404,
+                url: format!("/repos/{repo}/pulls/{number}"),
+                message: "Not Found".into(),
+            })
+    }
+
+    async fn check_runs(&mut self, _repo: &str, sha: &str) -> Result<Vec<CheckRun>, GitHubError> {
+        Ok(self.check_runs.get(sha).cloned().unwrap_or_default())
     }
 
     async fn issues_labeled(&mut self, repo: &str, label: &str) -> Result<Vec<Issue>, GitHubError> {
