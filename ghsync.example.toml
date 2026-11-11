@@ -1,0 +1,88 @@
+# ghsync configuration.
+#
+# Copy to ~/.config/ghsync/config.toml, set the token, then run
+# `ghsync setup` once: it discovers and writes back the project id, the
+# single-select option ids, and the per-repo discussion flags into this
+# file (atomically, preserving the token).
+
+board = "foodshare"
+org = "Foodshareclub"
+api = "https://api.github.com"
+
+# Fine-grained PAT, org Foodshareclub, all repos: Issues + Projects RW,
+# Discussions RW, Pull requests read; 90-day expiry.
+token = "REPLACE_WITH_FINE_GRAINED_PAT"
+
+# The cursor: the only on-disk state. Last-written project field values
+# per linked issue, used for change detection (steady state = zero writes).
+state_path = "~/.config/ghsync/state.json"
+
+# Kanban assignee for intake cards without a named profile.
+default_assignee = "default"
+
+# Agent profiles the intake form may name. An unknown profile fails the
+# intake with a loud error naming this list.
+profiles = [
+  "default",
+  "architect",
+  "lead",
+  "reviewer",
+  "security",
+  "verifier",
+]
+
+# Repos ghsync manages. The two `discussions_*` flags are written by
+# `ghsync setup`; absent (or false) means the feed and discussion
+# intake skip the repo and log the skip.
+[[repos]]
+name = "foodshare-app"
+default_milestone = "Next.js 16 + Bun 1.4.4"
+
+[[repos]]
+name = "foodshare-backend"
+default_milestone = "Rust"
+
+[[repos]]
+name = "foodshare-web"
+default_milestone = "Next.js 16 + Bun 1.4.4"
+
+[[repos]]
+name = "foodshare-tools"
+default_milestone = "Rust + TypeScript"
+
+[[repos]]
+name = "catch-22"
+default_milestone = "Next.js 16 + Bun 1.4.4"
+
+[project]
+# Org Project v2 board (title: "Foodshare Board").
+number = 1
+# Written back by `ghsync setup`; empty until it has run.
+project_id = ""
+status_field = "Status"
+assignee_field = "Assignee"
+phase_field = "Phase"
+
+# Project option label -> kanban status.
+[project.status_options]
+"Backlog" = "todo"
+"In progress" = "running"
+"Blocked" = "blocked"
+"Done" = "done"
+
+# Project option label -> phase slug.
+[project.phase_options]
+"Backlog" = "backlog"
+"In progress" = "in-progress"
+"Done" = "done"
+
+# Project option label -> agent profile.
+[project.assignee_options]
+"agent-default" = "default"
+"agent-security" = "security"
+"human" = "human"
+
+# Written back by `ghsync setup`; empty until it has run.
+[project.status_option_ids]
+
+[project.phase_option_ids]

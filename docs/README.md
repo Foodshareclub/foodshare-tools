@@ -10,6 +10,7 @@ Welcome to the Foodshare Tools documentation. This monorepo contains enterprise-
 | [Architecture](./architecture.md)       | System design and crate structure    |
 | [CLI Reference](./cli-reference.md)     | Every command and flag, from the code |
 | [Configuration](./configuration.md)     | TOML configuration options           |
+| [GHSYNC](./GHSYNC.md)                   | GitHub org ↔ Hermes Kanban sync      |
 | [Development](./development.md)         | Contributing and local development   |
 | [Design](./DESIGN.md)                   | What this repository is, and its rules |
 
