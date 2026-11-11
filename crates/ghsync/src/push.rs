@@ -378,9 +378,12 @@ pub async fn push_project_fields(
     let Some(proj) = cfg.project.as_ref() else {
         return Ok(report);
     };
-    // Without discovered option ids (T8 setup) no field can be written.
-    let setup_done = !proj.status_option_ids.is_empty() && !proj.phase_option_ids.is_empty();
-    let project_id = proj.number.to_string();
+    // Without discovered ids (T8 setup: project + option ids) no field
+    // can be written.
+    let setup_done = !proj.project_id.is_empty()
+        && !proj.status_option_ids.is_empty()
+        && !proj.phase_option_ids.is_empty();
+    let project_id = proj.project_id.clone();
 
     let mut sorted: Vec<&CardView> = views.iter().collect();
     sorted.sort_by(|a, b| a.card.id.cmp(&b.card.id));

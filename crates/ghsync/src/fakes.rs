@@ -192,6 +192,20 @@ pub struct FakeGitHub {
     pub graphql_calls: Vec<(String, serde_json::Value)>,
     /// Queued GraphQL responses, popped one per call.
     pub graphql_responses: Vec<serde_json::Value>,
+    /// Login returned by `get_user` (default "fakeuser").
+    pub user_login: String,
+    /// When true, `get_user` returns a 401 error.
+    pub user_rejected: bool,
+    /// Label names per repo.
+    pub labels: HashMap<String, Vec<String>>,
+    /// Recorded label creations: (repo, name), in order.
+    pub created_labels: Vec<(String, String)>,
+    /// Discussion state per repo: (enabled, category names).
+    pub discussion_state: HashMap<String, (bool, Vec<String>)>,
+    /// Recorded category creations: repository id, in order.
+    pub created_categories: Vec<String>,
+    /// Recorded category renames: (repo, category_id, name), in order.
+    pub renamed_categories: Vec<(String, String, String)>,
     next_issue_number: u32,
     next_milestone_number: u32,
     next_item_id: u32,
@@ -393,6 +407,51 @@ impl GitHub for FakeGitHub {
         Ok(())
     }
 
+    async fn get_user(&mut self) -> Result<String, GitHubError> {
+        if self.user_rejected {
+            return Err(GitHubError::Http {
+                status: 401,
+                url: "/user".into(),
+                message: "Bad credentials".into(),
+            });
+        }
+        Ok(if self.user_login.is_empty() {
+            "fakeuser".to_string()
+        } else {
+            self.user_login.clone()
+        })
+    }
+
+    async fn list_labels(&mut self, repo: &str) -> Result<Vec<String>, GitHubError> {
+        Ok(self.labels.get(repo).cloned().unwrap_or_default())
+    }
+
+    async fn create_label(
+        &mut self,
+        repo: &str,
+        name: &str,
+        _color: &str,
+    ) -> Result<(), GitHubError> {
+        self.labels
+            .entry(repo.to_string())
+            .or_default()
+            .push(name.to_string());
+        self.created_labels
+            .push((repo.to_string(), name.to_string()));
+        Ok(())
+    }
+
+    async fn rename_discussion_category(
+        &mut self,
+        repo: &str,
+        category_id: &str,
+        name: &str,
+    ) -> Result<(), GitHubError> {
+        self.renamed_categories
+            .push((repo.to_string(), category_id.to_string(), name.to_string()));
+        Ok(())
+    }
+
     async fn issues_labeled(&mut self, repo: &str, label: &str) -> Result<Vec<Issue>, GitHubError> {
         let mut out: Vec<Issue> = self
             .issues
@@ -425,6 +484,11 @@ impl GitHub for FakeGitHub {
         query: &str,
         variables: serde_json::Value,
     ) -> Result<serde_json::Value, GitHubError> {
+        if let Some(id) = variables.get("repositoryId").and_then(|v| v.as_str())
+            && query.contains("GhsyncCreateCategory")
+        {
+            self.created_categories.push(id.to_string());
+        }
         self.graphql_calls.push((query.to_string(), variables));
         let v = self
             .graphql_responses

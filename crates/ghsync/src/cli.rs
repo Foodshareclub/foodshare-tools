@@ -77,7 +77,57 @@ pub fn parse(args: &[String]) -> Result<Cli> {
 pub async fn run(args: Vec<String>) -> Result<()> {
     let cli = parse(&args)?;
     match cli.command {
-        Command::Setup => bail!("setup: not implemented yet"),
+        Command::Setup => {
+            let cfg = crate::config::Config::load(&cli.config_path())?;
+            let token = cfg.token.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no token configured; set it in {}",
+                    cli.config_path().display()
+                )
+            })?;
+            let mut gh = crate::github::RealGitHub::new(&cfg.api, &cfg.org, &token);
+            let report = crate::setup::run_setup(&mut gh, &cfg).await?;
+            println!("✓ token OK (user {})", report.user);
+            for (repo, created) in &report.labels_created {
+                println!("✓ labels {repo}: {created} created");
+            }
+            let state = if report.project_created {
+                "created"
+            } else {
+                "present"
+            };
+            println!(
+                "✓ project {} {state} (id {})",
+                crate::setup::PROJECT_TITLE,
+                report.project_id
+            );
+            println!(
+                "✓ fields Status={} Assignee={} Phase={} ({} status options, {} phase options)",
+                report.status_field,
+                report.assignee_field,
+                report.phase_field,
+                report.status_option_ids.len(),
+                report.phase_option_ids.len()
+            );
+            for (repo, line) in &report.discussions {
+                println!("✓ discussions {repo}: {line}");
+            }
+            println!(
+                "✓ views Board + Phases {}",
+                if report.views_created.is_empty() {
+                    "present"
+                } else {
+                    "created"
+                }
+            );
+            // Write the discovered ids back into the config, preserving
+            // every other key (including the token).
+            let mut new_cfg = cfg.clone();
+            crate::setup::apply_report_to_config(&mut new_cfg, &report);
+            new_cfg.save(&cli.config_path())?;
+            println!("✓ config updated {}", cli.config_path().display());
+            Ok(())
+        }
         Command::Push { dry_run } => {
             let cfg = crate::config::Config::load(&cli.config_path())?;
             let token = cfg.token.clone().ok_or_else(|| {

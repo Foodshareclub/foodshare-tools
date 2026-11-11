@@ -50,6 +50,7 @@ fn test_config() -> Config {
         .into_iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect(),
+        project_id: "PV1_fake".into(),
         ..Default::default()
     };
     Config {

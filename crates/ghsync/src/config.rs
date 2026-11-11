@@ -47,6 +47,21 @@ impl Status {
         })
     }
 
+    /// The kebab-case status string, as used in the config file.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Todo => "todo",
+            Self::Triage => "triage",
+            Self::Ready => "ready",
+            Self::Running => "running",
+            Self::Blocked => "blocked",
+            Self::Review => "review",
+            Self::Done => "done",
+            Self::Scheduled => "scheduled",
+            Self::Archived => "archived",
+        }
+    }
+
     /// The Project v2 `Status` option for this status.
     pub fn project_status(self) -> &'static str {
         match self {
@@ -169,6 +184,10 @@ pub struct RepoConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ProjConfig {
     pub number: u32,
+    /// The GraphQL node id of the Project v2 board (e.g. `PV1_…`),
+    /// discovered by `ghsync setup` and written back into the config.
+    /// Empty until setup has run; pushes report `setup-required` drift.
+    pub project_id: String,
     pub status_field: String,
     pub assignee_field: String,
     pub phase_field: String,
@@ -238,6 +257,7 @@ impl Default for Config {
             default_assignee: "default".into(),
             project: Some(ProjConfig {
                 number: 1,
+                project_id: String::new(),
                 status_field: "Status".into(),
                 assignee_field: "Assignee".into(),
                 phase_field: "Phase".into(),
@@ -289,6 +309,22 @@ impl Config {
         let raw: Raw = toml::from_str(&text).map_err(|e| ConfigError::Parse(e.to_string()))?;
         Self::from_raw(raw)
     }
+
+    /// Write the config back to `path`, preserving every key (including
+    /// the token). Atomic like the cursor: temp file + rename.
+    pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
+        let text = toml::to_string_pretty(&Raw::from(self))
+            .map_err(|e| ConfigError::Parse(e.to_string()))?;
+        if let Some(dir) = path.parent()
+            && !dir.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(dir).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        }
+        let tmp = path.with_extension("tmp");
+        std::fs::write(&tmp, &text).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        std::fs::rename(&tmp, path).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        Ok(())
+    }
 }
 
 /// Failure loading the config file.
@@ -300,38 +336,96 @@ pub enum ConfigError {
     Parse(String),
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 struct Raw {
+    #[serde(skip_serializing_if = "Option::is_none")]
     board: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     org: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     api: Option<String>,
     repos: Vec<RawRepo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     default_assignee: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     project: Option<RawProj>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     state_path: Option<PathBuf>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 struct RawRepo {
+    #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     default_milestone: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 struct RawProj {
+    #[serde(skip_serializing_if = "Option::is_none")]
     number: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    project_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     status_field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     assignee_field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     phase_field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     status_options: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     phase_options: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     assignee_options: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     status_option_ids: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     phase_option_ids: Option<BTreeMap<String, String>>,
+}
+
+impl From<&Config> for Raw {
+    fn from(c: &Config) -> Self {
+        Self {
+            board: Some(c.board.clone()),
+            org: Some(c.org.clone()),
+            api: Some(c.api.clone()),
+            repos: c
+                .repos
+                .iter()
+                .map(|r| RawRepo {
+                    name: Some(r.name.clone()),
+                    default_milestone: Some(r.default_milestone.clone()),
+                })
+                .collect(),
+            default_assignee: Some(c.default_assignee.clone()),
+            project: c.project.as_ref().map(|p| RawProj {
+                number: Some(p.number),
+                project_id: Some(p.project_id.clone()),
+                status_field: Some(p.status_field.clone()),
+                assignee_field: Some(p.assignee_field.clone()),
+                phase_field: Some(p.phase_field.clone()),
+                status_options: Some(
+                    p.status_options
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.as_str().to_string()))
+                        .collect(),
+                ),
+                phase_options: Some(p.phase_options.clone()),
+                assignee_options: Some(p.assignee_options.clone()),
+                status_option_ids: Some(p.status_option_ids.clone()),
+                phase_option_ids: Some(p.phase_option_ids.clone()),
+            }),
+            token: c.token.clone(),
+            state_path: Some(c.state_path.clone()),
+        }
+    }
 }
 
 impl Config {
@@ -357,6 +451,7 @@ impl Config {
                 };
                 Some(ProjConfig {
                     number: p.number.unwrap_or(dp.number),
+                    project_id: p.project_id.unwrap_or(dp.project_id.clone()),
                     status_field: p.status_field.unwrap_or(dp.status_field.clone()),
                     assignee_field: p.assignee_field.unwrap_or(dp.assignee_field.clone()),
                     phase_field: p.phase_field.unwrap_or(dp.phase_field.clone()),

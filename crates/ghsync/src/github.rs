@@ -155,6 +155,25 @@ pub trait GitHub: Send + Sync {
         field_id: &str,
         value: &serde_json::Value,
     ) -> Result<(), GitHubError>;
+    /// The login of the authenticated user; a 401 is a `GitHubError::Http`.
+    async fn get_user(&mut self) -> Result<String, GitHubError>;
+    /// All label names in `repo`.
+    async fn list_labels(&mut self, repo: &str) -> Result<Vec<String>, GitHubError>;
+    /// Create a label in `repo` (the color is decorative).
+    async fn create_label(
+        &mut self,
+        repo: &str,
+        name: &str,
+        color: &str,
+    ) -> Result<(), GitHubError>;
+    /// Rename a discussion category in `repo` (REST; the GraphQL API only
+    /// creates fixed-enum categories).
+    async fn rename_discussion_category(
+        &mut self,
+        repo: &str,
+        category_id: &str,
+        name: &str,
+    ) -> Result<(), GitHubError>;
 }
 
 // ---------- Project v2 GraphQL (snapshot-pinned) ----------
@@ -220,6 +239,125 @@ pub const GHSYNC_ADD_ITEM_MUTATION: &str = r#"mutation GhsyncAddItem($projectId:
   addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
     item {
       id
+    }
+  }
+}"#;
+
+// ---------- setup GraphQL (snapshot-pinned) ----------
+
+/// Find the org project by name.
+pub const GHSYNC_FIND_PROJECT_QUERY: &str = r#"query GhsyncFindProject($org: String!, $name: String!) {
+  organization(login: $org) {
+    projectV2ByName(name: $name) {
+      id
+      title
+    }
+  }
+}"#;
+
+/// Create the org project (org-wide content).
+pub const GHSYNC_CREATE_PROJECT_MUTATION: &str = r#"mutation GhsyncCreateProject($org: ID!, $title: String!) {
+  createProjectV2(owner: $org, title: $title, contentKind: ORGANIZATION) {
+    project {
+      id
+      title
+    }
+  }
+}"#;
+
+/// List a project's fields with their single-select options.
+pub const GHSYNC_FIELDS_QUERY: &str = r#"query GhsyncProjectFields($projectId: ID!) {
+  node(id: $projectId) {
+    ... on ProjectV2 {
+      fields(first: 100) {
+        nodes {
+          id
+          name
+          ... on ProjectV2FieldSingleSelect {
+            options {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+}"#;
+
+/// Create a single-select field.
+pub const GHSYNC_CREATE_SINGLE_SELECT_MUTATION: &str = r#"mutation GhsyncCreateSingleSelect($projectId: ID!, $name: String!) {
+  createProjectV2Field(projectId: $projectId, dataType: SINGLE_SELECT, name: $name) {
+    field {
+      ... on ProjectV2FieldSingleSelect {
+        id
+      }
+    }
+  }
+}"#;
+
+/// Create a text field.
+pub const GHSYNC_CREATE_TEXT_FIELD_MUTATION: &str = r#"mutation GhsyncCreateTextField($projectId: ID!, $name: String!) {
+  createProjectV2Field(projectId: $projectId, dataType: TEXT, name: $name) {
+    field {
+      id
+    }
+  }
+}"#;
+
+/// Create a single-select option.
+pub const GHSYNC_CREATE_OPTION_MUTATION: &str = r#"mutation GhsyncCreateOption($fieldId: ID!, $name: String!) {
+  createProjectV2FieldSingleSelectOption(fieldId: $fieldId, name: $name) {
+    option {
+      id
+      name
+    }
+  }
+}"#;
+
+/// List a project's views.
+pub const GHSYNC_VIEWS_QUERY: &str = r#"query GhsyncProjectViews($projectId: ID!) {
+  node(id: $projectId) {
+    ... on ProjectV2 {
+      views(first: 100) {
+        nodes {
+          id
+          name
+        }
+      }
+    }
+  }
+}"#;
+
+/// Create a grid view grouped by a field.
+pub const GHSYNC_CREATE_VIEW_MUTATION: &str = r#"mutation GhsyncCreateView($projectId: ID!, $name: String!, $fieldId: ID!) {
+  createProjectV2View(projectId: $projectId, view: {type: GRID, name: $name, fieldId: $fieldId}) {
+    view {
+      id
+    }
+  }
+}"#;
+
+/// A repo's discussion state and categories.
+pub const GHSYNC_DISCUSSIONS_QUERY: &str = r#"query GhsyncDiscussions($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    id
+    hasDiscussions
+    discussionCategories {
+      nodes {
+        id
+        name
+      }
+    }
+  }
+}"#;
+
+/// Create the fixed-enum `OTHER` category (renamed afterwards via REST).
+pub const GHSYNC_CREATE_CATEGORY_MUTATION: &str = r#"mutation GhsyncCreateCategory($repositoryId: ID!) {
+  addDiscussionCategory(input: {repositoryId: $repositoryId, categoryId: OTHER}) {
+    discussionCategory {
+      id
+      name
     }
   }
 }"#;
@@ -749,6 +887,72 @@ impl GitHub for RealGitHub {
         .await?;
         Ok(())
     }
+
+    async fn get_user(&mut self) -> Result<String, GitHubError> {
+        let resp = self.rest(reqwest::Method::GET, "/user", None).await?;
+        let v = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        v.get("login")
+            .and_then(|l| l.as_str())
+            .map(str::to_string)
+            .ok_or_else(|| GitHubError::Io("GET /user: missing login".into()))
+    }
+
+    async fn list_labels(&mut self, repo: &str) -> Result<Vec<String>, GitHubError> {
+        let resp = self
+            .rest(
+                reqwest::Method::GET,
+                &format!("/repos/{}{}/labels", self.org, repo),
+                None,
+            )
+            .await?;
+        let v = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        Ok(v.as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|l| l.get("name").and_then(|n| n.as_str()).map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    async fn create_label(
+        &mut self,
+        repo: &str,
+        name: &str,
+        color: &str,
+    ) -> Result<(), GitHubError> {
+        self.rest(
+            reqwest::Method::POST,
+            &format!("/repos/{}{}/labels", self.org, repo),
+            Some(serde_json::json!({ "name": name, "color": color })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn rename_discussion_category(
+        &mut self,
+        repo: &str,
+        category_id: &str,
+        name: &str,
+    ) -> Result<(), GitHubError> {
+        self.rest(
+            reqwest::Method::PATCH,
+            &format!(
+                "/repos/{}{}/discussions/categories/{category_id}",
+                self.org, repo
+            ),
+            Some(serde_json::json!({ "name": name })),
+        )
+        .await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -790,6 +994,76 @@ mod tests {
         );
         assert!(GHSYNC_ADD_ITEM_MUTATION.contains(
             "addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId})"
+        ));
+
+        assert!(
+            GHSYNC_FIND_PROJECT_QUERY
+                .contains("query GhsyncFindProject($org: String!, $name: String!)")
+        );
+        assert!(GHSYNC_FIND_PROJECT_QUERY.contains("projectV2ByName(name: $name)"));
+
+        assert!(
+            GHSYNC_CREATE_PROJECT_MUTATION
+                .contains("mutation GhsyncCreateProject($org: ID!, $title: String!)")
+        );
+        assert!(
+            GHSYNC_CREATE_PROJECT_MUTATION
+                .contains("createProjectV2(owner: $org, title: $title, contentKind: ORGANIZATION)")
+        );
+
+        assert!(GHSYNC_FIELDS_QUERY.contains("query GhsyncProjectFields($projectId: ID!)"));
+        assert!(GHSYNC_FIELDS_QUERY.contains("fields(first: 100)"));
+        assert!(GHSYNC_FIELDS_QUERY.contains("... on ProjectV2FieldSingleSelect {"));
+        assert!(GHSYNC_FIELDS_QUERY.contains("options {"));
+
+        assert!(
+            GHSYNC_CREATE_SINGLE_SELECT_MUTATION
+                .contains("mutation GhsyncCreateSingleSelect($projectId: ID!, $name: String!)")
+        );
+        assert!(GHSYNC_CREATE_SINGLE_SELECT_MUTATION.contains(
+            "createProjectV2Field(projectId: $projectId, dataType: SINGLE_SELECT, name: $name)"
+        ));
+
+        assert!(
+            GHSYNC_CREATE_TEXT_FIELD_MUTATION
+                .contains("mutation GhsyncCreateTextField($projectId: ID!, $name: String!)")
+        );
+        assert!(GHSYNC_CREATE_TEXT_FIELD_MUTATION.contains("dataType: TEXT"));
+
+        assert!(
+            GHSYNC_CREATE_OPTION_MUTATION
+                .contains("mutation GhsyncCreateOption($fieldId: ID!, $name: String!)")
+        );
+        assert!(
+            GHSYNC_CREATE_OPTION_MUTATION
+                .contains("createProjectV2FieldSingleSelectOption(fieldId: $fieldId, name: $name)")
+        );
+
+        assert!(GHSYNC_VIEWS_QUERY.contains("query GhsyncProjectViews($projectId: ID!)"));
+        assert!(GHSYNC_VIEWS_QUERY.contains("views(first: 100)"));
+
+        assert!(
+            GHSYNC_CREATE_VIEW_MUTATION.contains(
+                "mutation GhsyncCreateView($projectId: ID!, $name: String!, $fieldId: ID!)"
+            )
+        );
+        assert!(GHSYNC_CREATE_VIEW_MUTATION.contains(
+            "createProjectV2View(projectId: $projectId, view: {type: GRID, name: $name, fieldId: $fieldId})"
+        ));
+
+        assert!(
+            GHSYNC_DISCUSSIONS_QUERY
+                .contains("query GhsyncDiscussions($owner: String!, $name: String!)")
+        );
+        assert!(GHSYNC_DISCUSSIONS_QUERY.contains("hasDiscussions"));
+        assert!(GHSYNC_DISCUSSIONS_QUERY.contains("discussionCategories {"));
+
+        assert!(
+            GHSYNC_CREATE_CATEGORY_MUTATION
+                .contains("mutation GhsyncCreateCategory($repositoryId: ID!)")
+        );
+        assert!(GHSYNC_CREATE_CATEGORY_MUTATION.contains(
+            "addDiscussionCategory(input: {repositoryId: $repositoryId, categoryId: OTHER})"
         ));
     }
 }
