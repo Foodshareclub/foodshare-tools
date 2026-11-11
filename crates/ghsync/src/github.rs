@@ -102,6 +102,9 @@ pub trait GitHub: Send + Sync {
     ) -> Result<(), GitHubError>;
     /// Close an issue (never reopen).
     async fn close_issue(&mut self, repo: &str, number: u32) -> Result<(), GitHubError>;
+    /// All issues (open and closed) in `repo` carrying `label`, excluding
+    /// pull requests.
+    async fn issues_labeled(&mut self, repo: &str, label: &str) -> Result<Vec<Issue>, GitHubError>;
     /// Post a comment on an issue.
     async fn comment(&mut self, repo: &str, number: u32, body: &str) -> Result<(), GitHubError>;
     /// Run a GraphQL query; `data` of the response is returned. A
@@ -133,6 +136,11 @@ pub fn path_issue_comments(org: &str, repo: &str, number: u32, page: u32) -> Str
 /// `/repos/{org}/{repo}/milestones?state=all&per_page=100`
 pub fn path_milestones(org: &str, repo: &str) -> String {
     format!("/repos/{org}/{repo}/milestones?state=all&per_page=100")
+}
+
+/// `/repos/{org}/{repo}/issues?labels={label}&state=all&per_page=100&page={p}`
+pub fn path_issues_labeled(org: &str, repo: &str, label: &str, page: u32) -> String {
+    format!("/repos/{org}/{repo}/issues?labels={label}&state=all&per_page=100&page={page}")
 }
 
 /// The GraphQL endpoint.
@@ -428,6 +436,32 @@ impl GitHub for RealGitHub {
         )
         .await?;
         Ok(())
+    }
+
+    async fn issues_labeled(&mut self, repo: &str, label: &str) -> Result<Vec<Issue>, GitHubError> {
+        let mut out = Vec::new();
+        for page in 1..=10u32 {
+            let resp = self
+                .rest(
+                    reqwest::Method::GET,
+                    &path_issues_labeled(&self.org, repo, label, page),
+                    None,
+                )
+                .await?;
+            let arr = resp
+                .json::<Vec<serde_json::Value>>()
+                .await
+                .map_err(|e| GitHubError::Io(e.to_string()))?;
+            // The issues endpoint also returns pull requests.
+            for v in arr.iter().filter(|v| v.get("pull_request").is_none()) {
+                out.push(self.issue_from(repo, v));
+            }
+            if arr.len() < 100 {
+                break;
+            }
+        }
+        out.sort_by_key(|i| i.number);
+        Ok(out)
     }
 
     async fn comment(&mut self, repo: &str, number: u32, body: &str) -> Result<(), GitHubError> {

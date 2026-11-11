@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use ghsync::fakes::{FakeGitHub, FakeKanban};
 use ghsync::github::GitHub;
 use ghsync::kanban::{Kanban, LinkedIssue};
-use ghsync::link::{card_repo, resolve_links, LinkMap};
+use ghsync::link::{LinkMap, card_repo, resolve_links};
 
 async fn seed_card(kb: &mut FakeKanban, title: &str, link: Option<&str>) -> String {
     let card = kb
@@ -31,13 +31,21 @@ fn issue(org: &str, repo: &str, number: u32) -> LinkedIssue {
 async fn resolution_builds_bidirectional_map() {
     let mut kb = FakeKanban::default();
     let mut gh = FakeGitHub::default();
-    let id = seed_card(&mut kb, "A", Some("ghsync Foodshareclub/foodshare-app#41")).await;
-
-    // The issue exists and carries the footer back to the card.
+    // The issue exists first (labeled ghsync), then the card links to it
+    // and the issue carries the footer back to the card.
     let iss = gh
-        .create_issue("foodshare-app", "A", "kanban:foodshare:t_x", &[])
+        .create_issue("foodshare-app", "A", "b", &["ghsync".into()])
         .await
         .unwrap();
+    let id = seed_card(
+        &mut kb,
+        "A",
+        Some(&format!(
+            "ghsync Foodshareclub/foodshare-app#{}",
+            iss.number
+        )),
+    )
+    .await;
     gh.comment(
         "foodshare-app",
         iss.number,
@@ -150,7 +158,7 @@ async fn footer_to_missing_card_is_ignored() {
     // The footer points at a card that does not exist: the issue is
     // recorded as unlinked, not attached to anything.
     let key = issue("Foodshareclub", "foodshare-app", iss.number);
-    assert!(map.by_issue.get(&key).is_none());
+    assert!(!map.by_issue.contains_key(&key));
     assert!(map.conflict_issues().is_empty());
 }
 
@@ -183,7 +191,7 @@ async fn footer_on_other_board_is_ignored() {
     .await
     .unwrap();
     let key = issue("Foodshareclub", "foodshare-app", iss.number);
-    assert!(map.by_issue.get(&key).is_none());
+    assert!(!map.by_issue.contains_key(&key));
 }
 
 // ---------- card repo routing ----------
@@ -195,7 +203,7 @@ fn repo_line_routes_to_configured_repo() {
         body: "some text\nRepo: foodshare-app\nmore".into(),
         ..Default::default()
     };
-    assert_eq!(card_repo(&card, &repos).copied(), Some("foodshare-app"));
+    assert_eq!(card_repo(&card, &repos), Some("foodshare-app"));
 }
 
 #[test]
@@ -205,7 +213,7 @@ fn no_repo_line_defaults_to_foodshare_tools() {
         body: "no routing here".into(),
         ..Default::default()
     };
-    assert_eq!(card_repo(&card, &repos).copied(), Some("foodshare-tools"));
+    assert_eq!(card_repo(&card, &repos), Some("foodshare-tools"));
 }
 
 #[test]

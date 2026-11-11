@@ -18,7 +18,7 @@ use thiserror::Error;
 use crate::config::{Status, issue_link_comment, parse_issue_link, phase_from_card};
 
 /// A GitHub issue this card is linked to: `owner/repo#number`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct LinkedIssue {
     pub owner: String,
     pub repo: String,

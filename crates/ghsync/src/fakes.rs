@@ -290,6 +290,17 @@ impl GitHub for FakeGitHub {
         Ok(())
     }
 
+    async fn issues_labeled(&mut self, repo: &str, label: &str) -> Result<Vec<Issue>, GitHubError> {
+        let mut out: Vec<Issue> = self
+            .issues
+            .values()
+            .filter(|i| i.repo == repo && i.labels.iter().any(|l| l == label))
+            .cloned()
+            .collect();
+        out.sort_by_key(|i| i.number);
+        Ok(out)
+    }
+
     async fn comment(&mut self, repo: &str, number: u32, body: &str) -> Result<(), GitHubError> {
         self.next_comment_id += 1;
         self.comments
