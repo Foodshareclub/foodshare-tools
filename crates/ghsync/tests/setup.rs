@@ -32,7 +32,14 @@ fn cfg_with(path: &Path) -> Config {
 /// entry is the inner data object wrapped in it.
 fn fresh_org_responses() -> Vec<serde_json::Value> {
     let data = [
-        serde_json::json!({ "organization": { "projectV2ByName": null } }),
+        serde_json::json!({
+            "organization": {
+                "projectsV2": {
+                    "nodes": [],
+                    "pageInfo": { "hasNextPage": false, "endCursor": null }
+                }
+            }
+        }),
         serde_json::json!({
             "createProjectV2": { "project": { "id": "PV1_fake", "title": "Foodshare Board" } }
         }),
@@ -193,7 +200,12 @@ async fn second_run_writes_nothing() {
         let data = [
             serde_json::json!({
                 "organization": {
-                    "projectV2ByName": { "id": "PV1_fake", "title": "Foodshare Board" }
+                    "projectsV2": {
+                        "nodes": [
+                            { "id": "PV1_fake", "title": "Foodshare Board", "number": 1 }
+                        ],
+                        "pageInfo": { "hasNextPage": false, "endCursor": null }
+                    }
                 }
             }),
             serde_json::json!({

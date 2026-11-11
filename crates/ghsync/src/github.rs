@@ -322,12 +322,21 @@ pub const GHSYNC_ADD_ITEM_MUTATION: &str = r#"mutation GhsyncAddItem($projectId:
 
 // ---------- setup GraphQL (snapshot-pinned) ----------
 
-/// Find the org project by name.
-pub const GHSYNC_FIND_PROJECT_QUERY: &str = r#"query GhsyncFindProject($org: String!, $name: String!) {
+/// List the org's projects (paginated). GitHub's GraphQL has no
+/// `projectV2ByName`; the org has few boards, so setup pages through and
+/// matches the title itself.
+pub const GHSYNC_LIST_PROJECTS_QUERY: &str = r#"query GhsyncListProjects($org: String!, $cursor: String) {
   organization(login: $org) {
-    projectV2ByName(name: $name) {
-      id
-      title
+    projectsV2(first: 100, after: $cursor) {
+      nodes {
+        id
+        title
+        number
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
   }
 }"#;
@@ -1439,10 +1448,10 @@ mod tests {
         ));
 
         assert!(
-            GHSYNC_FIND_PROJECT_QUERY
-                .contains("query GhsyncFindProject($org: String!, $name: String!)")
+            GHSYNC_LIST_PROJECTS_QUERY
+                .contains("query GhsyncListProjects($org: String!, $cursor: String)")
         );
-        assert!(GHSYNC_FIND_PROJECT_QUERY.contains("projectV2ByName(name: $name)"));
+        assert!(GHSYNC_LIST_PROJECTS_QUERY.contains("projectsV2(first: 100, after: $cursor)"));
 
         assert!(
             GHSYNC_CREATE_PROJECT_MUTATION

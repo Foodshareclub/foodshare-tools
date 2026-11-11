@@ -21,7 +21,7 @@ use crate::github::{
     GHSYNC_CREATE_CATEGORY_MUTATION, GHSYNC_CREATE_OPTION_MUTATION, GHSYNC_CREATE_PROJECT_MUTATION,
     GHSYNC_CREATE_SINGLE_SELECT_MUTATION, GHSYNC_CREATE_TEXT_FIELD_MUTATION,
     GHSYNC_CREATE_VIEW_MUTATION, GHSYNC_DISCUSSIONS_QUERY, GHSYNC_FIELDS_QUERY,
-    GHSYNC_FIND_PROJECT_QUERY, GHSYNC_VIEWS_QUERY, GitHub, GitHubError,
+    GHSYNC_LIST_PROJECTS_QUERY, GHSYNC_VIEWS_QUERY, GitHub, GitHubError,
 };
 
 /// The title of the org Project v2 board.
@@ -110,17 +110,48 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
         report.labels_created.push((repo.name.clone(), created));
     }
 
-    // 3. The project.
-    let data = gh
-        .graphql(
-            GHSYNC_FIND_PROJECT_QUERY,
-            serde_json::json!({ "org": cfg.org, "name": PROJECT_TITLE }),
-        )
-        .await?;
-    let project_id = match data
-        .pointer("/organization/projectV2ByName/id")
-        .and_then(|v| v.as_str())
-    {
+    // 3. The project (found by title: no projectV2ByName in the GraphQL
+    // schema — page through the org's boards, of which there are few).
+    let mut project_id: Option<String> = None;
+    let mut cursor: Option<String> = None;
+    while project_id.is_none() {
+        let data = gh
+            .graphql(
+                GHSYNC_LIST_PROJECTS_QUERY,
+                serde_json::json!({ "org": cfg.org, "cursor": cursor }),
+            )
+            .await?;
+        let pv = data
+            .pointer("/organization/projectsV2")
+            .ok_or_else(|| GitHubError::Io("projectsV2: missing from response".into()))?;
+        let nodes = pv
+            .pointer("/nodes")
+            .and_then(|n| n.as_array())
+            .cloned()
+            .unwrap_or_default();
+        for node in &nodes {
+            if node.pointer("/title").and_then(|t| t.as_str()) == Some(PROJECT_TITLE) {
+                project_id = node
+                    .pointer("/id")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                break;
+            }
+        }
+        let more = pv
+            .pointer("/pageInfo/hasNextPage")
+            .and_then(|h| h.as_bool())
+            .unwrap_or(false);
+        let next = pv
+            .pointer("/pageInfo/endCursor")
+            .and_then(|c| c.as_str())
+            .map(str::to_string);
+        if !more || next.is_none() {
+            break;
+        }
+        cursor = next;
+    }
+    let project_id = match project_id {
         Some(id) => id.to_string(),
         None => {
             let data = gh
