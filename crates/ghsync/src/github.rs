@@ -537,6 +537,16 @@ pub fn path_discussion_labels(org: &str, repo: &str) -> String {
     format!("/repos/{org}/{repo}/discussions/labels")
 }
 
+/// `/repos/{org}/{repo}/labels`
+pub fn path_labels(org: &str, repo: &str) -> String {
+    format!("/repos/{org}/{repo}/labels")
+}
+
+/// `/repos/{org}/{repo}/discussions/categories/{id}`
+pub fn path_discussion_category(org: &str, repo: &str, category_id: &str) -> String {
+    format!("/repos/{org}/{repo}/discussions/categories/{category_id}")
+}
+
 /// The GraphQL endpoint.
 pub fn path_graphql(api: &str) -> String {
     format!("{api}/graphql")
@@ -1058,11 +1068,7 @@ impl GitHub for RealGitHub {
 
     async fn list_labels(&mut self, repo: &str) -> Result<Vec<String>, GitHubError> {
         let resp = self
-            .rest(
-                reqwest::Method::GET,
-                &format!("/repos/{}{}/labels", self.org, repo),
-                None,
-            )
+            .rest(reqwest::Method::GET, &path_labels(&self.org, repo), None)
             .await?;
         let v = resp
             .json::<serde_json::Value>()
@@ -1085,7 +1091,7 @@ impl GitHub for RealGitHub {
     ) -> Result<(), GitHubError> {
         self.rest(
             reqwest::Method::POST,
-            &format!("/repos/{}{}/labels", self.org, repo),
+            &path_labels(&self.org, repo),
             Some(serde_json::json!({ "name": name, "color": color })),
         )
         .await?;
@@ -1100,10 +1106,7 @@ impl GitHub for RealGitHub {
     ) -> Result<(), GitHubError> {
         self.rest(
             reqwest::Method::PATCH,
-            &format!(
-                "/repos/{}{}/discussions/categories/{category_id}",
-                self.org, repo
-            ),
+            &path_discussion_category(&self.org, repo, category_id),
             Some(serde_json::json!({ "name": name })),
         )
         .await?;
