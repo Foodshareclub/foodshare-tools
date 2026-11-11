@@ -21,11 +21,11 @@ state_path = "~/.config/ghsync/state.json"
 default_assignee = "default"
 
 # Agent profiles the intake form may name. An unknown profile fails the
-# intake with a loud error naming this list.
+# intake with a loud error naming this list. Must cover the form's
+# "Agent profile" options (agent-intake.yml).
 profiles = [
   "default",
   "architect",
-  "lead",
   "reviewer",
   "security",
   "verifier",
