@@ -18,6 +18,7 @@ fn test_config() -> Config {
         repos: vec![RepoConfig {
             name: REPO.into(),
             default_milestone: "Rust + TypeScript".into(),
+            ..Default::default()
         }],
         ..Config::default()
     }

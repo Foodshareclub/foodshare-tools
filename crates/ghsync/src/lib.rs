@@ -21,6 +21,7 @@
 
 pub mod cli;
 pub mod config;
+pub mod discuss;
 pub mod fakes;
 pub mod github;
 pub mod intake;

@@ -57,6 +57,7 @@ fn test_config() -> Config {
         repos: vec![RepoConfig {
             name: "foodshare-tools".into(),
             default_milestone: "Rust + TypeScript".into(),
+            ..Default::default()
         }],
         project: Some(p),
         ..Config::default()

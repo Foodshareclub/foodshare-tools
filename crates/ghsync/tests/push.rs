@@ -22,10 +22,12 @@ fn test_config() -> Config {
             RepoConfig {
                 name: "foodshare-app".into(),
                 default_milestone: "Next.js 16 + Bun 1.4.4".into(),
+                ..Default::default()
             },
             RepoConfig {
                 name: "foodshare-tools".into(),
                 default_milestone: "Rust + TypeScript".into(),
+                ..Default::default()
             },
         ],
         ..Config::default()

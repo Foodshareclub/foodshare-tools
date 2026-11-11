@@ -127,6 +127,11 @@ pub fn labels_for(repo: &str) -> Vec<String> {
 /// Prefix of the issue-side link comment.
 pub const CARD_LINK_PREFIX: &str = "ghsync ";
 
+/// Prefix of the discussion-side link comment. Distinct from
+/// `CARD_LINK_PREFIX` on purpose: `ghsyncd …` starts with `ghsync` but
+/// not with `ghsync `, so the two never misparse each other.
+pub const DISCUSSION_LINK_PREFIX: &str = "ghsyncd ";
+
 /// Prefix of the card-side link footer.
 pub const CARD_FOOTER_PREFIX: &str = "kanban:";
 
@@ -141,15 +146,26 @@ pub fn issue_link_comment(owner: &str, repo: &str, number: u32) -> String {
     format!("ghsync {owner}/{repo}#{number}")
 }
 
+/// The card-side link comment for a source discussion:
+/// `ghsyncd <owner>/<repo>#<n>`.
+pub fn discussion_link_comment(owner: &str, repo: &str, number: u32) -> String {
+    format!("ghsyncd {owner}/{repo}#{number}")
+}
+
 /// The card-side link footer: `kanban:<board>:<task-id>`.
 pub fn card_link_comment(board: &str, task_id: &str) -> String {
     format!("kanban:{board}:{task_id}")
 }
 
 /// Parse a link comment. The whole line must be the link; a line that
-/// merely mentions one does not count.
+/// merely mentions one does not count. Accepts both the issue prefix
+/// (`ghsync …`) and the discussion prefix (`ghsyncd …`); both resolve to
+/// the same issue reference.
 pub fn parse_issue_link(line: &str) -> Option<IssueRef> {
-    let rest = line.trim().strip_prefix(CARD_LINK_PREFIX)?;
+    let rest = line
+        .trim()
+        .strip_prefix(CARD_LINK_PREFIX)
+        .or_else(|| line.trim().strip_prefix(DISCUSSION_LINK_PREFIX))?;
     let (path, number) = rest.split_once('#')?;
     let (owner, repo) = path.split_once('/')?;
     if owner.is_empty() || repo.is_empty() {
@@ -174,10 +190,16 @@ pub fn parse_card_link(line: &str) -> Option<(String, String)> {
 }
 
 /// A repository ghsync manages.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RepoConfig {
     pub name: String,
     pub default_milestone: String,
+    /// Whether GitHub Discussions are enabled on this repo, as recorded
+    /// by `ghsync setup`. Gates the feed (kanban → Handoffs) side.
+    pub discussions_enabled: bool,
+    /// Whether discussion labels are supported on this repo (probed by
+    /// `ghsync setup`). Gates the discussion intake side.
+    pub discussion_labels_enabled: bool,
 }
 
 /// The org Project v2 board.
@@ -239,22 +261,27 @@ impl Default for Config {
                 RepoConfig {
                     name: "foodshare-app".into(),
                     default_milestone: "Next.js 16 + Bun 1.4.4".into(),
+                    ..Default::default()
                 },
                 RepoConfig {
                     name: "foodshare-backend".into(),
                     default_milestone: "Rust".into(),
+                    ..Default::default()
                 },
                 RepoConfig {
                     name: "foodshare-web".into(),
                     default_milestone: "Next.js 16 + Bun 1.4.4".into(),
+                    ..Default::default()
                 },
                 RepoConfig {
                     name: "foodshare-tools".into(),
                     default_milestone: "Rust + TypeScript".into(),
+                    ..Default::default()
                 },
                 RepoConfig {
                     name: "catch-22".into(),
                     default_milestone: "Next.js 16 + Bun 1.4.4".into(),
+                    ..Default::default()
                 },
             ],
             default_assignee: "default".into(),
@@ -368,6 +395,14 @@ struct RawRepo {
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     default_milestone: Option<String>,
+    #[serde(skip_serializing_if = "is_false")]
+    discussions_enabled: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    discussion_labels_enabled: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -407,6 +442,8 @@ impl From<&Config> for Raw {
                 .map(|r| RawRepo {
                     name: Some(r.name.clone()),
                     default_milestone: Some(r.default_milestone.clone()),
+                    discussions_enabled: r.discussions_enabled,
+                    discussion_labels_enabled: r.discussion_labels_enabled,
                 })
                 .collect(),
             default_assignee: Some(c.default_assignee.clone()),
@@ -487,6 +524,8 @@ impl Config {
                                 ConfigError::Parse("every repo entry needs a `name`".into())
                             })?,
                             default_milestone: r.default_milestone.unwrap_or_default(),
+                            discussions_enabled: r.discussions_enabled,
+                            discussion_labels_enabled: r.discussion_labels_enabled,
                         })
                     })
                     .collect::<Result<Vec<RepoConfig>, ConfigError>>()?

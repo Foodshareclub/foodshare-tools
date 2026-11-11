@@ -16,6 +16,7 @@ fn cfg_with(path: &Path) -> Config {
         repos: vec![RepoConfig {
             name: "foodshare-tools".into(),
             default_milestone: "Rust + TypeScript".into(),
+            ..Default::default()
         }],
         token: Some("fake-token".into()),
         state_path: path.to_path_buf(),
@@ -70,6 +71,10 @@ async fn fresh_org_setup_provisions_everything_and_records_ids() {
     let mut cfg = cfg_with(&cfg_path);
     let mut gh = FakeGitHub::default();
     gh.graphql_responses = fresh_org_responses();
+    // Discussion labels are supported on this repo (the probe finds the
+    // labels endpoint); setup records both flags.
+    gh.discussion_labels_supported
+        .insert("foodshare-tools".to_string(), true);
 
     let report = run_setup(&mut gh, &cfg).await.unwrap();
 
@@ -128,6 +133,11 @@ async fn fresh_org_setup_provisions_everything_and_records_ids() {
             "Handoffs".to_string()
         )]
     );
+    // The per-repo discussion flags are recorded for the config.
+    assert_eq!(
+        report.discussion_flags,
+        vec![("foodshare-tools".to_string(), true, true)]
+    );
     // No unused responses left: every queued response was consumed in
     // order (a wrong call order would have consumed a mismatched one).
     assert!(gh.graphql_responses.is_empty());
@@ -149,6 +159,9 @@ async fn fresh_org_setup_provisions_everything_and_records_ids() {
         Some("ph_inprog")
     );
     assert_eq!(reloaded.token.as_deref(), Some("fake-token"));
+    // The discussion flags round-trip into the config too.
+    assert!(reloaded.repos[0].discussions_enabled);
+    assert!(reloaded.repos[0].discussion_labels_enabled);
 }
 
 #[tokio::test]
@@ -255,6 +268,12 @@ async fn second_run_writes_nothing() {
     // The ids are still reported, so the config stays correct.
     assert_eq!(report.status_option_ids.len(), 4);
     assert_eq!(report.phase_option_ids.len(), 3);
+    // The flags are still probed and reported (probe is a read, not a
+    // mutation; the fake returns false unless seeded).
+    assert_eq!(
+        report.discussion_flags,
+        vec![("foodshare-tools".to_string(), true, false)]
+    );
     let _ = &cfg_path;
 }
 

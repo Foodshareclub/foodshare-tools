@@ -206,6 +206,21 @@ pub async fn run(args: Vec<String>) -> Result<()> {
             for (issue, why) in &pr_report.skipped {
                 println!("pr evidence skipped {issue}: {why}");
             }
+            // The discussion feed is a write side; a dry run only plans.
+            let feed_report = if dry_run {
+                None
+            } else {
+                Some(crate::discuss::post_feed(&mut gh, &cfg, &views, &links).await?)
+            };
+            if let Some(fr) = &feed_report {
+                for (card, why) in &fr.skipped {
+                    println!("feed skipped {card}: {why}");
+                }
+                println!(
+                    "feed: {} discussions created, {} comments appended",
+                    fr.created, fr.appended
+                );
+            }
             println!(
                 "push: {} created, {} verified, {} gestured, {} field writes, {} drift, {} skipped",
                 report.created.len(),
@@ -240,11 +255,25 @@ pub async fn run(args: Vec<String>) -> Result<()> {
             for (issue, why) in &report.skipped {
                 println!("skipped {issue}: {why}");
             }
+            let dreport =
+                crate::discuss::intake_discussions(&mut kb, &mut gh, &cfg, dry_run).await?;
+            for i in &dreport.would_create {
+                println!("would create card for discussion {i}");
+            }
+            for c in &dreport.created {
+                println!(
+                    "created card {} for discussion {} ({}, {})",
+                    c.card, c.issue, c.profile, c.phase
+                );
+            }
+            for (issue, why) in &dreport.skipped {
+                println!("skipped {issue}: {why}");
+            }
             println!(
                 "intake: {} created, {} would-create, {} skipped",
-                report.created.len(),
-                report.would_create.len(),
-                report.skipped.len()
+                report.created.len() + dreport.created.len(),
+                report.would_create.len() + dreport.would_create.len(),
+                report.skipped.len() + dreport.skipped.len()
             );
             Ok(())
         }

@@ -67,6 +67,26 @@ pub struct Comment {
     pub created_at: String,
 }
 
+/// A label on a discussion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscussionLabel {
+    pub id: String,
+    pub name: String,
+}
+
+/// A discussion. `id` is the GraphQL node id (used by the comment and
+/// label mutations); `number` is the human-facing `#n`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Discussion {
+    pub id: String,
+    pub number: u32,
+    pub title: String,
+    pub body: String,
+    pub labels: Vec<DiscussionLabel>,
+    /// Comment bodies, oldest first (used for dedupe + append detection).
+    pub comments: Vec<String>,
+}
+
 /// Failure of a GitHub operation.
 #[derive(Debug, Error)]
 pub enum GitHubError {
@@ -198,6 +218,39 @@ pub trait GitHub: Send + Sync {
     async fn get_pull(&mut self, repo: &str, number: u32) -> Result<Pull, GitHubError>;
     /// The check runs recorded against a commit.
     async fn check_runs(&mut self, repo: &str, sha: &str) -> Result<Vec<CheckRun>, GitHubError>;
+    /// Discussions in `repo`, filtered by category name and/or label name
+    /// (both optional).
+    async fn list_discussions(
+        &mut self,
+        repo: &str,
+        category: Option<&str>,
+        label: Option<&str>,
+    ) -> Result<Vec<Discussion>, GitHubError>;
+    /// Create a discussion in the named category.
+    async fn create_discussion(
+        &mut self,
+        repo: &str,
+        category: &str,
+        title: &str,
+        body: &str,
+    ) -> Result<Discussion, GitHubError>;
+    /// Add a comment to a discussion.
+    async fn discussion_comment(
+        &mut self,
+        repo: &str,
+        discussion_id: &str,
+        body: &str,
+    ) -> Result<(), GitHubError>;
+    /// Remove a label (by id) from a discussion.
+    async fn remove_discussion_label(
+        &mut self,
+        repo: &str,
+        discussion_id: &str,
+        label_id: &str,
+    ) -> Result<(), GitHubError>;
+    /// Whether the repo supports discussion labels (the probe setup
+    /// records; 404 = disabled).
+    async fn discussion_labels_supported(&mut self, repo: &str) -> Result<bool, GitHubError>;
 }
 
 // ---------- Project v2 GraphQL (snapshot-pinned) ----------
@@ -386,6 +439,61 @@ pub const GHSYNC_CREATE_CATEGORY_MUTATION: &str = r#"mutation GhsyncCreateCatego
   }
 }"#;
 
+/// List a repo's discussions, optionally filtered by category name and/or
+/// label name.
+pub const GHSYNC_DISCUSSION_LIST_QUERY: &str = r#"query GhsyncDiscussionList($owner: String!, $name: String!, $category: String, $label: String) {
+  repository(owner: $owner, name: $name) {
+    discussions(first: 100, category: $category, label: $label) {
+      nodes {
+        id
+        number
+        title
+        body
+        labels(first: 20) {
+          nodes {
+            id
+            name
+          }
+        }
+        comments(first: 100) {
+          nodes {
+            body
+          }
+        }
+      }
+    }
+  }
+}"#;
+
+/// Create a discussion in an existing category.
+pub const GHSYNC_CREATE_DISCUSSION_MUTATION: &str = r#"mutation GhsyncCreateDiscussion($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!) {
+  addDiscussion(input: {repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body}) {
+    discussion {
+      id
+      number
+      title
+    }
+  }
+}"#;
+
+/// Add a comment to a discussion.
+pub const GHSYNC_DISCUSSION_COMMENT_MUTATION: &str = r#"mutation GhsyncDiscussionComment($discussionId: ID!, $body: String!) {
+  addDiscussionComment(input: {discussionId: $discussionId, body: $body}) {
+    comment {
+      id
+    }
+  }
+}"#;
+
+/// Remove a label from a discussion.
+pub const GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION: &str = r#"mutation GhsyncRemoveDiscussionLabel($discussionId: ID!, $labelId: ID!) {
+  removeDiscussionLabel(input: {discussionId: $discussionId, labelId: $labelId}) {
+    discussion {
+      id
+    }
+  }
+}"#;
+
 // ---------- pure path builders (snapshot-tested) ----------
 
 /// `/repos/{org}/{repo}`
@@ -421,6 +529,12 @@ pub fn path_pull(org: &str, repo: &str, number: u32) -> String {
 /// The check runs against a commit.
 pub fn path_check_runs(org: &str, repo: &str, sha: &str) -> String {
     format!("/repos/{org}/{repo}/commits/{sha}/check-runs?per_page=100")
+}
+
+/// The discussion labels of a repo (404 = discussions or labels
+/// disabled — the probe relies on this).
+pub fn path_discussion_labels(org: &str, repo: &str) -> String {
+    format!("/repos/{org}/{repo}/discussions/labels")
 }
 
 /// The GraphQL endpoint.
@@ -1048,6 +1162,209 @@ impl GitHub for RealGitHub {
             })
             .unwrap_or_default())
     }
+
+    async fn list_discussions(
+        &mut self,
+        repo: &str,
+        category: Option<&str>,
+        label: Option<&str>,
+    ) -> Result<Vec<Discussion>, GitHubError> {
+        let data = self
+            .graphql(
+                GHSYNC_DISCUSSION_LIST_QUERY,
+                serde_json::json!({
+                    "owner": self.org,
+                    "name": repo,
+                    "category": category,
+                    "label": label,
+                }),
+            )
+            .await?;
+        Ok(data
+            .pointer("/repository/discussions/nodes")
+            .and_then(|n| n.as_array())
+            .map(|nodes| {
+                nodes
+                    .iter()
+                    .filter_map(|d| {
+                        let labels = d
+                            .pointer("/labels/nodes")
+                            .and_then(|l| l.as_array())
+                            .map(|ls| {
+                                ls.iter()
+                                    .filter_map(|l| {
+                                        Some(DiscussionLabel {
+                                            id: l.get("id")?.as_str()?.to_string(),
+                                            name: l.get("name")?.as_str()?.to_string(),
+                                        })
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        let comments = d
+                            .pointer("/comments/nodes")
+                            .and_then(|c| c.as_array())
+                            .map(|cs| {
+                                cs.iter()
+                                    .filter_map(|c| {
+                                        c.get("body").and_then(|b| b.as_str()).map(str::to_string)
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        Some(Discussion {
+                            id: d.get("id")?.as_str()?.to_string(),
+                            number: d.get("number")?.as_u64()? as u32,
+                            title: d.get("title")?.as_str()?.to_string(),
+                            body: d
+                                .get("body")
+                                .and_then(|b| b.as_str())
+                                .unwrap_or_default()
+                                .to_string(),
+                            labels,
+                            comments,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    async fn create_discussion(
+        &mut self,
+        repo: &str,
+        category: &str,
+        title: &str,
+        body: &str,
+    ) -> Result<Discussion, GitHubError> {
+        // The category id (and repository id) come from the state query:
+        // one lookup, then the create mutation.
+        let data = self
+            .graphql(
+                GHSYNC_DISCUSSIONS_QUERY,
+                serde_json::json!({ "owner": self.org, "name": repo }),
+            )
+            .await?;
+        let url = path_graphql(&self.api);
+        let repository_id = data
+            .pointer("/repository/id")
+            .and_then(|i| i.as_str())
+            .ok_or_else(|| GitHubError::Graphql {
+                url: url.clone(),
+                message: format!("repository id missing for {repo}"),
+            })?;
+        let category_id = data
+            .pointer("/repository/discussionCategories/nodes")
+            .and_then(|n| n.as_array())
+            .and_then(|nodes| {
+                nodes
+                    .iter()
+                    .find(|c| c.get("name").and_then(|n| n.as_str()) == Some(category))
+                    .and_then(|c| c.get("id").and_then(|i| i.as_str()))
+            })
+            .ok_or_else(|| GitHubError::Graphql {
+                url: url.clone(),
+                message: format!(
+                    "discussion category `{category}` not found in {repo}; run `ghsync setup`"
+                ),
+            })?;
+        let data = self
+            .graphql(
+                GHSYNC_CREATE_DISCUSSION_MUTATION,
+                serde_json::json!({
+                    "repositoryId": repository_id,
+                    "categoryId": category_id,
+                    "title": title,
+                    "body": body,
+                }),
+            )
+            .await?;
+        let d = data
+            .pointer("/addDiscussion/discussion")
+            .ok_or_else(|| GitHubError::Graphql {
+                url: url.clone(),
+                message: "addDiscussion returned no discussion".into(),
+            })?;
+        Ok(Discussion {
+            id: d
+                .get("id")
+                .and_then(|i| i.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            number: d.get("number").and_then(|n| n.as_u64()).unwrap_or(0) as u32,
+            title: d
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            body: body.to_string(),
+            labels: Vec::new(),
+            comments: Vec::new(),
+        })
+    }
+
+    async fn discussion_comment(
+        &mut self,
+        _repo: &str,
+        discussion_id: &str,
+        body: &str,
+    ) -> Result<(), GitHubError> {
+        self.graphql(
+            GHSYNC_DISCUSSION_COMMENT_MUTATION,
+            serde_json::json!({
+                "discussionId": discussion_id,
+                "body": body,
+            }),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn remove_discussion_label(
+        &mut self,
+        _repo: &str,
+        discussion_id: &str,
+        label_id: &str,
+    ) -> Result<(), GitHubError> {
+        self.graphql(
+            GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION,
+            serde_json::json!({
+                "discussionId": discussion_id,
+                "labelId": label_id,
+            }),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn discussion_labels_supported(&mut self, repo: &str) -> Result<bool, GitHubError> {
+        // 404 = discussions (or labels) disabled; anything else succeeds
+        // only with a real 2xx.
+        let url = format!("{}{}", self.api, path_discussion_labels(&self.org, repo));
+        let resp = self
+            .client
+            .get(&url)
+            .headers(self.authed())
+            .send()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        let status = resp.status();
+        if status.as_u16() == 404 {
+            return Ok(false);
+        }
+        if !status.is_success() {
+            let message = resp
+                .text()
+                .await
+                .map_err(|e| GitHubError::Io(e.to_string()))?;
+            return Err(GitHubError::Http {
+                status: status.as_u16(),
+                url,
+                message,
+            });
+        }
+        Ok(true)
+    }
 }
 
 #[cfg(test)]
@@ -1159,6 +1476,42 @@ mod tests {
         );
         assert!(GHSYNC_CREATE_CATEGORY_MUTATION.contains(
             "addDiscussionCategory(input: {repositoryId: $repositoryId, categoryId: OTHER})"
+        ));
+
+        assert!(GHSYNC_DISCUSSION_LIST_QUERY.contains(
+            "query GhsyncDiscussionList($owner: String!, $name: String!, $category: String, $label: String)"
+        ));
+        assert!(
+            GHSYNC_DISCUSSION_LIST_QUERY
+                .contains("discussions(first: 100, category: $category, label: $label)")
+        );
+        assert!(GHSYNC_DISCUSSION_LIST_QUERY.contains("labels(first: 20) {"));
+        assert!(GHSYNC_DISCUSSION_LIST_QUERY.contains("comments(first: 100) {"));
+
+        assert!(GHSYNC_CREATE_DISCUSSION_MUTATION.contains(
+            "mutation GhsyncCreateDiscussion($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!)"
+        ));
+        assert!(GHSYNC_CREATE_DISCUSSION_MUTATION.contains(
+            "addDiscussion(input: {repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body})"
+        ));
+
+        assert!(
+            GHSYNC_DISCUSSION_COMMENT_MUTATION
+                .contains("mutation GhsyncDiscussionComment($discussionId: ID!, $body: String!)")
+        );
+        assert!(
+            GHSYNC_DISCUSSION_COMMENT_MUTATION.contains(
+                "addDiscussionComment(input: {discussionId: $discussionId, body: $body})"
+            )
+        );
+
+        assert!(
+            GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION.contains(
+                "mutation GhsyncRemoveDiscussionLabel($discussionId: ID!, $labelId: ID!)"
+            )
+        );
+        assert!(GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION.contains(
+            "removeDiscussionLabel(input: {discussionId: $discussionId, labelId: $labelId})"
         ));
     }
 }

@@ -32,6 +32,7 @@ fn config_with(profiles: &[&str]) -> Config {
         repos: vec![RepoConfig {
             name: "foodshare-tools".into(),
             default_milestone: "Rust + TypeScript".into(),
+            ..Default::default()
         }],
         profiles: profiles.iter().map(|s| s.to_string()).collect(),
         ..Config::default()

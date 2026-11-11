@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::github::{CheckRun, Comment, GitHub, GitHubError, Issue, Milestone, Pull};
+use crate::github::{CheckRun, Comment, Discussion, GitHub, GitHubError, Issue, Milestone, Pull};
 use crate::kanban::{Card, CardView, Kanban, KanbanError, links_from_comments};
 
 /// In-memory kanban board.
@@ -210,10 +210,23 @@ pub struct FakeGitHub {
     pub pulls: HashMap<(String, u32), Pull>,
     /// Check runs keyed by commit sha.
     pub check_runs: HashMap<String, Vec<CheckRun>>,
+    /// Discussions per repo.
+    pub discussions: HashMap<String, Vec<Discussion>>,
+    /// Recorded discussion creations: (repo, category, title), in order.
+    pub created_discussions: Vec<(String, String, String)>,
+    /// Recorded discussion comments: (discussion_id, body), in order.
+    pub discussion_comments: Vec<(String, String)>,
+    /// Recorded label removals: (repo, discussion_id, label_id), in order.
+    pub removed_labels: Vec<(String, String, String)>,
+    /// Discussion-label support per repo (the probe setup records).
+    pub discussion_labels_supported: HashMap<String, bool>,
     next_issue_number: u32,
     next_milestone_number: u32,
     next_item_id: u32,
     next_comment_id: u64,
+    next_discussion_number: u32,
+    /// Category per discussion id (set by `create_discussion`).
+    discussion_categories: HashMap<String, String>,
 }
 
 type Key = (String, u32);
@@ -469,6 +482,100 @@ impl GitHub for FakeGitHub {
 
     async fn check_runs(&mut self, _repo: &str, sha: &str) -> Result<Vec<CheckRun>, GitHubError> {
         Ok(self.check_runs.get(sha).cloned().unwrap_or_default())
+    }
+
+    async fn list_discussions(
+        &mut self,
+        repo: &str,
+        category: Option<&str>,
+        label: Option<&str>,
+    ) -> Result<Vec<Discussion>, GitHubError> {
+        let mut out: Vec<Discussion> = self.discussions.get(repo).cloned().unwrap_or_default();
+        if let Some(label) = label {
+            out.retain(|d| d.labels.iter().any(|l| l.name == label));
+        }
+        if let Some(category) = category {
+            out.retain(|d| {
+                self.discussion_categories
+                    .get(&d.id)
+                    .map(|c| c == category)
+                    .unwrap_or(false)
+            });
+        }
+        out.sort_by_key(|d| d.number);
+        Ok(out)
+    }
+
+    async fn create_discussion(
+        &mut self,
+        repo: &str,
+        category: &str,
+        title: &str,
+        body: &str,
+    ) -> Result<Discussion, GitHubError> {
+        self.next_discussion_number += 1;
+        let number = self.next_discussion_number;
+        let id = format!("D{number}");
+        self.created_discussions
+            .push((repo.to_string(), category.to_string(), title.to_string()));
+        self.discussion_categories
+            .insert(id.clone(), category.to_string());
+        let d = Discussion {
+            id: id.clone(),
+            number,
+            title: title.to_string(),
+            body: body.to_string(),
+            labels: Vec::new(),
+            comments: Vec::new(),
+        };
+        self.discussions
+            .entry(repo.to_string())
+            .or_default()
+            .push(d.clone());
+        Ok(d)
+    }
+
+    async fn discussion_comment(
+        &mut self,
+        _repo: &str,
+        discussion_id: &str,
+        body: &str,
+    ) -> Result<(), GitHubError> {
+        self.discussion_comments
+            .push((discussion_id.to_string(), body.to_string()));
+        for ds in self.discussions.values_mut() {
+            if let Some(d) = ds.iter_mut().find(|d| d.id == discussion_id) {
+                d.comments.push(body.to_string());
+            }
+        }
+        Ok(())
+    }
+
+    async fn remove_discussion_label(
+        &mut self,
+        repo: &str,
+        discussion_id: &str,
+        label_id: &str,
+    ) -> Result<(), GitHubError> {
+        self.removed_labels.push((
+            repo.to_string(),
+            discussion_id.to_string(),
+            label_id.to_string(),
+        ));
+        if let Some(ds) = self.discussions.get_mut(repo)
+            && let Some(d) = ds.iter_mut().find(|d| d.id == discussion_id)
+        {
+            d.labels.retain(|l| l.id != label_id);
+        }
+        Ok(())
+    }
+
+    async fn discussion_labels_supported(&mut self, repo: &str) -> Result<bool, GitHubError> {
+        Ok(self
+            .discussion_labels_supported
+            .get(repo)
+            .copied()
+            .unwrap_or(false))
     }
 
     async fn issues_labeled(&mut self, repo: &str, label: &str) -> Result<Vec<Issue>, GitHubError> {

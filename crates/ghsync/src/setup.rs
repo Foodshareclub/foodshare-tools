@@ -72,6 +72,9 @@ pub struct SetupReport {
     pub milestones_created: Vec<(String, u32)>,
     /// (repo, human-readable state line) per repo, in config order.
     pub discussions: Vec<(String, String)>,
+    /// (repo, discussions enabled, labels supported) per repo, in config
+    /// order — written back into the config by the CLI.
+    pub discussion_flags: Vec<(String, bool, bool)>,
     /// Names of the views created this run.
     pub views_created: Vec<String>,
 }
@@ -256,6 +259,9 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
                 repo.name.clone(),
                 "disabled — discussion intake inert".into(),
             ));
+            report
+                .discussion_flags
+                .push((repo.name.clone(), false, false));
             continue;
         }
         let repo_id = data
@@ -299,6 +305,12 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
                 format!("enabled — {HANDOFFS_CATEGORY} created"),
             ));
         }
+        // Probe label support (404 = disabled) and record the flags; the
+        // feed/intake steps gate on them.
+        let labels_ok = gh.discussion_labels_supported(&repo.name).await?;
+        report
+            .discussion_flags
+            .push((repo.name.clone(), true, labels_ok));
     }
 
     // 7. Project grid views.
@@ -403,5 +415,11 @@ pub fn apply_report_to_config(cfg: &mut Config, report: &SetupReport) {
         p.phase_field = report.phase_field.clone();
         p.status_option_ids = report.status_option_ids.clone();
         p.phase_option_ids = report.phase_option_ids.clone();
+    }
+    for (repo, enabled, labels) in &report.discussion_flags {
+        if let Some(r) = cfg.repos.iter_mut().find(|r| &r.name == repo) {
+            r.discussions_enabled = *enabled;
+            r.discussion_labels_enabled = *labels;
+        }
     }
 }
