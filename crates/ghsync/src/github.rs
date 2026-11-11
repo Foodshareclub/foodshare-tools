@@ -570,6 +570,14 @@ impl RealGitHub {
                 .parse()
                 .expect("ascii token"),
         );
+        // GitHub rejects REST requests without a User-Agent (403
+        // "administrative rules"); reqwest sends none by default.
+        h.insert(
+            reqwest::header::USER_AGENT,
+            format!("ghsync/{}", env!("CARGO_PKG_VERSION"))
+                .parse()
+                .expect("ascii version"),
+        );
         h.insert(
             reqwest::header::ACCEPT,
             "application/vnd.github+json".parse().expect("static"),
@@ -1370,6 +1378,25 @@ impl GitHub for RealGitHub {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GitHub 403s REST calls without a User-Agent; pin the header so a
+    /// regression fails CI, not the live run.
+    #[test]
+    fn authed_headers_carry_user_agent() {
+        let gh = RealGitHub::new("https://api.github.com", "Foodshareclub", "tok");
+        let h = gh.authed();
+        let ua = h
+            .get(reqwest::header::USER_AGENT)
+            .expect("User-Agent present")
+            .to_str()
+            .unwrap();
+        assert!(
+            ua.starts_with("ghsync/"),
+            "User-Agent must identify ghsync: {ua}"
+        );
+        assert!(h.get(reqwest::header::AUTHORIZATION).is_some());
+        assert!(h.get(reqwest::header::ACCEPT).is_some());
+    }
 
     /// The Project v2 strings are the contract with the live API; pin the
     /// load-bearing parts so any drift fails CI, not the live run.
