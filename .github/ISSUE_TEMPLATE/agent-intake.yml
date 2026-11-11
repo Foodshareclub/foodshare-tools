@@ -1,0 +1,15 @@
+name: Agent intake
+about: File work for the Hermes Kanban agent loop
+title: "[intake] "
+labels: [intake]
+body:
+  - type: dropdown
+    id: phase
+    attributes: { label: Phase, options: [Ad-hoc, P1, P2, P3, P4, P5, P6] }
+  - type: dropdown
+    id: profile
+    attributes: { label: Agent profile, options: [default, architect, reviewer, security, verifier] }
+  - type: textarea
+    id: acceptance
+    attributes: { label: Acceptance criteria, description: "Command + expected output, or a link", render: markdown }
+    validations: { required: true }
