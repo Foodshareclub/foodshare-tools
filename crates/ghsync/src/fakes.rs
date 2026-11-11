@@ -131,6 +131,12 @@ impl Kanban for FakeKanban {
             .find_mut(task_id)
             .ok_or_else(|| KanbanError::NotFound(task_id.to_string(), "fake".to_string()))?;
         card.status = "blocked".into();
+        // The CLI appends the reason as a comment; the fake mirrors that,
+        // because push's unblock detection reads it back.
+        self.comments
+            .entry(task_id.to_string())
+            .or_default()
+            .push(reason.to_string());
         self.blocked
             .push((task_id.to_string(), kind.to_string(), reason.to_string()));
         Ok(())
@@ -169,6 +175,10 @@ pub struct FakeGitHub {
     pub labels_set: HashMap<(String, u32), Vec<String>>,
     /// Recorded posted comments: (repo, issue, body), in order.
     pub comments_posted: Vec<(String, u32, String)>,
+    /// Recorded `close_issue` calls: (repo, issue), in order.
+    pub closed_calls: Vec<(String, u32)>,
+    /// Recorded `set_issue_body` calls: (repo, issue) -> body.
+    pub bodies_set: HashMap<(String, u32), String>,
     /// GraphQL calls in order: (query, variables).
     pub graphql_calls: Vec<(String, serde_json::Value)>,
     /// Queued GraphQL responses, popped one per call.
@@ -203,6 +213,7 @@ impl GitHub for FakeGitHub {
             body: body.to_string(),
             state: "open".into(),
             labels: labels.to_vec(),
+            milestone: None,
             url: format!(
                 "https://github.com/fakeorg/{repo}/issues/{}",
                 self.next_issue_number
@@ -266,6 +277,13 @@ impl GitHub for FakeGitHub {
         milestone: u32,
     ) -> Result<(), GitHubError> {
         self.milestone_set.insert(self.key(repo, number), milestone);
+        if let Some(issue) = self.issues.get_mut(&self.key(repo, number)) {
+            issue.milestone = self
+                .milestones
+                .get(repo)
+                .and_then(|ms| ms.iter().find(|m| m.number == milestone))
+                .map(|m| m.title.clone());
+        }
         Ok(())
     }
 
@@ -287,6 +305,21 @@ impl GitHub for FakeGitHub {
         if let Some(issue) = self.issues.get_mut(&self.key(repo, number)) {
             issue.state = "closed".into();
         }
+        self.closed_calls.push((repo.to_string(), number));
+        Ok(())
+    }
+
+    async fn set_issue_body(
+        &mut self,
+        repo: &str,
+        number: u32,
+        body: &str,
+    ) -> Result<(), GitHubError> {
+        if let Some(issue) = self.issues.get_mut(&self.key(repo, number)) {
+            issue.body = body.to_string();
+        }
+        self.bodies_set
+            .insert(self.key(repo, number), body.to_string());
         Ok(())
     }
 

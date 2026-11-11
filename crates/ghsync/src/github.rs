@@ -22,6 +22,8 @@ pub struct Issue {
     /// `open` or `closed`.
     pub state: String,
     pub labels: Vec<String>,
+    /// The milestone title, if one is set.
+    pub milestone: Option<String>,
     pub url: String,
 }
 
@@ -102,6 +104,14 @@ pub trait GitHub: Send + Sync {
     ) -> Result<(), GitHubError>;
     /// Close an issue (never reopen).
     async fn close_issue(&mut self, repo: &str, number: u32) -> Result<(), GitHubError>;
+    /// Replace the issue body (e.g. re-appending a link footer a human
+    /// stripped).
+    async fn set_issue_body(
+        &mut self,
+        repo: &str,
+        number: u32,
+        body: &str,
+    ) -> Result<(), GitHubError>;
     /// All issues (open and closed) in `repo` carrying `label`, excluding
     /// pull requests.
     async fn issues_labeled(&mut self, repo: &str, label: &str) -> Result<Vec<Issue>, GitHubError>;
@@ -246,6 +256,10 @@ impl RealGitHub {
                         .collect()
                 })
                 .unwrap_or_default(),
+            milestone: v
+                .pointer("/milestone/title")
+                .and_then(|t| t.as_str())
+                .map(str::to_string),
             url: v
                 .get("url")
                 .and_then(|u| u.as_str())
@@ -433,6 +447,21 @@ impl GitHub for RealGitHub {
             reqwest::Method::PATCH,
             &path_issue(&self.org, repo, number),
             Some(serde_json::json!({ "state": "closed" })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn set_issue_body(
+        &mut self,
+        repo: &str,
+        number: u32,
+        body: &str,
+    ) -> Result<(), GitHubError> {
+        self.rest(
+            reqwest::Method::PATCH,
+            &path_issue(&self.org, repo, number),
+            Some(serde_json::json!({ "body": body })),
         )
         .await?;
         Ok(())

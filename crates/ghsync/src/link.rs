@@ -11,7 +11,7 @@ use anyhow::Result;
 
 use crate::config::{GHSYNC_LABEL, parse_card_link};
 use crate::github::GitHub;
-use crate::kanban::{Card, Kanban, LinkedIssue};
+use crate::kanban::{Card, CardView, Kanban, LinkedIssue};
 
 /// The card↔issue map, in both directions.
 #[derive(Debug, Clone, Default)]
@@ -73,34 +73,38 @@ fn push_unique_issue(slot: &mut Vec<LinkedIssue>, value: LinkedIssue) {
     }
 }
 
-/// Re-derive the link map from both sides.
+/// Re-derive the link map from pre-fetched card views (the core).
 ///
 /// Card side: each card's comments are scanned for `ghsync owner/repo#n`
 /// lines. Issue side: every `ghsync`-labeled issue in every configured
 /// repo is scanned for `kanban:<board>:<task-id>` footers; footers
 /// pointing at cards that do not exist on this board are ignored (stale).
-pub async fn resolve_links(
-    kb: &mut impl Kanban,
+pub async fn resolve_links_views(
     gh: &mut impl GitHub,
     board: &str,
     org: &str,
     repos: &[String],
-    cards: &[Card],
+    views: &[CardView],
 ) -> Result<LinkMap> {
     let mut by_card: BTreeMap<String, Vec<LinkedIssue>> = BTreeMap::new();
     let mut by_issue: BTreeMap<LinkedIssue, Vec<String>> = BTreeMap::new();
 
     // Card side: the card's own link comments.
-    for card in cards {
-        let view = kb.show(&card.id).await?;
+    for view in views {
         for link in &view.card.links {
-            push_unique_issue(by_card.entry(card.id.clone()).or_default(), link.clone());
-            push_unique(by_issue.entry(link.clone()).or_default(), card.id.clone());
+            push_unique_issue(
+                by_card.entry(view.card.id.clone()).or_default(),
+                link.clone(),
+            );
+            push_unique(
+                by_issue.entry(link.clone()).or_default(),
+                view.card.id.clone(),
+            );
         }
     }
 
     // Issue side: the footers on ghsync-labeled issues.
-    let card_ids: BTreeSet<&str> = cards.iter().map(|c| c.id.as_str()).collect();
+    let card_ids: BTreeSet<&str> = views.iter().map(|v| v.card.id.as_str()).collect();
     for repo in repos {
         let issues = gh.issues_labeled(repo, GHSYNC_LABEL).await?;
         for iss in issues {
@@ -124,6 +128,22 @@ pub async fn resolve_links(
     }
 
     Ok(LinkMap { by_card, by_issue })
+}
+
+/// Re-derive the link map from both sides, fetching each card's view.
+pub async fn resolve_links(
+    kb: &mut impl Kanban,
+    gh: &mut impl GitHub,
+    board: &str,
+    org: &str,
+    repos: &[String],
+    cards: &[Card],
+) -> Result<LinkMap> {
+    let mut views = Vec::with_capacity(cards.len());
+    for card in cards {
+        views.push(kb.show(&card.id).await?);
+    }
+    resolve_links_views(gh, board, org, repos, &views).await
 }
 
 #[cfg(test)]

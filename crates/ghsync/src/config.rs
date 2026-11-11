@@ -15,6 +15,9 @@ use thiserror::Error;
 #[serde(rename_all = "kebab-case")]
 pub enum Status {
     Todo,
+    /// A card in the triage column (unspecified; a specifier fleshes it
+    /// out). Projects as Backlog; it is not work in flight.
+    Triage,
     Ready,
     Running,
     Blocked,
@@ -32,6 +35,7 @@ impl Status {
     pub fn from_kanban(raw: &str) -> Option<Self> {
         Some(match raw {
             "todo" => Self::Todo,
+            "triage" => Self::Triage,
             "ready" => Self::Ready,
             "running" => Self::Running,
             "blocked" => Self::Blocked,
@@ -46,7 +50,7 @@ impl Status {
     /// The Project v2 `Status` option for this status.
     pub fn project_status(self) -> &'static str {
         match self {
-            Self::Todo | Self::Ready | Self::Scheduled => "Backlog",
+            Self::Todo | Self::Triage | Self::Ready | Self::Scheduled => "Backlog",
             Self::Running | Self::Review => "In progress",
             Self::Blocked => "Blocked",
             Self::Done | Self::Archived => "Done",

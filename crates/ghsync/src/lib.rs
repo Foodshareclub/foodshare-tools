@@ -25,3 +25,4 @@ pub mod fakes;
 pub mod github;
 pub mod kanban;
 pub mod link;
+pub mod push;

@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 
+use crate::kanban::Kanban;
+
 /// Keep the Foodshareclub GitHub org in step with the Hermes Kanban board.
 ///
 /// Kanban is the single source of state; GitHub is projection, intake,
@@ -77,7 +79,49 @@ pub async fn run(args: Vec<String>) -> Result<()> {
     match cli.command {
         Command::Setup => bail!("setup: not implemented yet"),
         Command::Push { dry_run } => {
-            println!("push {dry_run}");
+            let cfg = crate::config::Config::load(&cli.config_path())?;
+            let token = cfg.token.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no token configured; set it in {}",
+                    cli.config_path().display()
+                )
+            })?;
+            let mut kb = crate::kanban::RealKanban::new(&cfg.board);
+            let mut gh = crate::github::RealGitHub::new(&cfg.api, &cfg.org, &token);
+            let cards = kb.list().await?;
+            let mut views = Vec::with_capacity(cards.len());
+            for card in &cards {
+                views.push(kb.show(&card.id).await?);
+            }
+            let repos: Vec<String> = cfg.repos.iter().map(|r| r.name.clone()).collect();
+            let links =
+                crate::link::resolve_links_views(&mut gh, &cfg.board, &cfg.org, &repos, &views)
+                    .await?;
+            let report =
+                crate::push::push_issues(&mut kb, &mut gh, &cfg, &views, &links, dry_run).await?;
+            for id in &report.would_create {
+                println!("would create issue for {id}");
+            }
+            for id in &report.created {
+                println!("created issue for {id}");
+            }
+            for g in &report.gestures {
+                println!("{}: {} ({})", g.action, g.card, g.detail);
+            }
+            for d in &report.drift {
+                println!("drift {}: {} ({})", d.kind, d.card, d.detail);
+            }
+            for (id, why) in &report.skipped {
+                println!("skipped {id}: {why}");
+            }
+            println!(
+                "push: {} created, {} verified, {} gestured, {} drift, {} skipped",
+                report.created.len(),
+                report.verified.len(),
+                report.gestures.len(),
+                report.drift.len(),
+                report.skipped.len()
+            );
             Ok(())
         }
         Command::Intake { dry_run } => bail!("intake {dry_run}: not implemented yet"),

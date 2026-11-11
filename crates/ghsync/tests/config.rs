@@ -189,3 +189,17 @@ fn load_rejects_unknown_fields() {
         "unexpected: {err}"
     );
 }
+
+#[test]
+fn triage_status_maps_to_backlog_and_open_issue() {
+    // Triage is a kanban-only column (cards in triage..done are projected).
+    use ghsync::config::IssueState;
+    assert!(matches!(
+        Status::from_kanban("triage"),
+        Some(Status::Triage)
+    ));
+    assert_eq!(Status::Triage.project_status(), "Backlog");
+    assert_eq!(Status::Triage.issue_state(), IssueState::Open);
+    // The triage column has no phase of its own.
+    assert_eq!(phase_from_card(Status::Triage, Some("default")), "backlog");
+}
