@@ -1,0 +1,22 @@
+name: Announcements
+id: announcements
+description: Share news and updates about FoodShare foodshare-tools
+title: "[Announcement] "
+labels:
+  - announcement
+body:
+  - type: textarea
+    id: announcement
+    attributes:
+      label: Announcement
+      description: What is new?
+      placeholder: A short summary of the change or news.
+    validations:
+      required: true
+  - type: input
+    id: affected
+    attributes:
+      label: Affected platforms
+      description: Which platforms are affected? (web / iOS / Android / backend / all)
+    validations:
+      required: false

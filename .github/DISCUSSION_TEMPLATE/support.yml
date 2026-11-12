@@ -1,0 +1,28 @@
+name: Support
+id: support
+description: Report a problem you are running into with FoodShare foodshare-tools
+title: "[Support] "
+labels:
+  - "help wanted"
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what happens instead?
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: web / iOS / Android / self-hosted
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: App or web version, if relevant
+    validations:
+      required: false

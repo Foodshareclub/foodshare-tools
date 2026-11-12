@@ -1,0 +1,21 @@
+name: Ideas
+id: ideas
+description: Propose an idea or improvement for FoodShare foodshare-tools
+title: "[Idea] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What should be different or added?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What problem does it solve, and for whom?
+    validations:
+      required: false

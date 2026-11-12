@@ -1,0 +1,21 @@
+name: Q&A
+id: q-and-a
+description: Ask a question about FoodShare foodshare-tools
+title: "[Q] "
+labels:
+  - question
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What were you doing, what did you expect, what happened?
+    validations:
+      required: false
