@@ -1,0 +1,8 @@
+blank_issue: true
+contact_links:
+  - name: Feature ideas
+    url: https://github.com/Foodshareclub/foodshare-tools/discussions
+    about: Brainstorm ideas for foodshare-tools.
+  - name: Handoffs (agent feed)
+    url: https://github.com/Foodshareclub/foodshare-tools/discussions/categories/handoffs
+    about: Review verdicts and agent handoffs are posted here automatically by ghsync.
