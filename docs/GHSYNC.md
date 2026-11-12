@@ -13,7 +13,7 @@ channel — one role per surface, never a second state.
 | Intake form (`agent-intake.yml`) | Intake   | GH → kanban  | A submitted form is an `intake`-labeled issue; `intake` turns it into exactly one card.        |
 | Discussions (labeled)     | Intake    | GH → kanban  | A discussion labeled `intake` becomes one card; the label is removed.                          |
 | Org Project v2 board      | Projection | kanban → GH  | Status / Assignee / Phase fields per linked issue, written only when the value changes.        |
-| Handoffs discussions      | Feed      | kanban → GH  | Review verdicts and escalations post to the repo's `Handoffs` category, one discussion per card. |
+| Feed discussions          | Feed      | kanban → GH  | Review verdicts and escalations post to the repo's feed category (`feed_category`, default `General`), one discussion per card. |
 | Merged-PR comments        | Evidence  | GH → GH      | A merged PR referenced by a card leaves exactly one `PR #n merged - CI: …` comment on the linked issue. |
 
 ## Commands
@@ -26,9 +26,13 @@ ghsync status [--json]            # read-only drift table across every surface
 ```
 
 `setup` discovers the project id and single-select option ids and
-writes them back into the config. `push` runs the projection, the PR
-evidence, and the feed in that order; a dry run plans without writing
-and without moving the cursor.
+writes them back into the config. It also verifies that each
+discussions-enabled repo's configured `feed_category` exists among the
+repo's pre-existing categories — discussion categories cannot be
+created via the GitHub API — and fails loudly with the available list
+when it does not. `push` runs the projection, the PR evidence, and the
+feed in that order; a dry run plans without writing and without moving
+the cursor.
 
 ## Conventions
 
@@ -62,7 +66,7 @@ and without moving the cursor.
   honors.
 - **Discussion state** (comments, categories, labels other than
   `intake`) is not mirrored either way; ghsync only creates/appends in
-  `Handoffs` and reads the `intake` label.
+  the repo's feed category and reads the `intake` label.
 - **PR actions** (merge, approve, review) are never performed by
   ghsync. A merge only produces an evidence comment; it never
   completes or blocks the card.
@@ -79,9 +83,10 @@ and without moving the cursor.
 A card comment prefixed `sync:github ` carries a review verdict
 (`sync:github approve`, `sync:github request-changes`); a block
 reason prefixed `escalation:` is an escalation. `push` mirrors each
-to a `Handoffs` discussion titled `[<verdict>] <card title>`, and
-appends to the same discussion on later runs — never a second one.
-The card reference line in the discussion body
+to a discussion in the repo's feed category (config `feed_category`,
+default `General`) titled `[<verdict>] <card title>`, and appends to
+the same discussion on later runs — never a second one. The card
+reference line in the discussion body
 (`Card: kanban:<board>:<id>`) is what re-derives the link.
 
 ## Cadence and operations
@@ -103,6 +108,9 @@ The card reference line in the discussion body
   (the default until `setup` records otherwise) skips the feed and
   the discussion intake for that repo, and the skip is logged.
   `discussion_labels_enabled = false` skips discussion intake only.
+  `feed_category` (default `General`) names the pre-existing category
+  the feed posts into; `setup` verifies it and names the available
+  categories when it is missing.
 
 ## Token
 

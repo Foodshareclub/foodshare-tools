@@ -31,24 +31,30 @@ profiles = [
   "verifier",
 ]
 
-# Repos ghsync manages. The two `discussions_*` flags are written by
+# Repos ghsync manage. The two `discussions_*` flags are written by
 # `ghsync setup`; absent (or false) means the feed and discussion
-# intake skip the repo and log the skip.
+# intake skip the repo and log the skip. `feed_category` (default
+# "General") names a PRE-EXISTING discussion category the feed posts
+# into — categories cannot be created via the API, and `setup` fails
+# loudly with the available list if the configured one is missing.
+# `default_milestone` is the org-wide monthly readiness milestone
+# (month-bound: the operator re-points it when the month rolls).
 [[repos]]
 name = "foodshare-app"
-default_milestone = "Next.js 16 + Bun 1.4.4"
+default_milestone = "Prod Readiness — 2026-11"
 
 [[repos]]
 name = "foodshare-backend"
-default_milestone = "Rust"
+default_milestone = "Prod Readiness — 2026-11"
 
 [[repos]]
 name = "foodshare-web"
-default_milestone = "Next.js 16 + Bun 1.4.4"
+default_milestone = "Prod Readiness — 2026-11"
+feed_category = "General"
 
 [[repos]]
 name = "foodshare-tools"
-default_milestone = "Rust + TypeScript"
+default_milestone = "Prod Readiness — 2026-11"
 
 [project]
 # Org Project v2 board (title: "Foodshare Board").
@@ -72,10 +78,15 @@ phase_field = "Phase"
 "In progress" = "in-progress"
 "Done" = "done"
 
-# Project option label -> agent profile.
+# Project option label -> agent profile. Covers the board's agent
+# profiles + human, so no assignee write is skipped for an unmapped
+# profile (an unmapped one surfaces as unknown-assignee drift).
 [project.assignee_options]
 "agent-default" = "default"
+"agent-architect" = "architect"
+"agent-reviewer" = "reviewer"
 "agent-security" = "security"
+"agent-verifier" = "verifier"
 "human" = "human"
 
 # Written back by `ghsync setup`; empty until it has run.
