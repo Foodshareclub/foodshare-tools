@@ -177,7 +177,7 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
                 )
                 .await?;
             report.project_created = true;
-            data.pointer("/createProjectV2/project/id")
+            data.pointer("/createProjectV2/projectV2/id")
                 .and_then(|v| v.as_str())
                 .map(str::to_string)
                 .ok_or_else(|| {

@@ -338,7 +338,7 @@ pub const GHSYNC_LIST_PROJECTS_QUERY: &str = r#"query GhsyncListProjects($org: S
 /// Create the org project (org-wide content).
 pub const GHSYNC_CREATE_PROJECT_MUTATION: &str = r#"mutation GhsyncCreateProject($input: CreateProjectV2Input!) {
   createProjectV2(input: $input) {
-    project {
+    projectV2 {
       id
       title
     }
@@ -1470,7 +1470,11 @@ mod tests {
             GHSYNC_CREATE_PROJECT_MUTATION
                 .contains("mutation GhsyncCreateProject($input: CreateProjectV2Input!)")
         );
-        assert!(GHSYNC_CREATE_PROJECT_MUTATION.contains("createProjectV2(input: $input)"));
+        // The payload field is `projectV2` (live-verified 2026-11-12:
+        // `Field 'project' doesn't exist on type 'CreateProjectV2Payload'`).
+        assert!(GHSYNC_CREATE_PROJECT_MUTATION.contains(
+            "createProjectV2(input: $input) {\n    projectV2 {\n      id\n      title\n    }"
+        ));
 
         assert!(GHSYNC_FIELDS_QUERY.contains("query GhsyncProjectFields($projectId: ID!)"));
         assert!(GHSYNC_FIELDS_QUERY.contains("fields(first: 100)"));

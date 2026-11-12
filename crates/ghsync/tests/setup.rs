@@ -42,7 +42,7 @@ fn fresh_org_responses() -> Vec<serde_json::Value> {
             }
         }),
         serde_json::json!({
-            "createProjectV2": { "project": { "id": "PV1_fake", "title": "Foodshare Board" } }
+            "createProjectV2": { "projectV2": { "id": "PV1_fake", "title": "Foodshare Board" } }
         }),
         serde_json::json!({ "node": { "fields": { "nodes": [] } } }),
         serde_json::json!({ "createProjectV2Field": { "field": { "id": "F_status" } } }),
