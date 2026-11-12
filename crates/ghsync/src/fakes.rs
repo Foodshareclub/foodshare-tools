@@ -200,12 +200,9 @@ pub struct FakeGitHub {
     pub labels: HashMap<String, Vec<String>>,
     /// Recorded label creations: (repo, name), in order.
     pub created_labels: Vec<(String, String)>,
-    /// Discussion state per repo: (enabled, category names).
+    /// Discussion state per repo: (enabled, category names). Serves both
+    /// the `has_discussions` probe and the discussion-state query.
     pub discussion_state: HashMap<String, (bool, Vec<String>)>,
-    /// Recorded category creations: repository id, in order.
-    pub created_categories: Vec<String>,
-    /// Recorded category renames: (repo, category_id, name), in order.
-    pub renamed_categories: Vec<(String, String, String)>,
     /// Pull requests: (repo, number) -> Pull.
     pub pulls: HashMap<(String, u32), Pull>,
     /// Check runs keyed by commit sha.
@@ -458,15 +455,12 @@ impl GitHub for FakeGitHub {
         Ok(())
     }
 
-    async fn rename_discussion_category(
-        &mut self,
-        repo: &str,
-        category_id: &str,
-        name: &str,
-    ) -> Result<(), GitHubError> {
-        self.renamed_categories
-            .push((repo.to_string(), category_id.to_string(), name.to_string()));
-        Ok(())
+    async fn has_discussions(&mut self, repo: &str) -> Result<bool, GitHubError> {
+        Ok(self
+            .discussion_state
+            .get(repo)
+            .map(|(enabled, _)| *enabled)
+            .unwrap_or(false))
     }
 
     async fn get_pull(&mut self, repo: &str, number: u32) -> Result<Pull, GitHubError> {
@@ -610,12 +604,29 @@ impl GitHub for FakeGitHub {
         query: &str,
         variables: serde_json::Value,
     ) -> Result<serde_json::Value, GitHubError> {
-        if let Some(id) = variables.get("repositoryId").and_then(|v| v.as_str())
-            && query.contains("GhsyncCreateCategory")
-        {
-            self.created_categories.push(id.to_string());
+        self.graphql_calls
+            .push((query.to_string(), variables.clone()));
+        // The discussion-state query is a probe, not a provisioning step:
+        // serve it from `discussion_state` instead of the queued responses
+        // (mirrors the REST `has_discussions` probe).
+        if query.contains("GhsyncDiscussions") {
+            let repo = variables.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            let (_, categories) = self
+                .discussion_state
+                .get(repo)
+                .cloned()
+                .unwrap_or((false, Vec::new()));
+            let nodes: Vec<serde_json::Value> = categories
+                .iter()
+                .map(|c| serde_json::json!({ "id": format!("C_{repo}_{c}"), "name": c }))
+                .collect();
+            return Ok(serde_json::json!({
+                "repository": {
+                    "id": format!("R_{repo}"),
+                    "discussionCategories": { "nodes": nodes }
+                }
+            }));
         }
-        self.graphql_calls.push((query.to_string(), variables));
         let v = self
             .graphql_responses
             .first()

@@ -189,17 +189,37 @@ pub fn parse_card_link(line: &str) -> Option<(String, String)> {
     Some((board.to_string(), task_id.to_string()))
 }
 
+/// The discussion category that receives ghsync feed posts when the repo
+/// does not configure one.
+pub const DEFAULT_FEED_CATEGORY: &str = "General";
+
 /// A repository ghsync manages.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepoConfig {
     pub name: String,
     pub default_milestone: String,
+    /// The discussion category that receives ghsync feed posts. One of
+    /// the repo's pre-existing categories (setup verifies); defaults to
+    /// `DEFAULT_FEED_CATEGORY`.
+    pub feed_category: String,
     /// Whether GitHub Discussions are enabled on this repo, as recorded
-    /// by `ghsync setup`. Gates the feed (kanban → Handoffs) side.
+    /// by `ghsync setup`. Gates the feed side.
     pub discussions_enabled: bool,
     /// Whether discussion labels are supported on this repo (probed by
     /// `ghsync setup`). Gates the discussion intake side.
     pub discussion_labels_enabled: bool,
+}
+
+impl Default for RepoConfig {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            default_milestone: String::new(),
+            feed_category: DEFAULT_FEED_CATEGORY.into(),
+            discussions_enabled: false,
+            discussion_labels_enabled: false,
+        }
+    }
 }
 
 /// The org Project v2 board.
@@ -260,27 +280,22 @@ impl Default for Config {
             repos: vec![
                 RepoConfig {
                     name: "foodshare-app".into(),
-                    default_milestone: "Next.js 16 + Bun 1.4.4".into(),
+                    default_milestone: "Prod Readiness — 2026-11".into(),
                     ..Default::default()
                 },
                 RepoConfig {
                     name: "foodshare-backend".into(),
-                    default_milestone: "Rust".into(),
+                    default_milestone: "Prod Readiness — 2026-11".into(),
                     ..Default::default()
                 },
                 RepoConfig {
                     name: "foodshare-web".into(),
-                    default_milestone: "Next.js 16 + Bun 1.4.4".into(),
+                    default_milestone: "Prod Readiness — 2026-11".into(),
                     ..Default::default()
                 },
                 RepoConfig {
                     name: "foodshare-tools".into(),
-                    default_milestone: "Rust + TypeScript".into(),
-                    ..Default::default()
-                },
-                RepoConfig {
-                    name: "catch-22".into(),
-                    default_milestone: "Next.js 16 + Bun 1.4.4".into(),
+                    default_milestone: "Prod Readiness — 2026-11".into(),
                     ..Default::default()
                 },
             ],
@@ -311,7 +326,10 @@ impl Default for Config {
                 .collect(),
                 assignee_options: [
                     ("agent-default", "default"),
+                    ("agent-architect", "architect"),
+                    ("agent-reviewer", "reviewer"),
                     ("agent-security", "security"),
+                    ("agent-verifier", "verifier"),
                     ("human", "human"),
                 ]
                 .into_iter()
@@ -395,6 +413,8 @@ struct RawRepo {
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     default_milestone: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    feed_category: Option<String>,
     #[serde(skip_serializing_if = "is_false")]
     discussions_enabled: bool,
     #[serde(skip_serializing_if = "is_false")]
@@ -442,6 +462,7 @@ impl From<&Config> for Raw {
                 .map(|r| RawRepo {
                     name: Some(r.name.clone()),
                     default_milestone: Some(r.default_milestone.clone()),
+                    feed_category: Some(r.feed_category.clone()),
                     discussions_enabled: r.discussions_enabled,
                     discussion_labels_enabled: r.discussion_labels_enabled,
                 })
@@ -524,6 +545,9 @@ impl Config {
                                 ConfigError::Parse("every repo entry needs a `name`".into())
                             })?,
                             default_milestone: r.default_milestone.unwrap_or_default(),
+                            feed_category: r
+                                .feed_category
+                                .unwrap_or_else(|| DEFAULT_FEED_CATEGORY.into()),
                             discussions_enabled: r.discussions_enabled,
                             discussion_labels_enabled: r.discussion_labels_enabled,
                         })
