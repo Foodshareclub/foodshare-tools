@@ -27,9 +27,10 @@ fn cfg_with(path: &Path) -> Config {
 /// The exact GraphQL responses a fresh-org setup receives, in call order:
 /// find project (none) → create project → list fields (none) → create
 /// Status + 4 options → create Assignee → create Phase + 3 options →
-/// discussions (none, enabled) → create category → list views (none) →
-/// create Board + Phases. The fake unwraps the `data` envelope, so each
-/// entry is the inner data object wrapped in it.
+/// list views (none) → create Board + Phases. The discussion state is NOT
+/// queued: the fake serves the category-list query from `discussion_state`
+/// (mirroring the REST `has_discussions` probe) and categories cannot be
+/// created via API, so nothing is provisioned there.
 fn fresh_org_responses() -> Vec<serde_json::Value> {
     let data = [
         serde_json::json!({
@@ -54,14 +55,6 @@ fn fresh_org_responses() -> Vec<serde_json::Value> {
         serde_json::json!({ "createProjectV2FieldSingleSelectOption": { "option": { "id": "ph_backlog", "name": "Backlog" } } }),
         serde_json::json!({ "createProjectV2FieldSingleSelectOption": { "option": { "id": "ph_done", "name": "Done" } } }),
         serde_json::json!({ "createProjectV2FieldSingleSelectOption": { "option": { "id": "ph_inprog", "name": "In progress" } } }),
-        serde_json::json!({
-            "repository": {
-                "id": "R_1",
-                "hasDiscussions": true,
-                "discussionCategories": { "nodes": [] }
-            }
-        }),
-        serde_json::json!({ "addDiscussionCategory": { "discussionCategory": { "id": "C_1", "name": "Other" } } }),
         serde_json::json!({ "node": { "views": { "nodes": [] } } }),
         serde_json::json!({ "createProjectV2View": { "view": { "id": "V_board" } } }),
         serde_json::json!({ "createProjectV2View": { "view": { "id": "V_phases" } } }),
@@ -78,6 +71,17 @@ async fn fresh_org_setup_provisions_everything_and_records_ids() {
     let mut cfg = cfg_with(&cfg_path);
     let mut gh = FakeGitHub::default();
     gh.graphql_responses = fresh_org_responses();
+    // Discussions are enabled on this repo, and the configured feed
+    // category (default "General") pre-exists. Categories cannot be
+    // created via API (live-verified): setup only verifies the feed
+    // category among the pre-existing ones.
+    gh.discussion_state.insert(
+        "foodshare-tools".to_string(),
+        (
+            true,
+            vec!["Announcements".into(), "General".into(), "Q&A".into()],
+        ),
+    );
     // Discussion labels are supported on this repo (the probe finds the
     // labels endpoint); setup records both flags.
     gh.discussion_labels_supported
@@ -130,14 +134,14 @@ async fn fresh_org_setup_provisions_everything_and_records_ids() {
         gh.milestones["foodshare-tools"][0].title,
         "Rust + TypeScript"
     );
-    // Handoffs category created and renamed.
-    assert_eq!(gh.created_categories, vec!["R_1".to_string()]);
+    // The feed category is verified, never created: categories cannot be
+    // created via API (live-verified), so setup only checks the
+    // configured one among the pre-existing ones.
     assert_eq!(
-        gh.renamed_categories,
+        report.discussions,
         vec![(
             "foodshare-tools".to_string(),
-            "C_1".to_string(),
-            "Handoffs".to_string()
+            "enabled — feed category General present".to_string()
         )]
     );
     // The per-repo discussion flags are recorded for the config.
@@ -177,8 +181,13 @@ async fn second_run_writes_nothing() {
     let cfg_path = dir.path().join("config.toml");
     let cfg = cfg_with(&cfg_path);
     // A fully provisioned org: project, all fields with options, both
-    // views, discussions with Handoffs, all labels, milestone present.
+    // views, discussions with the feed category, all labels, milestone
+    // present.
     let mut gh = FakeGitHub::default();
+    gh.discussion_state.insert(
+        "foodshare-tools".to_string(),
+        (true, vec!["General".into()]),
+    );
     gh.labels.insert(
         "foodshare-tools".to_string(),
         vec![
@@ -237,13 +246,6 @@ async fn second_run_writes_nothing() {
                 }
             }),
             serde_json::json!({
-                "repository": {
-                    "id": "R_1",
-                    "hasDiscussions": true,
-                    "discussionCategories": { "nodes": [{ "id": "C_1", "name": "Handoffs" }] }
-                }
-            }),
-            serde_json::json!({
                 "node": {
                     "views": {
                         "nodes": [
@@ -263,12 +265,12 @@ async fn second_run_writes_nothing() {
 
     assert!(!report.project_created);
     assert_eq!(report.project_id, "PV1_fake");
-    // Zero creates of any kind.
+    // Zero creates of any kind (no category creations possible: they
+    // cannot be created via API at all).
     assert!(gh.created_labels.is_empty());
-    assert!(gh.created_categories.is_empty());
-    assert!(gh.renamed_categories.is_empty());
     assert!(gh.milestones["foodshare-tools"].len() == 1);
-    // Only the four read calls: find project, fields, discussions, views.
+    // Only the four read calls: find project, fields, discussion
+    // categories (served by the state probe), views.
     let creates: Vec<&str> = gh
         .graphql_calls
         .iter()
@@ -287,6 +289,44 @@ async fn second_run_writes_nothing() {
         vec![("foodshare-tools".to_string(), true, false)]
     );
     let _ = &cfg_path;
+}
+
+#[tokio::test]
+async fn missing_feed_category_fails_loud_and_stops_before_views() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = cfg_with(&dir.path().join("config.toml"));
+    let mut gh = FakeGitHub::default();
+    gh.graphql_responses = fresh_org_responses();
+    // Discussions enabled, but the configured feed category (the default
+    // "General") is not among the pre-existing categories.
+    gh.discussion_state.insert(
+        "foodshare-tools".to_string(),
+        (true, vec!["Announcements".into(), "Q&A".into()]),
+    );
+
+    let err = run_setup(&mut gh, &cfg).await.unwrap_err();
+    let msg = err.to_string();
+    let SetupError::FeedCategory {
+        repo,
+        wanted,
+        available,
+    } = err
+    else {
+        panic!("expected FeedCategory, got: {msg}");
+    };
+    assert_eq!(repo, "foodshare-tools");
+    assert_eq!(wanted, "General");
+    assert_eq!(
+        available,
+        vec!["Announcements".to_string(), "Q&A".to_string()]
+    );
+    // The error must be actionable: name the wanted category and the
+    // available ones so the operator can fix the config.
+    assert!(msg.contains("General"), "{msg}");
+    assert!(msg.contains("Announcements"), "{msg}");
+    // The final step (views) never ran: its three queued responses are
+    // untouched.
+    assert_eq!(gh.graphql_responses.len(), 3);
 }
 
 #[tokio::test]

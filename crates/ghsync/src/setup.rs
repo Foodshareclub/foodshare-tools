@@ -4,13 +4,13 @@
 //! Steps: (1) verify the token; (2) per-repo labels; (3) the org Project
 //! v2 board; (4) the project's fields and single-select options,
 //! recording their ids; (5) per-repo default milestones; (6) discussions
-//! report + the Handoffs category; (7) project grid views. The CLI then
-//! writes the discovered ids back into the config
+//! state report + feed-category verification; (7) project grid views.
+//! The CLI then writes the discovered ids back into the config
 //! (`apply_report_to_config` + `Config::save`), preserving every key.
 //!
-//! The live run needs the org PAT (T0) and is blocked on it; the unit
-//! tests drive this module through the fake with queued GraphQL
-//! responses, and the GraphQL strings are snapshot-pinned in `github.rs`.
+//! The live run needs the org token (T0); the unit tests drive this
+//! module through the fake with queued GraphQL responses, and the
+//! GraphQL strings are snapshot-pinned in `github.rs`.
 
 use std::collections::BTreeMap;
 
@@ -18,11 +18,11 @@ use thiserror::Error;
 
 use crate::config::Config;
 use crate::github::{
-    GHSYNC_CREATE_CATEGORY_MUTATION, GHSYNC_CREATE_KANBAN_VIEW_MUTATION,
-    GHSYNC_CREATE_OPTION_MUTATION, GHSYNC_CREATE_PHASES_VIEW_MUTATION,
-    GHSYNC_CREATE_PROJECT_MUTATION, GHSYNC_CREATE_SINGLE_SELECT_MUTATION,
-    GHSYNC_CREATE_TEXT_FIELD_MUTATION, GHSYNC_DISCUSSIONS_QUERY, GHSYNC_FIELDS_QUERY,
-    GHSYNC_LIST_PROJECTS_QUERY, GHSYNC_VIEWS_QUERY, GitHub, GitHubError,
+    GHSYNC_CREATE_KANBAN_VIEW_MUTATION, GHSYNC_CREATE_OPTION_MUTATION,
+    GHSYNC_CREATE_PHASES_VIEW_MUTATION, GHSYNC_CREATE_PROJECT_MUTATION,
+    GHSYNC_CREATE_SINGLE_SELECT_MUTATION, GHSYNC_CREATE_TEXT_FIELD_MUTATION,
+    GHSYNC_DISCUSSIONS_QUERY, GHSYNC_FIELDS_QUERY, GHSYNC_LIST_PROJECTS_QUERY, GHSYNC_VIEWS_QUERY,
+    GitHub, GitHubError,
 };
 
 /// The title of the org Project v2 board.
@@ -31,8 +31,6 @@ pub const PROJECT_TITLE: &str = "Foodshare Board";
 pub const VIEW_BOARD: &str = "Board";
 /// The grid view grouped by Phase.
 pub const VIEW_PHASES: &str = "Phases";
-/// The discussion category that receives ghsync feed posts.
-pub const HANDOFFS_CATEGORY: &str = "Handoffs";
 /// Label color (decorative).
 const LABEL_COLOR: &str = "0ea4a5";
 
@@ -44,6 +42,17 @@ pub enum SetupError {
         "ghsync: token rejected by GitHub (HTTP {status}): {message} — check the PAT in the config"
     )]
     Auth { status: u16, message: String },
+    /// The configured feed category does not exist among the repo's
+    /// pre-existing discussion categories (categories cannot be created
+    /// via API — live-verified).
+    #[error(
+        "ghsync: repo {repo}: discussion category {wanted:?} not found — available: {available:?} (set `feed_category` on this repo's [[repos]] entry to one of them)"
+    )]
+    FeedCategory {
+        repo: String,
+        wanted: String,
+        available: Vec<String>,
+    },
     #[error(transparent)]
     GitHub(#[from] GitHubError),
 }
@@ -280,18 +289,14 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
         }
     }
 
-    // 6. Discussions: report state, ensure the Handoffs category.
+    // 6. Discussions: report state, verify the configured feed category.
+    // `hasDiscussions` does not exist on Repository in GraphQL
+    // (live-verified), so the enabled flag comes from the REST repo
+    // object; categories cannot be created via API at all
+    // (live-verified), so the feed category must pre-exist — a missing
+    // one is a config error naming the available list.
     for repo in &cfg.repos {
-        let data = gh
-            .graphql(
-                GHSYNC_DISCUSSIONS_QUERY,
-                serde_json::json!({ "owner": cfg.org, "name": &repo.name }),
-            )
-            .await?;
-        let enabled = data
-            .pointer("/repository/hasDiscussions")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let enabled = gh.has_discussions(&repo.name).await?;
         if !enabled {
             report.discussions.push((
                 repo.name.clone(),
@@ -302,11 +307,12 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
                 .push((repo.name.clone(), false, false));
             continue;
         }
-        let repo_id = data
-            .pointer("/repository/id")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string();
+        let data = gh
+            .graphql(
+                GHSYNC_DISCUSSIONS_QUERY,
+                serde_json::json!({ "owner": cfg.org, "name": &repo.name }),
+            )
+            .await?;
         let categories = data
             .pointer("/repository/discussionCategories/nodes")
             .and_then(|n| n.as_array())
@@ -317,34 +323,19 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        if categories.iter().any(|c| c == HANDOFFS_CATEGORY) {
-            report.discussions.push((
-                repo.name.clone(),
-                format!("enabled — {HANDOFFS_CATEGORY} present"),
-            ));
-        } else {
-            // GraphQL only creates fixed-enum categories; create OTHER and
-            // rename it via REST.
-            let data = gh
-                .graphql(
-                    GHSYNC_CREATE_CATEGORY_MUTATION,
-                    serde_json::json!({ "repositoryId": repo_id }),
-                )
-                .await?;
-            let category_id = data
-                .pointer("/addDiscussionCategory/discussionCategory/id")
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-                .ok_or_else(|| GitHubError::Io("addDiscussionCategory: missing id".into()))?;
-            gh.rename_discussion_category(&repo.name, &category_id, HANDOFFS_CATEGORY)
-                .await?;
-            report.discussions.push((
-                repo.name.clone(),
-                format!("enabled — {HANDOFFS_CATEGORY} created"),
-            ));
+        if !categories.iter().any(|c| c == &repo.feed_category) {
+            return Err(SetupError::FeedCategory {
+                repo: repo.name.clone(),
+                wanted: repo.feed_category.clone(),
+                available: categories,
+            });
         }
-        // Probe label support (404 = disabled) and record the flags; the
-        // feed/intake steps gate on them.
+        report.discussions.push((
+            repo.name.clone(),
+            format!("enabled — feed category {} present", repo.feed_category),
+        ));
+        // Probe label support (404/410 = disabled) and record the flags;
+        // the feed/intake steps gate on them.
         let labels_ok = gh.discussion_labels_supported(&repo.name).await?;
         report
             .discussion_flags

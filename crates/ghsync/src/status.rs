@@ -30,7 +30,6 @@ use crate::kanban::{CardView, Kanban, KanbanError, LinkedIssue};
 use crate::link::LinkMap;
 use crate::pr::extract_pr_url;
 use crate::push::{Cursor, normalize_value};
-use crate::setup::HANDOFFS_CATEGORY;
 
 /// A failure of the status step.
 #[derive(Debug, Error)]
@@ -299,7 +298,7 @@ async fn card_row(
         && repo_cfg.discussions_enabled
     {
         let discussions = gh
-            .list_discussions(&linked.repo, Some(HANDOFFS_CATEGORY), None)
+            .list_discussions(&linked.repo, Some(&repo_cfg.feed_category), None)
             .await?;
         let card_ref = format!("Card: kanban:{}:{}", cfg.board, card.id);
         let verdict_line = format!("{SYNC_PREFIX}{verdict}");

@@ -206,14 +206,10 @@ pub trait GitHub: Send + Sync {
         name: &str,
         color: &str,
     ) -> Result<(), GitHubError>;
-    /// Rename a discussion category in `repo` (REST; the GraphQL API only
-    /// creates fixed-enum categories).
-    async fn rename_discussion_category(
-        &mut self,
-        repo: &str,
-        category_id: &str,
-        name: &str,
-    ) -> Result<(), GitHubError>;
+    /// Whether GitHub Discussions are enabled on `repo` (REST: the
+    /// `has_discussions` field of the repo object; GraphQL's
+    /// `hasDiscussions` does not exist — live-verified).
+    async fn has_discussions(&mut self, repo: &str) -> Result<bool, GitHubError>;
     /// Pull request info (merge state + head sha).
     async fn get_pull(&mut self, repo: &str, number: u32) -> Result<Pull, GitHubError>;
     /// The check runs recorded against a commit.
@@ -432,12 +428,15 @@ pub const GHSYNC_CREATE_PHASES_VIEW_MUTATION: &str = r#"mutation GhsyncCreatePha
   }
 }"#;
 
-/// A repo's discussion state and categories.
+/// A repo's discussion categories. The enabled flag is NOT part of this
+/// query: `hasDiscussions` does not exist on Repository (live-verified)
+/// and comes from REST `GET /repos/{org}/{repo}` instead. The connection
+/// requires `first` (a bare selection returns a null repository,
+/// live-verified).
 pub const GHSYNC_DISCUSSIONS_QUERY: &str = r#"query GhsyncDiscussions($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     id
-    hasDiscussions
-    discussionCategories {
+    discussionCategories(first: 100) {
       nodes {
         id
         name
@@ -446,26 +445,22 @@ pub const GHSYNC_DISCUSSIONS_QUERY: &str = r#"query GhsyncDiscussions($owner: St
   }
 }"#;
 
-/// Create the fixed-enum `OTHER` category (renamed afterwards via REST).
-pub const GHSYNC_CREATE_CATEGORY_MUTATION: &str = r#"mutation GhsyncCreateCategory($repositoryId: ID!) {
-  addDiscussionCategory(input: {repositoryId: $repositoryId, name: OTHER}) {
-    discussionCategory {
-      id
-      name
-    }
-  }
-}"#;
-
-/// List a repo's discussions, optionally filtered by category name and/or
-/// label name.
-pub const GHSYNC_DISCUSSION_LIST_QUERY: &str = r#"query GhsyncDiscussionList($owner: String!, $name: String!, $category: String, $label: String) {
+/// List a repo's discussions. The `category`/`label` arguments do not
+/// exist on `Repository.discussions` (live-verified), so the query pulls
+/// the first page and the caller filters on the selected category and
+/// label names.
+pub const GHSYNC_DISCUSSION_LIST_QUERY: &str = r#"query GhsyncDiscussionList($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    discussions(first: 100, category: $category, label: $label) {
+    discussions(first: 100) {
       nodes {
         id
         number
         title
         body
+        category {
+          id
+          name
+        }
         labels(first: 20) {
           nodes {
             id
@@ -482,9 +477,11 @@ pub const GHSYNC_DISCUSSION_LIST_QUERY: &str = r#"query GhsyncDiscussionList($ow
   }
 }"#;
 
-/// Create a discussion in an existing category.
+/// Create a discussion in an existing category. `addDiscussion` does not
+/// exist (live-verified); categories themselves cannot be created via
+/// API, so the category must pre-exist.
 pub const GHSYNC_CREATE_DISCUSSION_MUTATION: &str = r#"mutation GhsyncCreateDiscussion($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!) {
-  addDiscussion(input: {repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body}) {
+  createDiscussion(input: {repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body}) {
     discussion {
       id
       number
@@ -502,12 +499,13 @@ pub const GHSYNC_DISCUSSION_COMMENT_MUTATION: &str = r#"mutation GhsyncDiscussio
   }
 }"#;
 
-/// Remove a label from a discussion.
-pub const GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION: &str = r#"mutation GhsyncRemoveDiscussionLabel($discussionId: ID!, $labelId: ID!) {
-  removeDiscussionLabel(input: {discussionId: $discussionId, labelId: $labelId}) {
-    discussion {
-      id
-    }
+/// Remove a label from a discussion. `removeDiscussionLabel` does not
+/// exist (live-verified); label operations on a discussion go through
+/// the shared labelable mutations (verified live: the repo's issue
+/// labels attach to discussions through this path).
+pub const GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION: &str = r#"mutation GhsyncRemoveDiscussionLabel($labelableId: ID!, $labelIds: [ID!]!) {
+  removeLabelsFromLabelable(input: {labelableId: $labelableId, labelIds: $labelIds}) {
+    clientMutationId
   }
 }"#;
 
@@ -557,11 +555,6 @@ pub fn path_discussion_labels(org: &str, repo: &str) -> String {
 /// `/repos/{org}/{repo}/labels`
 pub fn path_labels(org: &str, repo: &str) -> String {
     format!("/repos/{org}/{repo}/labels")
-}
-
-/// `/repos/{org}/{repo}/discussions/categories/{id}`
-pub fn path_discussion_category(org: &str, repo: &str, category_id: &str) -> String {
-    format!("/repos/{org}/{repo}/discussions/categories/{category_id}")
 }
 
 /// The GraphQL endpoint.
@@ -1116,19 +1109,17 @@ impl GitHub for RealGitHub {
         Ok(())
     }
 
-    async fn rename_discussion_category(
-        &mut self,
-        repo: &str,
-        category_id: &str,
-        name: &str,
-    ) -> Result<(), GitHubError> {
-        self.rest(
-            reqwest::Method::PATCH,
-            &path_discussion_category(&self.org, repo, category_id),
-            Some(serde_json::json!({ "name": name })),
-        )
-        .await?;
-        Ok(())
+    async fn has_discussions(&mut self, repo: &str) -> Result<bool, GitHubError> {
+        let resp = self
+            .rest(reqwest::Method::GET, &path_repo(&self.org, repo), None)
+            .await?;
+        let v = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        Ok(v.get("has_discussions")
+            .and_then(|h| h.as_bool())
+            .unwrap_or(false))
     }
 
     async fn get_pull(&mut self, repo: &str, number: u32) -> Result<Pull, GitHubError> {
@@ -1201,14 +1192,11 @@ impl GitHub for RealGitHub {
         let data = self
             .graphql(
                 GHSYNC_DISCUSSION_LIST_QUERY,
-                serde_json::json!({
-                    "owner": self.org,
-                    "name": repo,
-                    "category": category,
-                    "label": label,
-                }),
+                serde_json::json!({ "owner": self.org, "name": repo }),
             )
             .await?;
+        // The query carries no category/label arguments (live-verified);
+        // both filters run client-side on the selected fields.
         Ok(data
             .pointer("/repository/discussions/nodes")
             .and_then(|n| n.as_array())
@@ -1241,6 +1229,17 @@ impl GitHub for RealGitHub {
                                     .collect::<Vec<_>>()
                             })
                             .unwrap_or_default();
+                        let category_name = d.pointer("/category/name").and_then(|c| c.as_str());
+                        if let Some(want) = category
+                            && category_name != Some(want)
+                        {
+                            return None;
+                        }
+                        if let Some(want) = label
+                            && !labels.iter().any(|l| l.name == want)
+                        {
+                            return None;
+                        }
                         Some(Discussion {
                             id: d.get("id")?.as_str()?.to_string(),
                             number: d.get("number")?.as_u64()? as u32,
@@ -1309,10 +1308,10 @@ impl GitHub for RealGitHub {
             )
             .await?;
         let d = data
-            .pointer("/addDiscussion/discussion")
+            .pointer("/createDiscussion/discussion")
             .ok_or_else(|| GitHubError::Graphql {
                 url: url.clone(),
-                message: "addDiscussion returned no discussion".into(),
+                message: "createDiscussion returned no discussion".into(),
             })?;
         Ok(Discussion {
             id: d
@@ -1355,11 +1354,14 @@ impl GitHub for RealGitHub {
         discussion_id: &str,
         label_id: &str,
     ) -> Result<(), GitHubError> {
+        // The label ops run through the shared labelable mutations with
+        // GLOBAL node ids (REST numeric label ids are not resolvable —
+        // live-verified).
         self.graphql(
             GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION,
             serde_json::json!({
-                "discussionId": discussion_id,
-                "labelId": label_id,
+                "labelableId": discussion_id,
+                "labelIds": [label_id]
             }),
         )
         .await?;
@@ -1367,8 +1369,10 @@ impl GitHub for RealGitHub {
     }
 
     async fn discussion_labels_supported(&mut self, repo: &str) -> Result<bool, GitHubError> {
-        // 404 = discussions (or labels) disabled; anything else succeeds
-        // only with a real 2xx.
+        // 404/410 = discussions (or labels) disabled; anything else
+        // succeeds only with a real 2xx. (GitHub returns 410 Gone on the
+        // discussions endpoints of repos where discussions are off —
+        // live-verified.)
         let url = format!("{}{}", self.api, path_discussion_labels(&self.org, repo));
         let resp = self
             .client
@@ -1378,7 +1382,7 @@ impl GitHub for RealGitHub {
             .await
             .map_err(|e| GitHubError::Io(e.to_string()))?;
         let status = resp.status();
-        if status.as_u16() == 404 {
+        if matches!(status.as_u16(), 404 | 410) {
             return Ok(false);
         }
         if !status.is_success() {
@@ -1516,35 +1520,40 @@ mod tests {
             GHSYNC_DISCUSSIONS_QUERY
                 .contains("query GhsyncDiscussions($owner: String!, $name: String!)")
         );
-        assert!(GHSYNC_DISCUSSIONS_QUERY.contains("hasDiscussions"));
-        assert!(GHSYNC_DISCUSSIONS_QUERY.contains("discussionCategories {"));
+        // `hasDiscussions` does not exist on Repository (live-verified);
+        // the enabled flag comes from REST `GET /repos/{org}/{repo}`.
+        assert!(!GHSYNC_DISCUSSIONS_QUERY.contains("hasDiscussions"));
+        // The connection requires `first` (a bare selection returns a
+        // null repository, live-verified).
+        assert!(GHSYNC_DISCUSSIONS_QUERY.contains("discussionCategories(first: 100) {"));
 
-        assert!(
-            GHSYNC_CREATE_CATEGORY_MUTATION
-                .contains("mutation GhsyncCreateCategory($repositoryId: ID!)")
-        );
-        assert!(
-            GHSYNC_CREATE_CATEGORY_MUTATION.contains(
-                "addDiscussionCategory(input: {repositoryId: $repositoryId, name: OTHER})"
-            )
-        );
+        // `addDiscussionCategory` does not exist (live-verified);
+        // categories are pre-existing and setup only verifies the feed
+        // category among them.
+        assert!(!GHSYNC_DISCUSSIONS_QUERY.contains("addDiscussionCategory"));
 
-        assert!(GHSYNC_DISCUSSION_LIST_QUERY.contains(
-            "query GhsyncDiscussionList($owner: String!, $name: String!, $category: String, $label: String)"
-        ));
         assert!(
             GHSYNC_DISCUSSION_LIST_QUERY
-                .contains("discussions(first: 100, category: $category, label: $label)")
+                .contains("query GhsyncDiscussionList($owner: String!, $name: String!)")
         );
+        // The `category`/`label` arguments do not exist (live-verified);
+        // filtering happens client-side on the selected category/labels.
+        assert!(!GHSYNC_DISCUSSION_LIST_QUERY.contains("$category"));
+        assert!(!GHSYNC_DISCUSSION_LIST_QUERY.contains("$label"));
+        assert!(GHSYNC_DISCUSSION_LIST_QUERY.contains("discussions(first: 100) {"));
+        assert!(GHSYNC_DISCUSSION_LIST_QUERY.contains("category {"));
         assert!(GHSYNC_DISCUSSION_LIST_QUERY.contains("labels(first: 20) {"));
         assert!(GHSYNC_DISCUSSION_LIST_QUERY.contains("comments(first: 100) {"));
 
         assert!(GHSYNC_CREATE_DISCUSSION_MUTATION.contains(
             "mutation GhsyncCreateDiscussion($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!)"
         ));
+        // The mutation is `createDiscussion` (`addDiscussion` does not
+        // exist, live-verified).
         assert!(GHSYNC_CREATE_DISCUSSION_MUTATION.contains(
-            "addDiscussion(input: {repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body})"
+            "createDiscussion(input: {repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body})"
         ));
+        assert!(!GHSYNC_CREATE_DISCUSSION_MUTATION.contains("addDiscussion("));
 
         assert!(
             GHSYNC_DISCUSSION_COMMENT_MUTATION
@@ -1556,13 +1565,15 @@ mod tests {
             )
         );
 
-        assert!(
-            GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION.contains(
-                "mutation GhsyncRemoveDiscussionLabel($discussionId: ID!, $labelId: ID!)"
-            )
-        );
+        // `removeDiscussionLabel` does not exist (live-verified); label
+        // removal on a discussion goes through the shared
+        // `removeLabelsFromLabelable` (verified live on foodshare-web).
         assert!(GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION.contains(
-            "removeDiscussionLabel(input: {discussionId: $discussionId, labelId: $labelId})"
+            "mutation GhsyncRemoveDiscussionLabel($labelableId: ID!, $labelIds: [ID!]!)"
         ));
+        assert!(GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION.contains(
+            "removeLabelsFromLabelable(input: {labelableId: $labelableId, labelIds: $labelIds})"
+        ));
+        assert!(!GHSYNC_REMOVE_DISCUSSION_LABEL_MUTATION.contains("removeDiscussionLabel"));
     }
 }

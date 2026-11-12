@@ -89,27 +89,23 @@ fn default_config_matches_plan() {
     assert_eq!(c.board, "foodshare");
     assert_eq!(c.org, "Foodshareclub");
     assert_eq!(c.api, "https://api.github.com");
-    assert_eq!(c.repos.len(), 5);
+    // Four org repos; catch-22 was removed (it is not a Foodshareclub
+    // repo).
+    assert_eq!(c.repos.len(), 4);
+    assert!(c.repo("catch-22").is_none());
     assert_eq!(c.default_assignee, "default");
 
-    let app = c.repo("foodshare-app").unwrap();
-    assert_eq!(app.default_milestone, "Next.js 16 + Bun 1.4.4");
-    assert_eq!(
-        c.repo("foodshare-backend").unwrap().default_milestone,
-        "Rust"
-    );
-    assert_eq!(
-        c.repo("foodshare-web").unwrap().default_milestone,
-        "Next.js 16 + Bun 1.4.4"
-    );
-    assert_eq!(
-        c.repo("foodshare-tools").unwrap().default_milestone,
-        "Rust + TypeScript"
-    );
-    assert_eq!(
-        c.repo("catch-22").unwrap().default_milestone,
-        "Next.js 16 + Bun 1.4.4"
-    );
+    // All four repos point at the org-wide monthly readiness milestone
+    // (architect decision t_1cc489c3, §5 D6 — the name is month-bound;
+    // the operator edits the config when the month rolls).
+    let ms = "Prod Readiness — 2026-11";
+    assert_eq!(c.repo("foodshare-app").unwrap().default_milestone, ms);
+    assert_eq!(c.repo("foodshare-backend").unwrap().default_milestone, ms);
+    assert_eq!(c.repo("foodshare-web").unwrap().default_milestone, ms);
+    assert_eq!(c.repo("foodshare-tools").unwrap().default_milestone, ms);
+    // The feed category defaults to "General" (setup verifies it among
+    // the repo's pre-existing categories).
+    assert_eq!(c.repo("foodshare-web").unwrap().feed_category, "General");
     assert!(c.repo("nope").is_none());
 
     let p = c.project.as_ref().unwrap();
@@ -127,13 +123,29 @@ fn default_config_matches_plan() {
         Some(&"in-progress".to_string())
     );
     assert_eq!(p.phase_options.get("Done"), Some(&"done".to_string()));
+    // Six profiles: the board's agent profiles + human (architect
+    // decision t_1cc489c3 — the old three-key map left architect/
+    // reviewer/verifier cards unmapped, which could never be clean).
+    assert_eq!(p.assignee_options.len(), 6);
     assert_eq!(
         p.assignee_options.get("agent-default"),
         Some(&"default".to_string())
     );
     assert_eq!(
+        p.assignee_options.get("agent-architect"),
+        Some(&"architect".to_string())
+    );
+    assert_eq!(
+        p.assignee_options.get("agent-reviewer"),
+        Some(&"reviewer".to_string())
+    );
+    assert_eq!(
         p.assignee_options.get("agent-security"),
         Some(&"security".to_string())
+    );
+    assert_eq!(
+        p.assignee_options.get("agent-verifier"),
+        Some(&"verifier".to_string())
     );
     assert_eq!(p.assignee_options.get("human"), Some(&"human".to_string()));
 }

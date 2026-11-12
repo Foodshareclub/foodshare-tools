@@ -9,8 +9,9 @@
 //!   display-only and are reverted on the next push.
 //! - **Intake** — issues submitted through the intake form (auto-`intake`
 //!   label) and discussions labeled `intake` become kanban cards.
-//! - **Feed** — review verdicts and escalations are posted to the repo's
-//!   `Handoffs` discussion category.
+//! - **Feed** — review verdicts and escalations are posted to the
+//!   repo's feed discussion category (config `feed_category`, default
+//!   `General`).
 //! - **Evidence** — merged-PR/CI comments are posted on the linked issue.
 //!
 //! The two sides are linked statelessly: each linked issue carries a

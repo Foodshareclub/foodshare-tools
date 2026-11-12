@@ -2,7 +2,8 @@
 //!
 //! Feed (kanban → discussions): a card with a `sync:github <verdict>`
 //! comment or an `escalation:` block gets one discussion in the repo's
-//! Handoffs category; a later run appends to it, never creates a second.
+//! feed category (config `feed_category`, default `General`); a later
+//! run appends to it, never creates a second.
 //! Intake (discussions → kanban): a discussion labeled `intake` becomes
 //! one card.
 //!
@@ -26,6 +27,7 @@ fn test_config() -> Config {
             default_milestone: "Rust + TypeScript".into(),
             discussions_enabled: true,
             discussion_labels_enabled: true,
+            ..Default::default()
         }],
         ..Config::default()
     }
@@ -107,7 +109,8 @@ async fn approval_verdict_creates_one_discussion_second_run_appends_at_most_one_
     assert_eq!(gh.created_discussions.len(), 1);
     let (repo, category, title) = &gh.created_discussions[0];
     assert_eq!(repo, REPO);
-    assert_eq!(category, "Handoffs");
+    // The feed category is config-driven (default "General").
+    assert_eq!(category, "General");
     assert_eq!(title, "[approve] Fix the flaky test");
     // The body re-derives the card link.
     let d = &gh.discussions[REPO][0];
@@ -173,6 +176,7 @@ async fn repo_without_discussions_is_skipped_with_zero_calls() {
             default_milestone: "Rust + TypeScript".into(),
             discussions_enabled: false,
             discussion_labels_enabled: false,
+            ..Default::default()
         }],
         ..Config::default()
     };
@@ -262,6 +266,7 @@ async fn discussion_intake_requires_label_support() {
             default_milestone: "Rust + TypeScript".into(),
             discussions_enabled: true,
             discussion_labels_enabled: false,
+            ..Default::default()
         }],
         ..Config::default()
     };

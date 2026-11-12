@@ -2,9 +2,10 @@
 //!
 //! **Feed** (kanban → discussions): a card carrying a `sync:github
 //! <verdict>` comment (approve / request-changes) or blocked with an
-//! `escalation:` reason gets one discussion in its repo's `Handoffs`
-//! category, titled `[<verdict>] <card title>`. The card reference in
-//! the body (`Card: kanban:<board>:<id>`) is the re-derivation key: a
+//! `escalation:` reason gets one discussion in its repo's feed category
+//! (config `feed_category`, default `General`), titled `[<verdict>]
+//! <card title>`. The card reference in the body
+//! (`Card: kanban:<board>:<id>`) is the re-derivation key: a
 //! later run finds the discussion by that line and appends a comment
 //! instead of creating a second discussion.
 //!
@@ -23,7 +24,6 @@ use crate::github::{GitHub, GitHubError};
 use crate::intake::{INTAKE_INITIAL_STATUS, INTAKE_LABEL, IntakeCard};
 use crate::kanban::{CardView, Kanban, KanbanError};
 use crate::link::LinkMap;
-use crate::setup::HANDOFFS_CATEGORY;
 
 /// The prefix of a verdict comment on a card.
 pub const SYNC_PREFIX: &str = "sync:github ";
@@ -112,7 +112,7 @@ pub async fn post_feed(
         let title = format!("[{verdict}] {}", card.title);
         let card_ref = format!("Card: kanban:{}:{}", cfg.board, card.id);
         let discussions = gh
-            .list_discussions(&linked.repo, Some(HANDOFFS_CATEGORY), None)
+            .list_discussions(&linked.repo, Some(&repo_cfg.feed_category), None)
             .await?;
         if let Some(existing) = discussions
             .iter()
@@ -131,7 +131,7 @@ pub async fn post_feed(
                 "{SYNC_PREFIX}{verdict}\n\n{}\n\n{card_ref}",
                 issue_link_comment(&linked.owner, &linked.repo, linked.number)
             );
-            gh.create_discussion(&linked.repo, HANDOFFS_CATEGORY, &title, &body)
+            gh.create_discussion(&linked.repo, &repo_cfg.feed_category, &title, &body)
                 .await?;
             report.created += 1;
         }

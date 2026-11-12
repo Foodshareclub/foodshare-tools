@@ -22,6 +22,7 @@ fn test_config() -> Config {
             default_milestone: "Rust + TypeScript".into(),
             discussions_enabled: true,
             discussion_labels_enabled: true,
+            ..Default::default()
         }],
         ..Config::default()
     };
@@ -326,10 +327,12 @@ async fn feed_due_flags_exactly_when_verdict_unposted() {
     assert_eq!(r.rows[0].drift, vec!["feed-due".to_string()]);
 
     // After the feed posts, it is no longer due (the verdict line is in
-    // the discussion body; the card ref re-derives the link).
+    // the discussion body; the card ref re-derives the link). The
+    // seeded discussion sits in the configured feed category (default
+    // "General").
     gh.create_discussion(
         REPO,
-        "Handoffs",
+        "General",
         "[approve] Fix thing",
         &format!(
             "sync:github approve\n\ngsync Foodshareclub/{REPO}#1\n\nCard: kanban:{BOARD}:{card_id}"
