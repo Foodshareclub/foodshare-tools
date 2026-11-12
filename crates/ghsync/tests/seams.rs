@@ -13,7 +13,8 @@ use std::os::unix::fs::PermissionsExt;
 
 use ghsync::fakes::{FakeGitHub, FakeKanban};
 use ghsync::github::{
-    GitHub, path_check_runs, path_issue, path_issue_comments, path_milestones, path_pull, path_repo,
+    GitHub, path_check_runs, path_discussion_category, path_issue, path_issue_comments,
+    path_labels, path_milestones, path_pull, path_repo,
 };
 use ghsync::kanban::{Card, Kanban, KanbanError, RealKanban, links_from_comments};
 
@@ -199,6 +200,14 @@ fn rest_paths_are_exact() {
     assert_eq!(
         path_check_runs("Foodshareclub", "foodshare-tools", "abc123"),
         "/repos/Foodshareclub/foodshare-tools/commits/abc123/check-runs?per_page=100"
+    );
+    assert_eq!(
+        path_labels("Foodshareclub", "foodshare-app"),
+        "/repos/Foodshareclub/foodshare-app/labels"
+    );
+    assert_eq!(
+        path_discussion_category("Foodshareclub", "foodshare-tools", "DC_id42"),
+        "/repos/Foodshareclub/foodshare-tools/discussions/categories/DC_id42"
     );
 }
 

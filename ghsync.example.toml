@@ -50,10 +50,6 @@ default_milestone = "Next.js 16 + Bun 1.4.4"
 name = "foodshare-tools"
 default_milestone = "Rust + TypeScript"
 
-[[repos]]
-name = "catch-22"
-default_milestone = "Next.js 16 + Bun 1.4.4"
-
 [project]
 # Org Project v2 board (title: "Foodshare Board").
 number = 1
