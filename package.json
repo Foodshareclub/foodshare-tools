@@ -11,6 +11,7 @@
     "test": "bun test",
     "lint": "bun run type-check",
     "type-check": "bun run tsrs --noEmit",
+    "type-check:tsc": "tsc --noEmit",
     "clean": "bun run clean:web",
     "sim:run": "cargo run --bin fs-sim",
     "sim:smoke": "cargo run --bin fs-sim -- --smoke",
@@ -45,7 +46,8 @@
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
-    "tsrs": "0.18.0-ts7.1.0-dev.20260929"
+    "tsrs": "0.18.0-ts7.1.0-dev.20260929",
+    "typescript": "7.0.2"
   },
   "engines": {
     "bun": ">=1.4.4"

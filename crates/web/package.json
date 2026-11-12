@@ -8,6 +8,7 @@
     "build": "bun --bun next build",
     "start": "bun --bun next start",
     "type-check": "bun run next typegen && bun run tsrs --noEmit",
+    "type-check:tsc": "bun run next typegen && tsc --noEmit",
     "lint": "bun run tsrs --noEmit",
     "test": "bun test --pass-with-no-tests",
     "sentry:init": "sentry-cli init",
@@ -38,6 +39,6 @@
     "postcss": "8.5.26",
     "tailwindcss": "4.3.3",
     "tsrs": "0.18.0-ts7.1.0-dev.20260929",
-    "typescript": "7.1.0-beta"
+    "typescript": "7.0.2"
   }
 }

@@ -9,6 +9,10 @@ name: Daily Compatibility & E2E
 # 2. Cross-repo compatibility matrix: vendored supabase drift between web and
 #    backend, production health endpoints, latest CI conclusions for all repos
 # 3. AI review of last 24h of tooling commits
+# 4. Stable-tsc divergence canary: the STABLE typescript@7.0.2 compiler over
+#    both TS surfaces (root scripts + the crates/web Next.js app), one job
+#    per surface, so a soundness bug in the tsrs dev build can never
+#    silently redefine "clean"
 
 on:
   schedule:
@@ -90,3 +94,50 @@ jobs:
         with:
           mode: review
           since: "24 hours"
+
+  tsc-cross-check:
+    name: tsc cross-check (divergence canary, root)
+    # tsrs is the only type checker in this pipeline, and it is a DEV
+    # prerelease of the TypeScript 7 compiler lineage. A soundness bug in
+    # the dev build would be invisible here. This job runs the STABLE
+    # typescript@7.0.2 compiler (pinned in package.json) over the root
+    # tsconfig (scripts/, types/, *.ts) every night: any divergence between
+    # the two compilers turns this job red, so the dev build can never
+    # silently redefine "clean". The Next.js app under crates/web has its
+    # own canary — tsc-cross-check-web below — because it is a standalone
+    # surface with its own lockfile and tsconfig.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Type-check with stable tsc
+        run: bun run type-check:tsc
+
+  tsc-cross-check-web:
+    name: tsc cross-check (divergence canary, crates/web)
+    # The same canary as tsc-cross-check above, for the standalone Next.js
+    # app under crates/web: its own package.json (typescript@7.0.2 pinned),
+    # its own lockfile, and its own tsconfig, which includes the .next/types
+    # route types — so the script runs `next typegen` first, mirroring the
+    # per-push type-check job in ci.yml. Install happens INSIDE crates/web:
+    # it is not a member of the root workspace.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        working-directory: crates/web
+      - name: Type-check with stable tsc
+        run: bun run type-check:tsc
+        working-directory: crates/web
