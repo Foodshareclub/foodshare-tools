@@ -26,12 +26,41 @@ fn cfg_with(path: &Path) -> Config {
 
 /// The exact GraphQL responses a fresh-org setup receives, in call order:
 /// find project (none) → create project → list fields (none) → create
-/// Status + 4 options → create Assignee → create Phase + 3 options →
-/// list views (none) → create Board + Phases. The discussion state is NOT
-/// queued: the fake serves the category-list query from `discussion_state`
-/// (mirroring the REST `has_discussions` probe) and categories cannot be
-/// created via API, so nothing is provisioned there.
+/// Status (with its options) → create Assignee → create Phase (with its
+/// options) → list fields again (option ids are only known after the
+/// create) → list views (none) → create Board + Phases. The discussion
+/// state is NOT queued: the fake serves the category-list query from
+/// `discussion_state` (mirroring the REST `has_discussions` probe) and
+/// categories cannot be created via API, so nothing is provisioned there.
 fn fresh_org_responses() -> Vec<serde_json::Value> {
+    let fields_full = serde_json::json!({
+        "node": {
+            "fields": {
+                "nodes": [
+                    {
+                        "id": "F_status",
+                        "name": "Status",
+                        "options": [
+                            { "id": "opt_backlog", "name": "Backlog" },
+                            { "id": "opt_blocked", "name": "Blocked" },
+                            { "id": "opt_done", "name": "Done" },
+                            { "id": "opt_inprog", "name": "In progress" }
+                        ]
+                    },
+                    { "id": "F_assignee", "name": "Assignee", "options": null },
+                    {
+                        "id": "F_phase",
+                        "name": "Phase",
+                        "options": [
+                            { "id": "ph_backlog", "name": "Backlog" },
+                            { "id": "ph_done", "name": "Done" },
+                            { "id": "ph_inprog", "name": "In progress" }
+                        ]
+                    }
+                ]
+            }
+        }
+    });
     let data = [
         serde_json::json!({
             "organization": {
@@ -46,19 +75,25 @@ fn fresh_org_responses() -> Vec<serde_json::Value> {
             "createProjectV2": { "projectV2": { "id": "PV1_fake", "title": "Foodshare Board" } }
         }),
         serde_json::json!({ "node": { "fields": { "nodes": [] } } }),
-        serde_json::json!({ "createProjectV2Field": { "field": { "id": "F_status" } } }),
-        serde_json::json!({ "createProjectV2FieldSingleSelectOption": { "option": { "id": "opt_backlog", "name": "Backlog" } } }),
-        serde_json::json!({ "createProjectV2FieldSingleSelectOption": { "option": { "id": "opt_blocked", "name": "Blocked" } } }),
-        serde_json::json!({ "createProjectV2FieldSingleSelectOption": { "option": { "id": "opt_done", "name": "Done" } } }),
-        serde_json::json!({ "createProjectV2FieldSingleSelectOption": { "option": { "id": "opt_inprog", "name": "In progress" } } }),
-        serde_json::json!({ "createProjectV2Field": { "field": { "id": "F_assignee" } } }),
-        serde_json::json!({ "createProjectV2Field": { "field": { "id": "F_phase" } } }),
-        serde_json::json!({ "createProjectV2FieldSingleSelectOption": { "option": { "id": "ph_backlog", "name": "Backlog" } } }),
-        serde_json::json!({ "createProjectV2FieldSingleSelectOption": { "option": { "id": "ph_done", "name": "Done" } } }),
-        serde_json::json!({ "createProjectV2FieldSingleSelectOption": { "option": { "id": "ph_inprog", "name": "In progress" } } }),
+        // Call order: the Assignee text field is created before the
+        // single-select ensures run.
+        serde_json::json!({
+            "createProjectV2Field": { "projectV2Field": { "id": "F_assignee" } }
+        }),
+        serde_json::json!({
+            "createProjectV2Field": { "projectV2Field": { "id": "F_status" } }
+        }),
+        serde_json::json!({
+            "createProjectV2Field": { "projectV2Field": { "id": "F_phase" } }
+        }),
+        fields_full,
         serde_json::json!({ "node": { "views": { "nodes": [] } } }),
-        serde_json::json!({ "createProjectV2View": { "view": { "id": "V_board" } } }),
-        serde_json::json!({ "createProjectV2View": { "view": { "id": "V_phases" } } }),
+        serde_json::json!({
+            "createProjectV2View": { "projectV2View": { "id": "V_board" } }
+        }),
+        serde_json::json!({
+            "createProjectV2View": { "projectV2View": { "id": "V_phases" } }
+        }),
     ];
     data.into_iter()
         .map(|d| serde_json::json!({ "data": d }))
@@ -112,6 +147,36 @@ async fn fresh_org_setup_provisions_everything_and_records_ids() {
     assert_eq!(report.status_field, "F_status");
     assert_eq!(report.assignee_field, "F_assignee");
     assert_eq!(report.phase_field, "F_phase");
+    // Options are created WITH the field (no separate option-create
+    // mutation exists in the live schema): the Status create call carries
+    // all four options, each with the required name/color/description.
+    // (The options ride on the query string as `singleSelectOptions:
+    // $options`; the variables are top-level.)
+    let status_create = gh
+        .graphql_calls
+        .iter()
+        .find(|(q, v)| q.contains("GhsyncCreateSingleSelect") && v["name"] == "Status")
+        .expect("the Status create was made");
+    let options = &status_create.1["options"];
+    let names: Vec<&str> = options
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o["name"].as_str().unwrap())
+        .collect();
+    // BTreeMap key order: alphabetical.
+    assert_eq!(names, vec!["Backlog", "Blocked", "Done", "In progress"]);
+    for o in options.as_array().unwrap() {
+        assert!(o.get("color").and_then(|c| c.as_str()).is_some());
+        assert!(o.get("description").and_then(|c| c.as_str()).is_some());
+    }
+    // No per-option create calls of any kind.
+    assert!(
+        !gh.graphql_calls
+            .iter()
+            .any(|(q, _)| q.contains("GhsyncCreateOption")),
+        "stale option-create call"
+    );
     // Every option of both single-select fields is recorded with its id.
     assert_eq!(report.status_option_ids.len(), 4);
     assert_eq!(
@@ -223,6 +288,34 @@ async fn second_run_writes_nothing() {
         }],
     );
     gh.graphql_responses = {
+        let fields_full = serde_json::json!({
+            "node": {
+                "fields": {
+                    "nodes": [
+                        {
+                            "id": "F_status",
+                            "name": "Status",
+                            "options": [
+                                { "id": "opt_backlog", "name": "Backlog" },
+                                { "id": "opt_blocked", "name": "Blocked" },
+                                { "id": "opt_done", "name": "Done" },
+                                { "id": "opt_inprog", "name": "In progress" }
+                            ]
+                        },
+                        { "id": "F_assignee", "name": "Assignee", "options": null },
+                        {
+                            "id": "F_phase",
+                            "name": "Phase",
+                            "options": [
+                                { "id": "ph_backlog", "name": "Backlog" },
+                                { "id": "ph_done", "name": "Done" },
+                                { "id": "ph_inprog", "name": "In progress" }
+                            ]
+                        }
+                    ]
+                }
+            }
+        });
         let data = [
             serde_json::json!({
                 "organization": {
@@ -235,34 +328,11 @@ async fn second_run_writes_nothing() {
                     }
                 }
             }),
-            serde_json::json!({
-                "node": {
-                    "fields": {
-                        "nodes": [
-                            {
-                                "id": "F_status",
-                                "name": "Status",
-                                "options": [
-                                    { "id": "opt_backlog", "name": "Backlog" },
-                                    { "id": "opt_blocked", "name": "Blocked" },
-                                    { "id": "opt_done", "name": "Done" },
-                                    { "id": "opt_inprog", "name": "In progress" }
-                                ]
-                            },
-                            { "id": "F_assignee", "name": "Assignee", "options": null },
-                            {
-                                "id": "F_phase",
-                                "name": "Phase",
-                                "options": [
-                                    { "id": "ph_backlog", "name": "Backlog" },
-                                    { "id": "ph_done", "name": "Done" },
-                                    { "id": "ph_inprog", "name": "In progress" }
-                                ]
-                            }
-                        ]
-                    }
-                }
-            }),
+            fields_full.clone(),
+            // Option ids are collected from a second fields read (the
+            // ensures run first, no mutations expected on a complete
+            // board).
+            fields_full,
             serde_json::json!({
                 "node": {
                     "views": {
@@ -287,8 +357,9 @@ async fn second_run_writes_nothing() {
     // cannot be created via API at all).
     assert!(gh.created_labels.is_empty());
     assert!(gh.milestones["foodshare-tools"].len() == 1);
-    // Only the four read calls: find project, fields, discussion
-    // categories (served by the state probe), views.
+    // Only the five read calls: find project, fields (ensure), fields
+    // (option ids), discussion categories (state-answered by the fake,
+    // not the queue), views.
     let creates: Vec<&str> = gh
         .graphql_calls
         .iter()
@@ -296,7 +367,7 @@ async fn second_run_writes_nothing() {
         .filter(|q| q.starts_with("mutation"))
         .collect();
     assert!(creates.is_empty(), "unexpected mutations: {creates:?}");
-    assert_eq!(gh.graphql_calls.len(), 4);
+    assert_eq!(gh.graphql_calls.len(), 5);
     // The ids are still reported, so the config stays correct.
     assert_eq!(report.status_option_ids.len(), 4);
     assert_eq!(report.phase_option_ids.len(), 3);
@@ -307,6 +378,155 @@ async fn second_run_writes_nothing() {
         vec![("foodshare-tools".to_string(), true, false)]
     );
     let _ = &cfg_path;
+}
+
+#[tokio::test]
+async fn field_missing_an_option_gets_one_update_with_merged_list() {
+    // The live schema has no option-create mutation: a single-select
+    // field missing configured options is fixed with ONE
+    // `updateProjectV2Field` carrying the FULL option list — existing
+    // options keep their ids (so in-project items are not orphaned),
+    // new ones are appended without ids.
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = cfg_with(&dir.path().join("config.toml"));
+    let mut gh = FakeGitHub::default();
+    gh.labels.insert(
+        "foodshare-tools".to_string(),
+        vec![
+            "ghsync".into(),
+            "ghsync-foodshare-tools".into(),
+            "intake".into(),
+        ],
+    );
+    gh.milestones.insert(
+        "foodshare-tools".to_string(),
+        vec![ghsync::github::Milestone {
+            number: 1,
+            title: "Rust + TypeScript".into(),
+            open_issues: 0,
+            closed_issues: 0,
+        }],
+    );
+    gh.discussion_state.insert(
+        "foodshare-tools".to_string(),
+        (true, vec!["General".into()]),
+    );
+    // Status exists but only has two of the four configured options.
+    let fields_partial = serde_json::json!({
+        "node": {
+            "fields": {
+                "nodes": [
+                    {
+                        "id": "F_status",
+                        "name": "Status",
+                        "options": [
+                            { "id": "opt_backlog", "name": "Backlog" },
+                            { "id": "opt_blocked", "name": "Blocked" }
+                        ]
+                    },
+                    { "id": "F_assignee", "name": "Assignee", "options": null },
+                    {
+                        "id": "F_phase",
+                        "name": "Phase",
+                        "options": [
+                            { "id": "ph_backlog", "name": "Backlog" },
+                            { "id": "ph_done", "name": "Done" },
+                            { "id": "ph_inprog", "name": "In progress" }
+                        ]
+                    }
+                ]
+            }
+        }
+    });
+    let fields_full = serde_json::json!({
+        "node": {
+            "fields": {
+                "nodes": [
+                    {
+                        "id": "F_status",
+                        "name": "Status",
+                        "options": [
+                            { "id": "opt_backlog", "name": "Backlog" },
+                            { "id": "opt_blocked", "name": "Blocked" },
+                            { "id": "opt_done", "name": "Done" },
+                            { "id": "opt_inprog", "name": "In progress" }
+                        ]
+                    },
+                    { "id": "F_assignee", "name": "Assignee", "options": null },
+                    {
+                        "id": "F_phase",
+                        "name": "Phase",
+                        "options": [
+                            { "id": "ph_backlog", "name": "Backlog" },
+                            { "id": "ph_done", "name": "Done" },
+                            { "id": "ph_inprog", "name": "In progress" }
+                        ]
+                    }
+                ]
+            }
+        }
+    });
+    gh.graphql_responses = [
+        serde_json::json!({
+            "organization": {
+                "id": "ORG_fake",
+                "projectsV2": {
+                    "nodes": [
+                        { "id": "PV1_fake", "title": "Foodshare Board", "number": 1 }
+                    ],
+                    "pageInfo": { "hasNextPage": false, "endCursor": null }
+                }
+            }
+        }),
+        fields_partial,
+        serde_json::json!({
+            "updateProjectV2Field": { "projectV2Field": { "id": "F_status" } }
+        }),
+        fields_full,
+        serde_json::json!({
+            "node": {
+                "views": {
+                    "nodes": [
+                        { "id": "V_board", "name": "Board" },
+                        { "id": "V_phases", "name": "Phases" }
+                    ]
+                }
+            }
+        }),
+    ]
+    .into_iter()
+    .map(|d| serde_json::json!({ "data": d }))
+    .collect::<Vec<_>>();
+
+    let report = run_setup(&mut gh, &cfg).await.unwrap();
+
+    // Exactly one mutation, on the Status field.
+    let mutations: Vec<_> = gh
+        .graphql_calls
+        .iter()
+        .filter(|(q, _)| q.starts_with("mutation"))
+        .collect();
+    assert_eq!(mutations.len(), 1, "unexpected mutations: {mutations:?}");
+    let (query, vars) = &mutations[0];
+    assert!(query.contains("GhsyncSetFieldOptions"));
+    assert_eq!(vars["fieldId"], "F_status");
+    let options = &vars["options"];
+    let arr = options.as_array().unwrap();
+    assert_eq!(arr.len(), 4);
+    // Existing options keep their ids; new ones are appended without.
+    assert_eq!(arr[0]["id"], "opt_backlog");
+    assert_eq!(arr[1]["id"], "opt_blocked");
+    assert!(arr[2].get("id").is_none());
+    assert_eq!(arr[2]["name"], "Done");
+    assert!(arr[3].get("id").is_none());
+    assert_eq!(arr[3]["name"], "In progress");
+    // The report carries all four option ids from the final read.
+    assert_eq!(report.status_option_ids.len(), 4);
+    assert_eq!(
+        report.status_option_ids.get("Done").map(String::as_str),
+        Some("opt_done")
+    );
+    assert!(gh.graphql_responses.is_empty());
 }
 
 #[tokio::test]

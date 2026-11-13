@@ -182,15 +182,20 @@ pub trait GitHub: Send + Sync {
     ) -> Result<String, GitHubError>;
     /// The current value of an item's field: the option name for
     /// single-select fields, the text for text fields; `None` if unset.
+    /// (The live query reads the `fieldValues` connection and matches
+    /// on the field's node id — see `GHSYNC_FIELD_VALUE_QUERY`.)
     async fn project_field_value(
         &mut self,
         item_id: &str,
         field_id: &str,
     ) -> Result<Option<String>, GitHubError>;
     /// Set an item's field. `value` is the GraphQL field-value input,
-    /// e.g. `{"singleSelectOptionId": "…"}` or `{"text": "…"}`.
+    /// e.g. `{"singleSelectOptionId": "…"}` or `{"text": "…"}` (the
+    /// live `ProjectV2FieldValue` input object; the input also requires
+    /// the project id).
     async fn set_project_field(
         &mut self,
+        project_id: &str,
         item_id: &str,
         field_id: &str,
         value: &serde_json::Value,
@@ -268,7 +273,6 @@ pub const GHSYNC_ITEMS_QUERY: &str = r#"query GhsyncProjectItems($projectId: ID!
           content {
             ... on Issue {
               number
-              nodeId
               repository {
                 name
               }
@@ -281,15 +285,33 @@ pub const GHSYNC_ITEMS_QUERY: &str = r#"query GhsyncProjectItems($projectId: ID!
 }"#;
 
 /// Read the current value of one project item field.
-pub const GHSYNC_FIELD_VALUE_QUERY: &str = r#"query GhsyncFieldValue($itemId: ID!, $fieldId: ID!) {
+///
+/// Live-verified 2026-11-13: `ProjectV2Item` has no
+/// `fieldValueByFieldId` — the value is read from the `fieldValues`
+/// connection and matched on the field's node id, which each value
+/// carries via the `field` selection (a `ProjectV2FieldConfiguration`
+/// union: fragments only).
+pub const GHSYNC_FIELD_VALUE_QUERY: &str = r#"query GhsyncFieldValue($itemId: ID!) {
   node(id: $itemId) {
     ... on ProjectV2Item {
-      fieldValueByFieldId(fieldId: $fieldId) {
-        ... on ProjectV2ItemFieldSingleSelectValue {
-          name
-        }
-        ... on ProjectV2ItemFieldTextValue {
-          text
+      fieldValues(first: 100) {
+        nodes {
+          ... on ProjectV2ItemFieldSingleSelectValue {
+            name
+            field {
+              ... on ProjectV2SingleSelectField {
+                id
+              }
+            }
+          }
+          ... on ProjectV2ItemFieldTextValue {
+            text
+            field {
+              ... on ProjectV2Field {
+                id
+              }
+            }
+          }
         }
       }
     }
@@ -297,8 +319,12 @@ pub const GHSYNC_FIELD_VALUE_QUERY: &str = r#"query GhsyncFieldValue($itemId: ID
 }"#;
 
 /// Set a project item field value.
-pub const GHSYNC_SET_FIELD_MUTATION: &str = r#"mutation GhsyncSetField($itemId: ID!, $fieldId: ID!, $value: ProjectV2ItemFieldItemValueUpdate!) {
-  updateProjectV2ItemFieldValue(input: {itemId: $itemId, fieldId: $fieldId, value: $value}) {
+///
+/// Live-verified 2026-11-13: the value is the `ProjectV2FieldValue`
+/// input object (`{singleSelectOptionId | text | …}`) and the input
+/// also requires `projectId`.
+pub const GHSYNC_SET_FIELD_MUTATION: &str = r#"mutation GhsyncSetField($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: ProjectV2FieldValue!) {
+  updateProjectV2ItemFieldValue(input: {projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: $value}) {
     projectV2Item {
       id
     }
@@ -347,14 +373,24 @@ pub const GHSYNC_CREATE_PROJECT_MUTATION: &str = r#"mutation GhsyncCreateProject
 }"#;
 
 /// List a project's fields with their single-select options.
+///
+/// Live-verified 2026-11-13: `fields.nodes` is the
+/// `ProjectV2FieldConfiguration` union — selections are fragments only.
+/// Text/number fields are the `ProjectV2Field` object; single-selects
+/// are `ProjectV2SingleSelectField` (the old
+/// `ProjectV2FieldSingleSelect` name does not exist).
 pub const GHSYNC_FIELDS_QUERY: &str = r#"query GhsyncProjectFields($projectId: ID!) {
   node(id: $projectId) {
     ... on ProjectV2 {
       fields(first: 100) {
         nodes {
-          id
-          name
-          ... on ProjectV2FieldSingleSelect {
+          ... on ProjectV2Field {
+            id
+            name
+          }
+          ... on ProjectV2SingleSelectField {
+            id
+            name
             options {
               id
               name
@@ -366,11 +402,17 @@ pub const GHSYNC_FIELDS_QUERY: &str = r#"query GhsyncProjectFields($projectId: I
   }
 }"#;
 
-/// Create a single-select field.
-pub const GHSYNC_CREATE_SINGLE_SELECT_MUTATION: &str = r#"mutation GhsyncCreateSingleSelect($projectId: ID!, $name: String!) {
-  createProjectV2Field(input: {projectId: $projectId, dataType: SINGLE_SELECT, name: $name}) {
-    field {
-      ... on ProjectV2FieldSingleSelect {
+/// Create a single-select field, with its options.
+///
+/// Live-verified 2026-11-13: there is no separate option-create
+/// mutation — options ride on the field create, each as a
+/// `ProjectV2SingleSelectFieldOptionInput` (name + color + description
+/// all required). The payload field is `projectV2Field` (a union:
+/// fragments only).
+pub const GHSYNC_CREATE_SINGLE_SELECT_MUTATION: &str = r#"mutation GhsyncCreateSingleSelect($projectId: ID!, $name: String!, $options: [ProjectV2SingleSelectFieldOptionInput!]!) {
+  createProjectV2Field(input: {projectId: $projectId, dataType: SINGLE_SELECT, name: $name, singleSelectOptions: $options}) {
+    projectV2Field {
+      ... on ProjectV2SingleSelectField {
         id
       }
     }
@@ -379,19 +421,26 @@ pub const GHSYNC_CREATE_SINGLE_SELECT_MUTATION: &str = r#"mutation GhsyncCreateS
 
 /// Create a text field.
 pub const GHSYNC_CREATE_TEXT_FIELD_MUTATION: &str = r#"mutation GhsyncCreateTextField($projectId: ID!, $name: String!) {
-  createProjectV2Field(input: {projectId: $projectId, dataType: TEXT, name: $name}) {
-    field {
-      id
+  createProjectV2Field(input: {projectId: $projectId, dataType: TEXT, name: $name, singleSelectOptions: []}) {
+    projectV2Field {
+      ... on ProjectV2Field {
+        id
+      }
     }
   }
 }"#;
 
-/// Create a single-select option.
-pub const GHSYNC_CREATE_OPTION_MUTATION: &str = r#"mutation GhsyncCreateOption($fieldId: ID!, $name: String!) {
-  createProjectV2FieldSingleSelectOption(input: {fieldId: $fieldId, name: $name}) {
-    option {
-      id
-      name
+/// Replace a single-select field's options with the given FULL list.
+///
+/// Live-verified 2026-11-13: options cannot be added individually — the
+/// update carries the whole list; existing options keep their ids (items
+/// in the project reference them), new ones are appended without.
+pub const GHSYNC_SET_FIELD_OPTIONS_MUTATION: &str = r#"mutation GhsyncSetFieldOptions($fieldId: ID!, $options: [ProjectV2SingleSelectFieldOptionInput!]!) {
+  updateProjectV2Field(input: {fieldId: $fieldId, singleSelectOptions: $options}) {
+    projectV2Field {
+      ... on ProjectV2SingleSelectField {
+        id
+      }
     }
   }
 }"#;
@@ -410,20 +459,28 @@ pub const GHSYNC_VIEWS_QUERY: &str = r#"query GhsyncProjectViews($projectId: ID!
   }
 }"#;
 
-/// Create the kanban "Board" view (columns follow the project's first
-/// single-select field — Status, which setup creates first).
+/// Create the kanban "Board" view.
+///
+/// Live-verified 2026-11-13: the view input takes `name` (not
+/// `viewName`) and a `layout` enum — the live schema has no KANBAN
+/// view type; BOARD_LAYOUT is the board grid. The payload field is
+/// `projectV2View`.
 pub const GHSYNC_CREATE_KANBAN_VIEW_MUTATION: &str = r#"mutation GhsyncCreateKanbanView($projectId: ID!, $name: String!) {
-  createProjectV2View(input: {projectId: $projectId, viewName: $name, viewType: KANBAN}) {
-    view {
+  createProjectV2View(input: {projectId: $projectId, name: $name, layout: BOARD_LAYOUT, configuration: {visibleFieldIds: []}}) {
+    projectV2View {
       id
     }
   }
 }"#;
 
-/// Create the "Phases" view over the Phase single-select field.
+/// Create the "Phases" view over the Phase field.
+///
+/// Live-verified 2026-11-13: there is no PHASES layout in the live
+/// schema; ROADMAP_LAYOUT with the Phase field in `visibleFieldIds`
+/// (a list) is the closest equivalent.
 pub const GHSYNC_CREATE_PHASES_VIEW_MUTATION: &str = r#"mutation GhsyncCreatePhasesView($projectId: ID!, $name: String!, $fieldId: ID!) {
-  createProjectV2View(input: {projectId: $projectId, viewName: $name, viewType: PHASES, fieldConfigs: [{fieldId: $fieldId}]}) {
-    view {
+  createProjectV2View(input: {projectId: $projectId, name: $name, layout: ROADMAP_LAYOUT, configuration: {visibleFieldIds: [$fieldId]}}) {
+    projectV2View {
       id
     }
   }
@@ -1035,32 +1092,46 @@ impl GitHub for RealGitHub {
         let data = self
             .graphql(
                 GHSYNC_FIELD_VALUE_QUERY,
-                serde_json::json!({ "itemId": item_id, "fieldId": field_id }),
+                serde_json::json!({ "itemId": item_id }),
             )
             .await?;
-        let Some(value) = data
-            .pointer("/node/fieldValueByFieldId")
-            .cloned()
-            .filter(|v| !v.is_null())
+        let Some(nodes) = data
+            .pointer("/node/fieldValues/nodes")
+            .and_then(|n| n.as_array())
         else {
             return Ok(None);
         };
-        Ok(value
-            .get("name")
-            .and_then(|v| v.as_str())
-            .or_else(|| value.get("text").and_then(|v| v.as_str()))
-            .map(str::to_string))
+        // Each value node carries its field's node id (a union: the
+        // matching fragment merges `field { id }` in); the item has at
+        // most one value per field.
+        for n in nodes {
+            if n.pointer("/field/id").and_then(|v| v.as_str()) != Some(field_id) {
+                continue;
+            }
+            return Ok(n
+                .get("name")
+                .and_then(|v| v.as_str())
+                .or_else(|| n.get("text").and_then(|v| v.as_str()))
+                .map(str::to_string));
+        }
+        Ok(None)
     }
 
     async fn set_project_field(
         &mut self,
+        project_id: &str,
         item_id: &str,
         field_id: &str,
         value: &serde_json::Value,
     ) -> Result<(), GitHubError> {
         self.graphql(
             GHSYNC_SET_FIELD_MUTATION,
-            serde_json::json!({ "itemId": item_id, "fieldId": field_id, "value": value }),
+            serde_json::json!({
+                "projectId": project_id,
+                "itemId": item_id,
+                "fieldId": field_id,
+                "value": value
+            }),
         )
         .await?;
         Ok(())
@@ -1436,22 +1507,36 @@ mod tests {
         assert!(GHSYNC_ITEMS_QUERY.contains("... on ProjectV2 {"));
         assert!(GHSYNC_ITEMS_QUERY.contains("... on Issue {"));
         assert!(GHSYNC_ITEMS_QUERY.contains("number"));
-        assert!(GHSYNC_ITEMS_QUERY.contains("nodeId"));
         assert!(GHSYNC_ITEMS_QUERY.contains("repository {"));
+        // `Issue.nodeId` does not exist in the live schema (live-verified
+        // 2026-11-13) and the item→issue match uses number + repo name,
+        // so the node id is not selected.
+        assert!(!GHSYNC_ITEMS_QUERY.contains("nodeId"));
 
-        assert!(
-            GHSYNC_FIELD_VALUE_QUERY
-                .contains("query GhsyncFieldValue($itemId: ID!, $fieldId: ID!)")
-        );
+        // `ProjectV2Item` has no `fieldValueByFieldId` in the live schema
+        // (live-verified 2026-11-13): the value is read from the
+        // `fieldValues` connection and matched on the field's node id,
+        // which each value carries via the `field` selection.
+        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("query GhsyncFieldValue($itemId: ID!)"));
         assert!(GHSYNC_FIELD_VALUE_QUERY.contains("... on ProjectV2Item {"));
-        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("fieldValueByFieldId(fieldId: $fieldId)"));
+        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("fieldValues(first: 100)"));
         assert!(GHSYNC_FIELD_VALUE_QUERY.contains("ProjectV2ItemFieldSingleSelectValue"));
         assert!(GHSYNC_FIELD_VALUE_QUERY.contains("ProjectV2ItemFieldTextValue"));
+        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("... on ProjectV2SingleSelectField {"));
+        assert!(GHSYNC_FIELD_VALUE_QUERY.contains("... on ProjectV2Field {"));
+        assert!(!GHSYNC_FIELD_VALUE_QUERY.contains("fieldValueByFieldId"));
 
+        // Live-verified 2026-11-13: the value is the `ProjectV2FieldValue`
+        // input object ({singleSelectOptionId | text | …}) and the input
+        // also requires projectId. `ProjectV2ItemFieldItemValueUpdate` is
+        // not a defined input type.
         assert!(GHSYNC_SET_FIELD_MUTATION.contains(
-            "mutation GhsyncSetField($itemId: ID!, $fieldId: ID!, $value: ProjectV2ItemFieldItemValueUpdate!)"
+            "mutation GhsyncSetField($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: ProjectV2FieldValue!)"
         ));
-        assert!(GHSYNC_SET_FIELD_MUTATION.contains("updateProjectV2ItemFieldValue(input: {itemId: $itemId, fieldId: $fieldId, value: $value})"));
+        assert!(GHSYNC_SET_FIELD_MUTATION.contains(
+            "updateProjectV2ItemFieldValue(input: {projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: $value})"
+        ));
+        assert!(!GHSYNC_SET_FIELD_MUTATION.contains("ProjectV2ItemFieldItemValueUpdate"));
 
         assert!(
             GHSYNC_ADD_ITEM_MUTATION
@@ -1483,49 +1568,81 @@ mod tests {
             "createProjectV2(input: $input) {\n    projectV2 {\n      id\n      title\n    }"
         ));
 
+        // `fields.nodes` is the `ProjectV2FieldConfiguration` union in the
+        // live schema — id/name cannot be selected directly on it
+        // (live-verified 2026-11-13). Text/number fields are the
+        // `ProjectV2Field` object; single-selects are
+        // `ProjectV2SingleSelectField` (the old
+        // `ProjectV2FieldSingleSelect` name does not exist).
         assert!(GHSYNC_FIELDS_QUERY.contains("query GhsyncProjectFields($projectId: ID!)"));
         assert!(GHSYNC_FIELDS_QUERY.contains("fields(first: 100)"));
-        assert!(GHSYNC_FIELDS_QUERY.contains("... on ProjectV2FieldSingleSelect {"));
+        assert!(GHSYNC_FIELDS_QUERY.contains("... on ProjectV2Field {"));
+        assert!(GHSYNC_FIELDS_QUERY.contains("... on ProjectV2SingleSelectField {"));
         assert!(GHSYNC_FIELDS_QUERY.contains("options {"));
+        assert!(!GHSYNC_FIELDS_QUERY.contains("... on ProjectV2FieldSingleSelect {"));
 
-        assert!(
-            GHSYNC_CREATE_SINGLE_SELECT_MUTATION
-                .contains("mutation GhsyncCreateSingleSelect($projectId: ID!, $name: String!)")
-        );
+        // Live-verified 2026-11-13: options are created WITH the field —
+        // there is no separate option-create mutation in the live schema
+        // — and each option input requires name, color and description.
+        // The payload field is `projectV2Field` (a union: fragments only).
         assert!(GHSYNC_CREATE_SINGLE_SELECT_MUTATION.contains(
-            "createProjectV2Field(input: {projectId: $projectId, dataType: SINGLE_SELECT, name: $name})"
+            "mutation GhsyncCreateSingleSelect($projectId: ID!, $name: String!, $options: [ProjectV2SingleSelectFieldOptionInput!]!)"
         ));
+        assert!(GHSYNC_CREATE_SINGLE_SELECT_MUTATION.contains(
+            "createProjectV2Field(input: {projectId: $projectId, dataType: SINGLE_SELECT, name: $name, singleSelectOptions: $options})"
+        ));
+        assert!(GHSYNC_CREATE_SINGLE_SELECT_MUTATION.contains("projectV2Field {"));
+        assert!(
+            GHSYNC_CREATE_SINGLE_SELECT_MUTATION.contains("... on ProjectV2SingleSelectField {")
+        );
 
         assert!(
             GHSYNC_CREATE_TEXT_FIELD_MUTATION
                 .contains("mutation GhsyncCreateTextField($projectId: ID!, $name: String!)")
         );
-        assert!(GHSYNC_CREATE_TEXT_FIELD_MUTATION.contains("dataType: TEXT"));
-
-        assert!(
-            GHSYNC_CREATE_OPTION_MUTATION
-                .contains("mutation GhsyncCreateOption($fieldId: ID!, $name: String!)")
-        );
-        assert!(GHSYNC_CREATE_OPTION_MUTATION.contains(
-            "createProjectV2FieldSingleSelectOption(input: {fieldId: $fieldId, name: $name})"
+        assert!(GHSYNC_CREATE_TEXT_FIELD_MUTATION.contains(
+            "createProjectV2Field(input: {projectId: $projectId, dataType: TEXT, name: $name, singleSelectOptions: []})"
         ));
+        assert!(GHSYNC_CREATE_TEXT_FIELD_MUTATION.contains("projectV2Field {"));
+        assert!(GHSYNC_CREATE_TEXT_FIELD_MUTATION.contains("... on ProjectV2Field {"));
+
+        // Adding missing options to an existing field is a
+        // `updateProjectV2Field` with the FULL option list (existing
+        // options keep their ids); live-verified 2026-11-13.
+        assert!(GHSYNC_SET_FIELD_OPTIONS_MUTATION.contains(
+            "mutation GhsyncSetFieldOptions($fieldId: ID!, $options: [ProjectV2SingleSelectFieldOptionInput!]!)"
+        ));
+        assert!(GHSYNC_SET_FIELD_OPTIONS_MUTATION.contains(
+            "updateProjectV2Field(input: {fieldId: $fieldId, singleSelectOptions: $options})"
+        ));
+        assert!(GHSYNC_SET_FIELD_OPTIONS_MUTATION.contains("projectV2Field {"));
 
         assert!(GHSYNC_VIEWS_QUERY.contains("query GhsyncProjectViews($projectId: ID!)"));
         assert!(GHSYNC_VIEWS_QUERY.contains("views(first: 100)"));
 
+        // Live-verified 2026-11-13: the view input takes `name` (not
+        // `viewName`) and a `layout` enum — the live schema has no
+        // KANBAN/PHASES view types; BOARD_LAYOUT is the board grid and
+        // ROADMAP_LAYOUT the closest to the old PHASES view (grouped by
+        // the Phase field via visibleFieldIds, a list). The payload field
+        // is `projectV2View`.
         assert!(
             GHSYNC_CREATE_KANBAN_VIEW_MUTATION
                 .contains("mutation GhsyncCreateKanbanView($projectId: ID!, $name: String!)")
         );
         assert!(GHSYNC_CREATE_KANBAN_VIEW_MUTATION.contains(
-            "createProjectV2View(input: {projectId: $projectId, viewName: $name, viewType: KANBAN})"
+            "createProjectV2View(input: {projectId: $projectId, name: $name, layout: BOARD_LAYOUT, configuration: {visibleFieldIds: []}})"
         ));
+        assert!(GHSYNC_CREATE_KANBAN_VIEW_MUTATION.contains("projectV2View {"));
         assert!(GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains(
             "mutation GhsyncCreatePhasesView($projectId: ID!, $name: String!, $fieldId: ID!)"
         ));
         assert!(GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains(
-            "createProjectV2View(input: {projectId: $projectId, viewName: $name, viewType: PHASES, fieldConfigs: [{fieldId: $fieldId}]})"
+            "createProjectV2View(input: {projectId: $projectId, name: $name, layout: ROADMAP_LAYOUT, configuration: {visibleFieldIds: [$fieldId]}})"
         ));
+        assert!(GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains("projectV2View {"));
+        assert!(!GHSYNC_CREATE_KANBAN_VIEW_MUTATION.contains("viewType"));
+        assert!(!GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains("viewType"));
 
         assert!(
             GHSYNC_DISCUSSIONS_QUERY

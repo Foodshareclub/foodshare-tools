@@ -404,6 +404,7 @@ impl GitHub for FakeGitHub {
 
     async fn set_project_field(
         &mut self,
+        _project_id: &str,
         item_id: &str,
         field_id: &str,
         value: &serde_json::Value,

@@ -543,7 +543,8 @@ pub async fn push_project_fields(
             } else {
                 last.map(str::to_string)
             };
-            gh.set_project_field(&item, field_id, value).await?;
+            gh.set_project_field(&project_id, &item, field_id, value)
+                .await?;
             cursor.set(&issue_key, field_name, stored);
             report.writes.push(FieldWrite {
                 issue: issue_key.clone(),

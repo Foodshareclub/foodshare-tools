@@ -18,11 +18,11 @@ use thiserror::Error;
 
 use crate::config::Config;
 use crate::github::{
-    GHSYNC_CREATE_KANBAN_VIEW_MUTATION, GHSYNC_CREATE_OPTION_MUTATION,
-    GHSYNC_CREATE_PHASES_VIEW_MUTATION, GHSYNC_CREATE_PROJECT_MUTATION,
-    GHSYNC_CREATE_SINGLE_SELECT_MUTATION, GHSYNC_CREATE_TEXT_FIELD_MUTATION,
-    GHSYNC_DISCUSSIONS_QUERY, GHSYNC_FIELDS_QUERY, GHSYNC_LIST_PROJECTS_QUERY, GHSYNC_VIEWS_QUERY,
-    GitHub, GitHubError,
+    GHSYNC_CREATE_KANBAN_VIEW_MUTATION, GHSYNC_CREATE_PHASES_VIEW_MUTATION,
+    GHSYNC_CREATE_PROJECT_MUTATION, GHSYNC_CREATE_SINGLE_SELECT_MUTATION,
+    GHSYNC_CREATE_TEXT_FIELD_MUTATION, GHSYNC_DISCUSSIONS_QUERY, GHSYNC_FIELDS_QUERY,
+    GHSYNC_LIST_PROJECTS_QUERY, GHSYNC_SET_FIELD_OPTIONS_MUTATION, GHSYNC_VIEWS_QUERY, GitHub,
+    GitHubError,
 };
 
 /// The title of the org Project v2 board.
@@ -247,17 +247,7 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
         .map(|p| p.phase_options.keys().cloned().collect())
         .unwrap_or_default();
 
-    let (status_field, status_option_ids) = ensure_single_select(
-        gh,
-        &project_id,
-        "Status",
-        &status_keys,
-        existing.remove("Status"),
-    )
-    .await?;
-    report.status_field = status_field.clone();
-    report.status_option_ids = status_option_ids;
-
+    let existing_status = existing.remove("Status");
     let assignee_field = match existing.remove("Assignee") {
         Some((id, _)) => id,
         None => {
@@ -267,7 +257,7 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
                     serde_json::json!({ "projectId": project_id, "name": "Assignee" }),
                 )
                 .await?;
-            data.pointer("/createProjectV2Field/field/id")
+            data.pointer("/createProjectV2Field/projectV2Field/id")
                 .and_then(|v| v.as_str())
                 .map(str::to_string)
                 .ok_or_else(|| {
@@ -276,17 +266,25 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
         }
     };
     report.assignee_field = assignee_field;
-
-    let (phase_field, phase_option_ids) = ensure_single_select(
-        gh,
-        &project_id,
-        "Phase",
-        &phase_keys,
-        existing.remove("Phase"),
-    )
-    .await?;
+    let existing_phase = existing.remove("Phase");
+    let status_field =
+        ensure_single_select(gh, &project_id, "Status", &status_keys, existing_status).await?;
+    report.status_field = status_field;
+    let phase_field =
+        ensure_single_select(gh, &project_id, "Phase", &phase_keys, existing_phase).await?;
     report.phase_field = phase_field;
-    report.phase_option_ids = phase_option_ids;
+
+    // Option ids: the create/update responses do not return the options,
+    // so one more fields read collects them (setup is a one-off; the
+    // steady-state cost lives in push, not here).
+    let data = gh
+        .graphql(
+            GHSYNC_FIELDS_QUERY,
+            serde_json::json!({ "projectId": project_id }),
+        )
+        .await?;
+    report.status_option_ids = option_ids_from(&data, "Status");
+    report.phase_option_ids = option_ids_from(&data, "Phase");
 
     // 5. Per-repo default milestones.
     for repo in &cfg.repos {
@@ -395,57 +393,113 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
 }
 
 /// Ensure a single-select field exists with all the wanted options;
-/// returns (field id, option label -> option id).
+/// returns the field id.
+///
+/// Live-verified 2026-11-13: there is no per-option mutation — options
+/// ride on the field create, and a field missing options is updated once
+/// with the FULL merged list (existing options keep their ids, which
+/// items in the project reference). Option ids are collected by the
+/// caller from a final fields read.
 async fn ensure_single_select(
     gh: &mut impl GitHub,
     project_id: &str,
     name: &str,
     option_names: &[String],
     existing: Option<(String, Vec<(String, String)>)>,
-) -> Result<(String, BTreeMap<String, String>), GitHubError> {
-    let (field_id, existing_options) = match existing {
-        Some((id, opts)) => (id, opts),
+) -> Result<String, GitHubError> {
+    match existing {
+        Some((field_id, existing_options)) => {
+            let missing: Vec<&String> = option_names
+                .iter()
+                .filter(|want| !existing_options.iter().any(|(_, n)| n == *want))
+                .collect();
+            if missing.is_empty() {
+                return Ok(field_id);
+            }
+            // Merged list: existing options first (ids preserved), then
+            // the new ones.
+            let options: Vec<serde_json::Value> = existing_options
+                .iter()
+                .map(|(id, n)| option_input(Some(id), n))
+                .chain(missing.iter().map(|n| option_input(None, n)))
+                .collect();
+            gh.graphql(
+                GHSYNC_SET_FIELD_OPTIONS_MUTATION,
+                serde_json::json!({ "fieldId": field_id, "options": options }),
+            )
+            .await?;
+            Ok(field_id)
+        }
         None => {
+            let options: Vec<serde_json::Value> =
+                option_names.iter().map(|n| option_input(None, n)).collect();
             let data = gh
                 .graphql(
                     GHSYNC_CREATE_SINGLE_SELECT_MUTATION,
-                    serde_json::json!({ "projectId": project_id, "name": name }),
+                    serde_json::json!({
+                        "projectId": project_id,
+                        "name": name,
+                        "options": options
+                    }),
                 )
                 .await?;
-            let id = data
-                .pointer("/createProjectV2Field/field/id")
+            data.pointer("/createProjectV2Field/projectV2Field/id")
                 .and_then(|v| v.as_str())
                 .map(str::to_string)
-                .ok_or_else(|| {
-                    GitHubError::Io(format!("createProjectV2Field({name}): missing id"))
-                })?;
-            (id, Vec::new())
-        }
-    };
-    let mut ids = BTreeMap::new();
-    for want in option_names {
-        if let Some((oid, _)) = existing_options.iter().find(|(_, n)| n == want) {
-            ids.insert(want.clone(), oid.clone());
-        } else {
-            let data = gh
-                .graphql(
-                    GHSYNC_CREATE_OPTION_MUTATION,
-                    serde_json::json!({ "fieldId": field_id, "name": want }),
-                )
-                .await?;
-            let oid = data
-                .pointer("/createProjectV2FieldSingleSelectOption/option/id")
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-                .ok_or_else(|| {
-                    GitHubError::Io(format!(
-                        "createProjectV2FieldSingleSelectOption({want}): missing id"
-                    ))
-                })?;
-            ids.insert(want.clone(), oid);
+                .ok_or_else(|| GitHubError::Io(format!("createProjectV2Field({name}): missing id")))
         }
     }
-    Ok((field_id, ids))
+}
+
+/// One option input. The live `ProjectV2SingleSelectFieldOptionInput`
+/// requires name, color and description (live-verified 2026-11-13); an
+/// existing option keeps its id.
+fn option_input(id: Option<&str>, name: &str) -> serde_json::Value {
+    let mut v = serde_json::json!({
+        "name": name,
+        "color": option_color(name),
+        "description": ""
+    });
+    if let Some(id) = id {
+        v["id"] = serde_json::json!(id);
+    }
+    v
+}
+
+/// Cosmetic board column colors; the enum values are live-verified
+/// (GRAY/BLUE/RED/GREEN).
+fn option_color(name: &str) -> &'static str {
+    match name {
+        "In progress" => "BLUE",
+        "Blocked" => "RED",
+        "Done" => "GREEN",
+        _ => "GRAY",
+    }
+}
+
+/// Option label -> option id for one field, from a fields-read
+/// response.
+fn option_ids_from(data: &serde_json::Value, field_name: &str) -> BTreeMap<String, String> {
+    data.pointer("/node/fields/nodes")
+        .and_then(|n| n.as_array())
+        .map(|nodes| {
+            nodes
+                .iter()
+                .find(|n| n.get("name").and_then(|v| v.as_str()) == Some(field_name))
+                .and_then(|n| n.get("options").and_then(|o| o.as_array()))
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|o| {
+                            Some((
+                                o.get("name")?.as_str()?.to_string(),
+                                o.get("id")?.as_str()?.to_string(),
+                            ))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .unwrap_or_default()
 }
 
 /// Copy the discovered ids into the config so the next `Config::load`
