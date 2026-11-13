@@ -476,10 +476,10 @@ pub const GHSYNC_CREATE_KANBAN_VIEW_MUTATION: &str = r#"mutation GhsyncCreateKan
 /// Create the "Phases" view over the Phase field.
 ///
 /// Live-verified 2026-11-13: there is no PHASES layout in the live
-/// schema; ROADMAP_LAYOUT with the Phase field in `visibleFieldIds`
-/// (a list) is the closest equivalent.
-pub const GHSYNC_CREATE_PHASES_VIEW_MUTATION: &str = r#"mutation GhsyncCreatePhasesView($projectId: ID!, $name: String!, $fieldId: ID!) {
-  createProjectV2View(input: {projectId: $projectId, name: $name, layout: ROADMAP_LAYOUT, configuration: {visibleFieldIds: [$fieldId]}}) {
+/// schema, and "Roadmap views do not support visible fields" — so the
+/// Phases view is a plain ROADMAP_LAYOUT with no configuration.
+pub const GHSYNC_CREATE_PHASES_VIEW_MUTATION: &str = r#"mutation GhsyncCreatePhasesView($projectId: ID!, $name: String!) {
+  createProjectV2View(input: {projectId: $projectId, name: $name, layout: ROADMAP_LAYOUT}) {
     projectV2View {
       id
     }
@@ -1634,15 +1634,20 @@ mod tests {
             "createProjectV2View(input: {projectId: $projectId, name: $name, layout: BOARD_LAYOUT, configuration: {visibleFieldIds: []}})"
         ));
         assert!(GHSYNC_CREATE_KANBAN_VIEW_MUTATION.contains("projectV2View {"));
+        assert!(
+            GHSYNC_CREATE_PHASES_VIEW_MUTATION
+                .contains("mutation GhsyncCreatePhasesView($projectId: ID!, $name: String!)")
+        );
         assert!(GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains(
-            "mutation GhsyncCreatePhasesView($projectId: ID!, $name: String!, $fieldId: ID!)"
-        ));
-        assert!(GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains(
-            "createProjectV2View(input: {projectId: $projectId, name: $name, layout: ROADMAP_LAYOUT, configuration: {visibleFieldIds: [$fieldId]}})"
+            "createProjectV2View(input: {projectId: $projectId, name: $name, layout: ROADMAP_LAYOUT})"
         ));
         assert!(GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains("projectV2View {"));
         assert!(!GHSYNC_CREATE_KANBAN_VIEW_MUTATION.contains("viewType"));
         assert!(!GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains("viewType"));
+        // Live-verified 2026-11-13: "Roadmap views do not support visible
+        // fields" — the Phases view is a plain ROADMAP_LAYOUT with no
+        // configuration (the grouped board grid is the Board view).
+        assert!(!GHSYNC_CREATE_PHASES_VIEW_MUTATION.contains("visibleFieldIds"));
 
         assert!(
             GHSYNC_DISCUSSIONS_QUERY

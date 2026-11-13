@@ -396,11 +396,7 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
     if !views.iter().any(|v| v == VIEW_PHASES) {
         gh.graphql(
             GHSYNC_CREATE_PHASES_VIEW_MUTATION,
-            serde_json::json!({
-                "projectId": project_id,
-                "name": VIEW_PHASES,
-                "fieldId": report.phase_field.as_str(),
-            }),
+            serde_json::json!({ "projectId": project_id, "name": VIEW_PHASES }),
         )
         .await?;
         report.views_created.push(VIEW_PHASES.into());
