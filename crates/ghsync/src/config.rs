@@ -305,7 +305,7 @@ impl Default for Config {
                 number: 1,
                 project_id: String::new(),
                 status_field: "Status".into(),
-                assignee_field: "Assignee".into(),
+                assignee_field: "Agent".into(),
                 phase_field: "Phase".into(),
                 status_options: [
                     ("Backlog", Status::Todo),

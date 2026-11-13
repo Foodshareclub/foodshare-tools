@@ -62,7 +62,7 @@ number = 1
 # Written back by `ghsync setup`; empty until it has run.
 project_id = ""
 status_field = "Status"
-assignee_field = "Assignee"
+assignee_field = "Agent"
 phase_field = "Phase"
 
 # Project option label -> kanban status.

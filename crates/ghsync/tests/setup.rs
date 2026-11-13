@@ -47,7 +47,7 @@ fn fresh_org_responses() -> Vec<serde_json::Value> {
                             { "id": "opt_inprog", "name": "In progress" }
                         ]
                     },
-                    { "id": "F_assignee", "name": "Assignee", "options": null },
+                    { "id": "F_assignee", "name": "Agent", "options": null },
                     {
                         "id": "F_phase",
                         "name": "Phase",
@@ -177,6 +177,15 @@ async fn fresh_org_setup_provisions_everything_and_records_ids() {
             .any(|(q, _)| q.contains("GhsyncCreateOption")),
         "stale option-create call"
     );
+    // "Assignee" is a reserved custom-field name in the live schema
+    // (live-verified 2026-11-13: "Name cannot have a reserved value");
+    // the text field is created under the configured board name "Agent".
+    let agent_create = gh
+        .graphql_calls
+        .iter()
+        .find(|(q, _)| q.contains("GhsyncCreateTextField"))
+        .expect("the Agent text-field create was made");
+    assert_eq!(agent_create.1["name"], "Agent");
     // Every option of both single-select fields is recorded with its id.
     assert_eq!(report.status_option_ids.len(), 4);
     assert_eq!(
@@ -302,7 +311,7 @@ async fn second_run_writes_nothing() {
                                 { "id": "opt_inprog", "name": "In progress" }
                             ]
                         },
-                        { "id": "F_assignee", "name": "Assignee", "options": null },
+                        { "id": "F_assignee", "name": "Agent", "options": null },
                         {
                             "id": "F_phase",
                             "name": "Phase",
@@ -424,7 +433,7 @@ async fn field_missing_an_option_gets_one_update_with_merged_list() {
                             { "id": "opt_blocked", "name": "Blocked" }
                         ]
                     },
-                    { "id": "F_assignee", "name": "Assignee", "options": null },
+                    { "id": "F_assignee", "name": "Agent", "options": null },
                     {
                         "id": "F_phase",
                         "name": "Phase",
@@ -452,7 +461,7 @@ async fn field_missing_an_option_gets_one_update_with_merged_list() {
                             { "id": "opt_inprog", "name": "In progress" }
                         ]
                     },
-                    { "id": "F_assignee", "name": "Assignee", "options": null },
+                    { "id": "F_assignee", "name": "Agent", "options": null },
                     {
                         "id": "F_phase",
                         "name": "Phase",

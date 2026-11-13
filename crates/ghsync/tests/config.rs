@@ -111,7 +111,7 @@ fn default_config_matches_plan() {
     let p = c.project.as_ref().unwrap();
     assert_eq!(p.number, 1);
     assert_eq!(p.status_field, "Status");
-    assert_eq!(p.assignee_field, "Assignee");
+    assert_eq!(p.assignee_field, "Agent");
     assert_eq!(p.phase_field, "Phase");
     assert_eq!(p.status_options.get("Backlog"), Some(&Status::Todo));
     assert_eq!(p.status_options.get("In progress"), Some(&Status::Running));

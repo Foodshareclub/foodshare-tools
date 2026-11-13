@@ -75,7 +75,7 @@ async fn clean_pair(kb: &mut FakeKanban, gh: &mut FakeGitHub) -> (String, Cursor
         "In progress".to_string(),
     );
     gh.project_fields.insert(
-        ("I1".to_string(), "Assignee".to_string()),
+        ("I1".to_string(), "Agent".to_string()),
         "agent-default".to_string(),
     );
     gh.project_fields.insert(
@@ -218,7 +218,7 @@ async fn merged_pr_without_evidence_flags_exactly() {
         "In progress".to_string(),
     );
     gh.project_fields.insert(
-        ("I1".to_string(), "Assignee".to_string()),
+        ("I1".to_string(), "Agent".to_string()),
         "agent-default".to_string(),
     );
     gh.project_fields.insert(
@@ -278,7 +278,7 @@ async fn merged_pr_with_evidence_is_clean() {
         "In progress".to_string(),
     );
     gh.project_fields.insert(
-        ("I1".to_string(), "Assignee".to_string()),
+        ("I1".to_string(), "Agent".to_string()),
         "agent-default".to_string(),
     );
     gh.project_fields.insert(

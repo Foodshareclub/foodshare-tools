@@ -12,7 +12,7 @@ channel — one role per surface, never a second state.
 | Issues + labels           | Projection | kanban → GH  | One issue per card, `ghsync` + `ghsync-<repo>` labels, `kanban:` footer, milestone, open/closed state. |
 | Intake form (`agent-intake.yml`) | Intake   | GH → kanban  | A submitted form is an `intake`-labeled issue; `intake` turns it into exactly one card.        |
 | Discussions (labeled)     | Intake    | GH → kanban  | A discussion labeled `intake` becomes one card; the label is removed.                          |
-| Org Project v2 board      | Projection | kanban → GH  | Status / Assignee / Phase fields per linked issue, written only when the value changes.        |
+| Org Project v2 board      | Projection | kanban → GH  | Status / Agent / Phase fields per linked issue, written only when the value changes.           |
 | Feed discussions          | Feed      | kanban → GH  | Review verdicts and escalations post to the repo's feed category (`feed_category`, default `General`), one discussion per card. |
 | Merged-PR comments        | Evidence  | GH → GH      | A merged PR referenced by a card leaves exactly one `PR #n merged - CI: …` comment on the linked issue. |
 

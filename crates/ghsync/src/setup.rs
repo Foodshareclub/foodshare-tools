@@ -53,6 +53,9 @@ pub enum SetupError {
         wanted: String,
         available: Vec<String>,
     },
+    /// A required config section is missing.
+    #[error("ghsync: {0}")]
+    Config(String),
     #[error(transparent)]
     GitHub(#[from] GitHubError),
 }
@@ -247,14 +250,28 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
         .map(|p| p.phase_options.keys().cloned().collect())
         .unwrap_or_default();
 
-    let existing_status = existing.remove("Status");
-    let assignee_field = match existing.remove("Assignee") {
+    // 4. Status / Agent / Phase fields. The board field names come from
+    // the config (`status_field`/`assignee_field`/`phase_field` hold the
+    // names until setup has replaced them with the live field ids).
+    // "Assignee" is a reserved custom-field name in the live schema
+    // (live-verified 2026-11-13), which is why the default board name
+    // is "Agent".
+    let Some(proj) = cfg.project.as_ref() else {
+        return Err(SetupError::Config(
+            "missing [project] section — cannot run setup".into(),
+        ));
+    };
+    let status_name = proj.status_field.clone();
+    let assignee_name = proj.assignee_field.clone();
+    let phase_name = proj.phase_field.clone();
+    let existing_status = existing.remove(&status_name);
+    let assignee_field = match existing.remove(&assignee_name) {
         Some((id, _)) => id,
         None => {
             let data = gh
                 .graphql(
                     GHSYNC_CREATE_TEXT_FIELD_MUTATION,
-                    serde_json::json!({ "projectId": project_id, "name": "Assignee" }),
+                    serde_json::json!({ "projectId": project_id, "name": assignee_name }),
                 )
                 .await?;
             data.pointer("/createProjectV2Field/projectV2Field/id")
@@ -266,12 +283,12 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
         }
     };
     report.assignee_field = assignee_field;
-    let existing_phase = existing.remove("Phase");
+    let existing_phase = existing.remove(&phase_name);
     let status_field =
-        ensure_single_select(gh, &project_id, "Status", &status_keys, existing_status).await?;
+        ensure_single_select(gh, &project_id, &status_name, &status_keys, existing_status).await?;
     report.status_field = status_field;
     let phase_field =
-        ensure_single_select(gh, &project_id, "Phase", &phase_keys, existing_phase).await?;
+        ensure_single_select(gh, &project_id, &phase_name, &phase_keys, existing_phase).await?;
     report.phase_field = phase_field;
 
     // Option ids: the create/update responses do not return the options,
@@ -283,8 +300,8 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
             serde_json::json!({ "projectId": project_id }),
         )
         .await?;
-    report.status_option_ids = option_ids_from(&data, "Status");
-    report.phase_option_ids = option_ids_from(&data, "Phase");
+    report.status_option_ids = option_ids_from(&data, &status_name);
+    report.phase_option_ids = option_ids_from(&data, &phase_name);
 
     // 5. Per-repo default milestones.
     for repo in &cfg.repos {
