@@ -35,6 +35,7 @@ fn fresh_org_responses() -> Vec<serde_json::Value> {
     let data = [
         serde_json::json!({
             "organization": {
+                "id": "ORG_fake",
                 "projectsV2": {
                     "nodes": [],
                     "pageInfo": { "hasNextPage": false, "endCursor": null }
@@ -91,6 +92,22 @@ async fn fresh_org_setup_provisions_everything_and_records_ids() {
 
     assert_eq!(report.user, "fakeuser");
     assert!(report.project_created);
+    // The create call must use the live input shape {ownerId, title}:
+    // `owner` and `contentKind` do not exist on CreateProjectV2Input
+    // (live-verified 2026-11-12 — the old shape was rejected by the API).
+    let create_call = gh
+        .graphql_calls
+        .iter()
+        .find(|(q, _)| q.contains("GhsyncCreateProject"))
+        .expect("the create call was made");
+    let input = &create_call.1["input"];
+    assert_eq!(input["ownerId"], "ORG_fake");
+    assert_eq!(input["title"], "Foodshare Board");
+    assert!(input.get("owner").is_none(), "stale input key: owner");
+    assert!(
+        input.get("contentKind").is_none(),
+        "stale input key: contentKind"
+    );
     assert_eq!(report.project_id, "PV1_fake");
     assert_eq!(report.status_field, "F_status");
     assert_eq!(report.assignee_field, "F_assignee");
@@ -209,6 +226,7 @@ async fn second_run_writes_nothing() {
         let data = [
             serde_json::json!({
                 "organization": {
+                    "id": "ORG_fake",
                     "projectsV2": {
                         "nodes": [
                             { "id": "PV1_fake", "title": "Foodshare Board", "number": 1 }

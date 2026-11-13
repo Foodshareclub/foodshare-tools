@@ -122,7 +122,10 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
 
     // 3. The project (found by title: no projectV2ByName in the GraphQL
     // schema — page through the org's boards, of which there are few).
+    // The org node id rides on the same list call: CreateProjectV2Input
+    // requires ownerId (live-verified 2026-11-12).
     let mut project_id: Option<String> = None;
+    let mut org_id: Option<String> = None;
     let mut cursor: Option<String> = None;
     while project_id.is_none() {
         let data = gh
@@ -131,6 +134,12 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
                 serde_json::json!({ "org": cfg.org, "cursor": cursor }),
             )
             .await?;
+        if org_id.is_none() {
+            org_id = data
+                .pointer("/organization/id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+        }
         let pv = data
             .pointer("/organization/projectsV2")
             .ok_or_else(|| GitHubError::Io("projectsV2: missing from response".into()))?;
@@ -164,14 +173,16 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
     let project_id = match project_id {
         Some(id) => id.to_string(),
         None => {
+            let org_id = org_id.ok_or_else(|| {
+                GitHubError::Io("organization id missing from projects list response".into())
+            })?;
             let data = gh
                 .graphql(
                     GHSYNC_CREATE_PROJECT_MUTATION,
                     serde_json::json!({
                         "input": {
-                            "owner": cfg.org,
-                            "title": PROJECT_TITLE,
-                            "contentKind": "ORGANIZATION"
+                            "ownerId": org_id,
+                            "title": PROJECT_TITLE
                         }
                     }),
                 )

@@ -321,6 +321,7 @@ pub const GHSYNC_ADD_ITEM_MUTATION: &str = r#"mutation GhsyncAddItem($projectId:
 /// matches the title itself.
 pub const GHSYNC_LIST_PROJECTS_QUERY: &str = r#"query GhsyncListProjects($org: String!, $cursor: String) {
   organization(login: $org) {
+    id
     projectsV2(first: 100, after: $cursor) {
       nodes {
         id
@@ -1465,6 +1466,12 @@ mod tests {
                 .contains("query GhsyncListProjects($org: String!, $cursor: String)")
         );
         assert!(GHSYNC_LIST_PROJECTS_QUERY.contains("projectsV2(first: 100, after: $cursor)"));
+        // The org node id is selected in the same call: CreateProjectV2Input
+        // requires ownerId (live-verified 2026-11-12), and there is no
+        // extra API call for it.
+        assert!(GHSYNC_LIST_PROJECTS_QUERY.contains(
+            "organization(login: $org) {\n    id\n    projectsV2(first: 100, after: $cursor)"
+        ));
 
         assert!(
             GHSYNC_CREATE_PROJECT_MUTATION
