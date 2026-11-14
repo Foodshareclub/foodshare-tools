@@ -574,6 +574,11 @@ pub fn path_repo(org: &str, repo: &str) -> String {
     format!("/repos/{org}/{repo}")
 }
 
+/// `/repos/{org}/{repo}/issues`
+pub fn path_issues(org: &str, repo: &str) -> String {
+    format!("/repos/{org}/{repo}/issues")
+}
+
 /// `/repos/{org}/{repo}/issues/{n}`
 pub fn path_issue(org: &str, repo: &str, number: u32) -> String {
     format!("/repos/{org}/{repo}/issues/{number}")
@@ -760,7 +765,7 @@ impl GitHub for RealGitHub {
         let resp = self
             .rest(
                 reqwest::Method::POST,
-                &path_repo(&self.org, repo),
+                &path_issues(&self.org, repo),
                 Some(payload),
             )
             .await?;

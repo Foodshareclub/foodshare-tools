@@ -13,8 +13,8 @@ use std::os::unix::fs::PermissionsExt;
 
 use ghsync::fakes::{FakeGitHub, FakeKanban};
 use ghsync::github::{
-    GitHub, path_check_runs, path_discussion_labels, path_issue, path_issue_comments, path_labels,
-    path_milestones, path_pull, path_repo,
+    GitHub, path_check_runs, path_discussion_labels, path_issue, path_issue_comments, path_issues,
+    path_labels, path_milestones, path_pull, path_repo,
 };
 use ghsync::kanban::{Card, Kanban, KanbanError, RealKanban, links_from_comments};
 
@@ -180,6 +180,16 @@ fn rest_paths_are_exact() {
     assert_eq!(
         path_repo("Foodshareclub", "foodshare-app"),
         "/repos/Foodshareclub/foodshare-app"
+    );
+    // The issues collection — where create_issue must POST. Posting to the
+    // repo root instead is a live bug: GitHub answers an undefined POST on
+    // /repos/{org}/{repo} with HTTP 200 and the REPO object, which has no
+    // `number` field, so the "created" issue silently became #0 and the
+    // follow-up set_milestone 404'd on /issues/0 (2026-11-13, first live
+    // full-board push).
+    assert_eq!(
+        path_issues("Foodshareclub", "foodshare-app"),
+        "/repos/Foodshareclub/foodshare-app/issues"
     );
     assert_eq!(
         path_issue("Foodshareclub", "foodshare-app", 41),
