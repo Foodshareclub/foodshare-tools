@@ -389,6 +389,267 @@ async fn second_run_writes_nothing() {
     let _ = &cfg_path;
 }
 
+/// After the first run, `apply_report_to_config` writes the field ids
+/// back into the config — `status_field`/`assignee_field`/`phase_field`
+/// then hold ids, not names. The live board proved what a name-only
+/// lookup does on a re-run: it misses the field and creates a ghost
+/// field named after the configured id (three ghost sets existed on the
+/// Foodshare Board, each named after the previous revision's field id).
+/// Resolution must match by id, and option ids must be collected from
+/// the field carrying the configured id — not from the field NAMED
+/// after it (the ghost).
+#[tokio::test]
+async fn second_run_with_id_writeback_adopts_fields_by_id_and_writes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg_path = dir.path().join("config.toml");
+    let mut cfg = cfg_with(&cfg_path);
+    // The first run's write-back: the config's field entries hold the
+    // fields' live-shape ids.
+    let proj = cfg.project.as_mut().unwrap();
+    proj.status_field = "PVTSSF_lADOBl819c4Brb9qFStatus".into();
+    proj.assignee_field = "PVTF_lADOBl819c4Brb9qFAgent".into();
+    proj.phase_field = "PVTSSF_lADOBl819c4Brb9qFPhase".into();
+
+    let mut gh = FakeGitHub::default();
+    gh.discussion_state.insert(
+        "foodshare-tools".to_string(),
+        (true, vec!["General".into()]),
+    );
+    gh.discussion_labels_supported
+        .insert("foodshare-tools".to_string(), true);
+    gh.labels.insert(
+        "foodshare-tools".to_string(),
+        vec![
+            "ghsync".into(),
+            "ghsync-foodshare-tools".into(),
+            "intake".into(),
+        ],
+    );
+    gh.milestones.insert(
+        "foodshare-tools".to_string(),
+        vec![ghsync::github::Milestone {
+            number: 1,
+            title: "Rust + TypeScript".into(),
+            open_issues: 0,
+            closed_issues: 0,
+        }],
+    );
+    // The post-incident board: the original fields (named Status /
+    // Agent / Phase) plus one ghost per field, each ghost named after
+    // the original's id and carrying its own option ids.
+    let fields_after_incident = serde_json::json!({
+        "node": {
+            "fields": {
+                "nodes": [
+                    {
+                        "id": "PVTSSF_lADOBl819c4Brb9qFStatus",
+                        "name": "Status",
+                        "options": [
+                            { "id": "opt_backlog", "name": "Backlog" },
+                            { "id": "opt_blocked", "name": "Blocked" },
+                            { "id": "opt_done", "name": "Done" },
+                            { "id": "opt_inprog", "name": "In progress" }
+                        ]
+                    },
+                    {
+                        "id": "PVTSSF_lADOBl819c4Brb9qGhostStatus",
+                        "name": "PVTSSF_lADOBl819c4Brb9qFStatus",
+                        "options": [
+                            { "id": "ghost_backlog", "name": "Backlog" },
+                            { "id": "ghost_blocked", "name": "Blocked" },
+                            { "id": "ghost_done", "name": "Done" },
+                            { "id": "ghost_inprog", "name": "In progress" }
+                        ]
+                    },
+                    { "id": "PVTF_lADOBl819c4Brb9qFAgent", "name": "Agent", "options": null },
+                    { "id": "PVTF_lADOBl819c4Brb9qGhostAgent", "name": "PVTF_lADOBl819c4Brb9qFAgent", "options": null },
+                    {
+                        "id": "PVTSSF_lADOBl819c4Brb9qFPhase",
+                        "name": "Phase",
+                        "options": [
+                            { "id": "ph_backlog", "name": "Backlog" },
+                            { "id": "ph_done", "name": "Done" },
+                            { "id": "ph_inprog", "name": "In progress" }
+                        ]
+                    },
+                    {
+                        "id": "PVTSSF_lADOBl819c4Brb9qGhostPhase",
+                        "name": "PVTSSF_lADOBl819c4Brb9qFPhase",
+                        "options": [
+                            { "id": "ghostph_backlog", "name": "Backlog" },
+                            { "id": "ghostph_done", "name": "Done" },
+                            { "id": "ghostph_inprog", "name": "In progress" }
+                        ]
+                    }
+                ]
+            }
+        }
+    });
+    gh.graphql_responses = {
+        let data = [
+            serde_json::json!({
+                "organization": {
+                    "id": "ORG_fake",
+                    "projectsV2": {
+                        "nodes": [
+                            { "id": "PV1_fake", "title": "Foodshare Board", "number": 1 }
+                        ],
+                        "pageInfo": { "hasNextPage": false, "endCursor": null }
+                    }
+                }
+            }),
+            fields_after_incident.clone(),
+            fields_after_incident,
+            serde_json::json!({
+                "node": {
+                    "views": {
+                        "nodes": [
+                            { "id": "V_board", "name": "Board" },
+                            { "id": "V_phases", "name": "Phases" }
+                        ]
+                    }
+                }
+            }),
+        ];
+        data.into_iter()
+            .map(|d| serde_json::json!({ "data": d }))
+            .collect::<Vec<_>>()
+    };
+
+    let report = run_setup(&mut gh, &cfg).await.unwrap();
+
+    assert!(!report.project_created);
+    assert_eq!(report.project_id, "PV1_fake");
+    // The written-back ids resolve to the original fields — not the
+    // ghosts named after them.
+    assert_eq!(report.status_field, "PVTSSF_lADOBl819c4Brb9qFStatus");
+    assert_eq!(report.assignee_field, "PVTF_lADOBl819c4Brb9qFAgent");
+    assert_eq!(report.phase_field, "PVTSSF_lADOBl819c4Brb9qFPhase");
+    // Option ids come from the original fields, not the ghosts.
+    assert_eq!(
+        report.status_option_ids.get("Backlog").map(String::as_str),
+        Some("opt_backlog")
+    );
+    assert_eq!(
+        report
+            .status_option_ids
+            .get("In progress")
+            .map(String::as_str),
+        Some("opt_inprog")
+    );
+    assert_eq!(
+        report.phase_option_ids.get("Done").map(String::as_str),
+        Some("ph_done")
+    );
+    // Zero mutations, no new labels, no new milestones.
+    let creates: Vec<&str> = gh
+        .graphql_calls
+        .iter()
+        .map(|(q, _)| q.as_str())
+        .filter(|q| q.starts_with("mutation"))
+        .collect();
+    assert!(creates.is_empty(), "unexpected mutations: {creates:?}");
+    assert!(gh.created_labels.is_empty());
+    assert_eq!(gh.milestones["foodshare-tools"].len(), 1);
+    // The read calls: find project, fields (ensure), fields (option
+    // ids), discussion categories (state-answered), views.
+    assert_eq!(gh.graphql_calls.len(), 5);
+    let _ = &cfg_path;
+}
+
+/// A configured value in live field-id shape that matches no field in
+/// the project (the board changed out from under the config) must fail
+/// loudly, not create a field named after the id — that is how the
+/// ghost chain started.
+#[tokio::test]
+async fn unknown_live_field_id_fails_loud_instead_of_creating_a_ghost() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg_path = dir.path().join("config.toml");
+    let mut cfg = cfg_with(&cfg_path);
+    let proj = cfg.project.as_mut().unwrap();
+    proj.status_field = "PVTSSF_deadbeef".into();
+    proj.assignee_field = "PVTF_lADOBl819c4Brb9qFAgent".into();
+    proj.phase_field = "PVTSSF_lADOBl819c4Brb9qFPhase".into();
+
+    let mut gh = FakeGitHub::default();
+    gh.discussion_state.insert(
+        "foodshare-tools".to_string(),
+        (true, vec!["General".into()]),
+    );
+    gh.labels.insert(
+        "foodshare-tools".to_string(),
+        vec![
+            "ghsync".into(),
+            "ghsync-foodshare-tools".into(),
+            "intake".into(),
+        ],
+    );
+    gh.milestones.insert(
+        "foodshare-tools".to_string(),
+        vec![ghsync::github::Milestone {
+            number: 1,
+            title: "Rust + TypeScript".into(),
+            open_issues: 0,
+            closed_issues: 0,
+        }],
+    );
+    gh.graphql_responses = {
+        let fields_full = serde_json::json!({
+            "node": {
+                "fields": {
+                    "nodes": [
+                        { "id": "PVTF_lADOBl819c4Brb9qFAgent", "name": "Agent", "options": null },
+                        {
+                            "id": "PVTSSF_lADOBl819c4Brb9qFPhase",
+                            "name": "Phase",
+                            "options": [
+                                { "id": "ph_backlog", "name": "Backlog" },
+                                { "id": "ph_done", "name": "Done" },
+                                { "id": "ph_inprog", "name": "In progress" }
+                            ]
+                        }
+                    ]
+                }
+            }
+        });
+        let data = [
+            serde_json::json!({
+                "organization": {
+                    "id": "ORG_fake",
+                    "projectsV2": {
+                        "nodes": [
+                            { "id": "PV1_fake", "title": "Foodshare Board", "number": 1 }
+                        ],
+                        "pageInfo": { "hasNextPage": false, "endCursor": null }
+                    }
+                }
+            }),
+            fields_full,
+        ];
+        data.into_iter()
+            .map(|d| serde_json::json!({ "data": d }))
+            .collect::<Vec<_>>()
+    };
+
+    let err = run_setup(&mut gh, &cfg).await.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("PVTSSF_deadbeef"),
+        "error must name the missing field id: {msg}"
+    );
+    // Nothing was created or written: find project + fields read only.
+    let creates: Vec<&str> = gh
+        .graphql_calls
+        .iter()
+        .map(|(q, _)| q.as_str())
+        .filter(|q| q.starts_with("mutation"))
+        .collect();
+    assert!(creates.is_empty(), "unexpected mutations: {creates:?}");
+    assert!(gh.created_labels.is_empty());
+    assert_eq!(gh.milestones["foodshare-tools"].len(), 1);
+    let _ = &cfg_path;
+}
+
 #[tokio::test]
 async fn field_missing_an_option_gets_one_update_with_merged_list() {
     // The live schema has no option-create mutation: a single-select

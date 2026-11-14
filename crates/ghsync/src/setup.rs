@@ -208,7 +208,14 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
             serde_json::json!({ "projectId": project_id }),
         )
         .await?;
-    let mut existing: BTreeMap<String, (String, Vec<(String, String)>)> = BTreeMap::new();
+    // Index the fields by BOTH id and name. Pre-setup the config's
+    // field entries hold names; after a run's write-back they hold ids.
+    // A ghost field (created by the old name-only lookup, live incident
+    // 2026-11-13) is NAMED after the previous revision's field id, so an
+    // id must resolve by id — a name match on an id-shaped value would
+    // adopt the ghost.
+    let mut by_id: FieldIndex = BTreeMap::new();
+    let mut by_name: FieldIndex = BTreeMap::new();
     if let Some(nodes) = data
         .pointer("/node/fields/nodes")
         .and_then(|n| n.as_array())
@@ -224,7 +231,7 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
                 .and_then(|v| v.as_str())
                 .unwrap_or_default()
                 .to_string();
-            let options = n
+            let options: Vec<(String, String)> = n
                 .get("options")
                 .and_then(|o| o.as_array())
                 .map(|arr| {
@@ -238,7 +245,8 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
                         .collect()
                 })
                 .unwrap_or_default();
-            existing.insert(name, (id, options));
+            by_id.insert(id.clone(), (id.clone(), options.clone()));
+            by_name.insert(name, (id, options));
         }
     }
 
@@ -264,8 +272,8 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
     let status_name = proj.status_field.clone();
     let assignee_name = proj.assignee_field.clone();
     let phase_name = proj.phase_field.clone();
-    let existing_status = existing.remove(&status_name);
-    let assignee_field = match existing.remove(&assignee_name) {
+    let existing_status = resolve_field(&status_name, &by_id, &by_name)?;
+    let assignee_field = match resolve_field(&assignee_name, &by_id, &by_name)? {
         Some((id, _)) => id,
         None => {
             let data = gh
@@ -283,25 +291,27 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
         }
     };
     report.assignee_field = assignee_field;
-    let existing_phase = existing.remove(&phase_name);
+    let existing_phase = resolve_field(&phase_name, &by_id, &by_name)?;
     let status_field =
         ensure_single_select(gh, &project_id, &status_name, &status_keys, existing_status).await?;
-    report.status_field = status_field;
+    report.status_field = status_field.clone();
     let phase_field =
         ensure_single_select(gh, &project_id, &phase_name, &phase_keys, existing_phase).await?;
-    report.phase_field = phase_field;
+    report.phase_field = phase_field.clone();
 
     // Option ids: the create/update responses do not return the options,
     // so one more fields read collects them (setup is a one-off; the
-    // steady-state cost lives in push, not here).
+    // steady-state cost lives in push, not here). Matched by field id —
+    // a ghost field is named after a field id, and a name match would
+    // collect the ghost's options.
     let data = gh
         .graphql(
             GHSYNC_FIELDS_QUERY,
             serde_json::json!({ "projectId": project_id }),
         )
         .await?;
-    report.status_option_ids = option_ids_from(&data, &status_name);
-    report.phase_option_ids = option_ids_from(&data, &phase_name);
+    report.status_option_ids = option_ids_from(&data, &status_field);
+    report.phase_option_ids = option_ids_from(&data, &phase_field);
 
     // 5. Per-repo default milestones.
     for repo in &cfg.repos {
@@ -406,6 +416,46 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
     Ok(report)
 }
 
+/// One field from a fields read: (field id, option id -> option name).
+type FieldEntry = (String, Vec<(String, String)>);
+/// Fields indexed by id or by name (the config's field entry is a name
+/// pre-setup and an id after a run's write-back).
+type FieldIndex = BTreeMap<String, FieldEntry>;
+
+/// The live id shapes of the two custom project field kinds
+/// (text / single-select), live-verified 2026-11-13.
+fn is_field_id(value: &str) -> bool {
+    value.starts_with("PVTF_") || value.starts_with("PVTSSF_")
+}
+
+/// Resolve one configured field entry against a fields read.
+///
+/// Pre-setup the entry holds the field's NAME (the provisioning
+/// default); after a run's write-back it holds the field's ID. An
+/// id-shaped value resolves by id only — if the id is gone (the board
+/// changed out from under the config) the run fails loudly instead of
+/// creating a field named after the id. That silent create is how the
+/// ghost chain on the Foodshare Board started: each re-run adopted — or
+/// created — the field named after the previous revision's id.
+fn resolve_field(
+    wanted: &str,
+    by_id: &FieldIndex,
+    by_name: &FieldIndex,
+) -> Result<Option<FieldEntry>, SetupError> {
+    if is_field_id(wanted) {
+        return by_id
+            .get(wanted)
+            .cloned()
+            .map(Some)
+            .ok_or_else(|| {
+                SetupError::Config(format!(
+                    "configured field id {wanted} does not exist in the project — the board changed out from under the config; inspect the board, then re-run setup (do not re-create the field by name)"
+                ))
+            });
+    }
+    Ok(by_name.get(wanted).cloned())
+}
+
 /// Ensure a single-select field exists with all the wanted options;
 /// returns the field id.
 ///
@@ -492,14 +542,15 @@ fn option_color(name: &str) -> &'static str {
 }
 
 /// Option label -> option id for one field, from a fields-read
-/// response.
-fn option_ids_from(data: &serde_json::Value, field_name: &str) -> BTreeMap<String, String> {
+/// response. Matched by the field's ID: a ghost field is NAMED after a
+/// field id, so a name match would collect the ghost's options.
+fn option_ids_from(data: &serde_json::Value, field_id: &str) -> BTreeMap<String, String> {
     data.pointer("/node/fields/nodes")
         .and_then(|n| n.as_array())
         .map(|nodes| {
             nodes
                 .iter()
-                .find(|n| n.get("name").and_then(|v| v.as_str()) == Some(field_name))
+                .find(|n| n.get("id").and_then(|v| v.as_str()) == Some(field_id))
                 .and_then(|n| n.get("options").and_then(|o| o.as_array()))
                 .map(|arr| {
                     arr.iter()
