@@ -263,3 +263,37 @@ fn parse_form_plain_body_is_all_none() {
     assert_eq!(f.profile, None);
     assert_eq!(f.acceptance, None);
 }
+
+/// GitHub's actual issue-form rendering: inline field types (dropdown)
+/// put the value on the SAME line as the heading, block types (textarea)
+/// put it on the following lines. Pinned against the documented
+/// rendering and the live E2E issue (foodshare-tools#217, 2026-11-13 —
+/// the first live intake ran through this exact body).
+const FORM_BODY_LIVE: &str = "**Phase:** P3
+
+**Agent profile:** default
+
+**Acceptance criteria:**
+E2E: exactly one kanban card
+";
+
+#[test]
+fn parse_form_reads_live_same_line_rendering() {
+    let f = parse_form(FORM_BODY_LIVE);
+    assert_eq!(f.phase.as_deref(), Some("P3"));
+    assert_eq!(f.profile.as_deref(), Some("default"));
+    assert_eq!(
+        f.acceptance.as_deref(),
+        Some("E2E: exactly one kanban card")
+    );
+}
+
+#[test]
+fn parse_form_mixed_renderings_parse_together() {
+    // same-line dropdown followed by own-line block field
+    let body = "**Phase:** P5\n\n**Acceptance criteria:**\necho ok\n";
+    let f = parse_form(body);
+    assert_eq!(f.phase.as_deref(), Some("P5"));
+    assert_eq!(f.acceptance.as_deref(), Some("echo ok"));
+    assert_eq!(f.profile, None);
+}

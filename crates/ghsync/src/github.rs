@@ -249,8 +249,10 @@ pub trait GitHub: Send + Sync {
         discussion_id: &str,
         label_id: &str,
     ) -> Result<(), GitHubError>;
-    /// Whether the repo supports discussion labels (the probe setup
-    /// records; 404 = disabled).
+    /// Whether the repo has labels usable on its discussions (the probe
+    /// setup records; the feed/intake steps gate on it). Probes the
+    /// repo's labels route — see the implementation for why the
+    /// /discussions/labels route cannot be used.
     async fn discussion_labels_supported(&mut self, repo: &str) -> Result<bool, GitHubError>;
 }
 
@@ -607,12 +609,6 @@ pub fn path_pull(org: &str, repo: &str, number: u32) -> String {
 /// The check runs against a commit.
 pub fn path_check_runs(org: &str, repo: &str, sha: &str) -> String {
     format!("/repos/{org}/{repo}/commits/{sha}/check-runs?per_page=100")
-}
-
-/// The discussion labels of a repo (404 = discussions or labels
-/// disabled — the probe relies on this).
-pub fn path_discussion_labels(org: &str, repo: &str) -> String {
-    format!("/repos/{org}/{repo}/discussions/labels")
 }
 
 /// `/repos/{org}/{repo}/labels`
@@ -1446,11 +1442,13 @@ impl GitHub for RealGitHub {
     }
 
     async fn discussion_labels_supported(&mut self, repo: &str) -> Result<bool, GitHubError> {
-        // 404/410 = discussions (or labels) disabled; anything else
-        // succeeds only with a real 2xx. (GitHub returns 410 Gone on the
-        // discussions endpoints of repos where discussions are off —
-        // live-verified.)
-        let url = format!("{}{}", self.api, path_discussion_labels(&self.org, repo));
+        // Probed via the repo's LABELS route: the /discussions/labels REST
+        // route does not exist — it 404s even on repos where
+        // addLabelsToLabelable on a discussion demonstrably works
+        // (live-verified 2026-11-13 on foodshare-web: 404 on the probe,
+        // 200 on label add/remove). A repo whose labels list is 404/410
+        // or empty cannot carry a discussion label.
+        let url = format!("{}{}", self.api, path_labels(&self.org, repo));
         let resp = self
             .client
             .get(&url)
@@ -1473,7 +1471,11 @@ impl GitHub for RealGitHub {
                 message,
             });
         }
-        Ok(true)
+        let labels: Vec<serde_json::Value> = resp
+            .json()
+            .await
+            .map_err(|e| GitHubError::Io(e.to_string()))?;
+        Ok(!labels.is_empty())
     }
 }
 

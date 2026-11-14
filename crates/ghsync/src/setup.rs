@@ -360,8 +360,9 @@ pub async fn run_setup(gh: &mut impl GitHub, cfg: &Config) -> Result<SetupReport
             repo.name.clone(),
             format!("enabled — feed category {} present", repo.feed_category),
         ));
-        // Probe label support (404/410 = disabled) and record the flags;
-        // the feed/intake steps gate on them.
+        // Probe label support via the repo's labels route (404/410/empty
+        // = unsupported) and record the flags; the feed/intake steps
+        // gate on them.
         let labels_ok = gh.discussion_labels_supported(&repo.name).await?;
         report
             .discussion_flags

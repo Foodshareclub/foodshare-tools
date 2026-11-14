@@ -56,13 +56,19 @@ pub struct FormFields {
     pub acceptance: Option<String>,
 }
 
-/// A form heading line: the whole line is `**<label>:**`.
-fn form_heading(line: &str) -> Option<&str> {
-    let inner = line.strip_prefix("**")?.strip_suffix(":**")?;
+/// A form heading line. Returns the label plus any value rendered on the
+/// SAME line after it. GitHub renders inline field types (dropdown,
+/// checkbox) as `**<label>:** <value>` and block types (textarea) as a
+/// bare `**<label>:**` heading with the value on following lines — both
+/// shapes must parse (the live E2E issue foodshare-tools#217 uses the
+/// same-line shape).
+fn form_heading(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("**")?;
+    let (inner, tail) = rest.split_once(":**")?;
     if inner.is_empty() {
         return None;
     }
-    Some(inner)
+    Some((inner.to_string(), tail.trim().to_string()))
 }
 
 /// Parse the rendered form sections out of an issue body.
@@ -75,9 +81,12 @@ pub fn parse_form(body: &str) -> FormFields {
     let mut lines: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut current: Option<String> = None;
     for line in body.lines() {
-        if let Some(label) = form_heading(line.trim()) {
-            current = Some(label.to_string());
-            lines.entry(label.to_string()).or_default();
+        if let Some((label, same_line)) = form_heading(line.trim()) {
+            if !same_line.is_empty() {
+                lines.entry(label.clone()).or_default().push(same_line);
+            }
+            lines.entry(label.clone()).or_default();
+            current = Some(label);
             continue;
         }
         if let Some(label) = &current
