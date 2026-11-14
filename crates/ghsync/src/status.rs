@@ -23,7 +23,9 @@
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::config::{Config, GHSYNC_LABEL, ProjConfig, Status, card_link_comment, labels_for};
+use crate::config::{
+    Config, GHSYNC_LABEL, LinkKind, ProjConfig, Status, card_link_comment, labels_for,
+};
 use crate::discuss::{SYNC_PREFIX, verdict_for};
 use crate::github::{GitHub, GitHubError};
 use crate::kanban::{CardView, Kanban, KanbanError, LinkedIssue};
@@ -176,6 +178,7 @@ pub async fn run_status(
                 owner: cfg.org.clone(),
                 repo: repo.clone(),
                 number: iss.number,
+                kind: LinkKind::Issue,
             };
             if links.by_issue.contains_key(&key) {
                 continue;
@@ -228,6 +231,28 @@ async fn card_row(
     };
 
     let mut drift = Vec::new();
+
+    // A discussion link: the GitHub side is the discussion itself — no
+    // issue to read (the issues API 404s discussion numbers live), no
+    // projection to check. A first-class clean linked state.
+    if linked.kind == LinkKind::Discussion {
+        return Ok(StatusRow {
+            task: card.id.clone(),
+            status: card.status.clone(),
+            target: linked.key(),
+            kind: "discussion".into(),
+            labels: Vec::new(),
+            status_field: "-".into(),
+            assignee_field: "-".into(),
+            phase_field: "-".into(),
+            milestone: "-".into(),
+            pr: "-".into(),
+            drift: Vec::new(),
+            clean: true,
+        }
+        .finish());
+    }
+
     let issue = gh.get_issue(&linked.repo, linked.number).await?;
 
     // Label mismatch: the projection owns the label set.

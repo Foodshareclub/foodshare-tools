@@ -7,8 +7,8 @@
 use std::path::Path;
 
 use ghsync::config::{
-    Config, IssueState, Status, issue_link_comment, issue_state_from_kanban, labels_for,
-    parse_card_link, parse_issue_link, phase_from_card, status_from_kanban,
+    Config, IssueState, LinkKind, Status, issue_link_comment, issue_state_from_kanban, labels_for,
+    parse_card_link, parse_issue_link, parse_link_ref, phase_from_card, status_from_kanban,
 };
 
 #[test]
@@ -246,4 +246,17 @@ fn load_project_option_ids() {
     // Absent maps default to empty.
     assert!(!p.status_option_ids.contains_key("Done"));
     assert_eq!(p.phase_option_ids.len(), 1);
+}
+
+#[test]
+fn link_kind_is_carried_from_the_comment_prefix() {
+    let (r, kind) = parse_link_ref("ghsync Foodshareclub/foodshare-tools#7").unwrap();
+    assert_eq!(kind, LinkKind::Issue);
+    assert_eq!(r.number, 7);
+    let (r2, kind2) = parse_link_ref("ghsyncd Foodshareclub/foodshare-web#205").unwrap();
+    assert_eq!(kind2, LinkKind::Discussion);
+    assert_eq!(r2.number, 205);
+    // Non-link lines still parse to None (both kinds).
+    assert!(parse_link_ref("ghsyncd something-else").is_none());
+    assert!(parse_link_ref("regular comment").is_none());
 }

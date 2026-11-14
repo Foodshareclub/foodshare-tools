@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 
-use crate::config::{GHSYNC_LABEL, parse_card_link};
+use crate::config::{GHSYNC_LABEL, LinkKind, parse_card_link};
 use crate::github::GitHub;
 use crate::kanban::{Card, CardView, Kanban, LinkedIssue};
 
@@ -112,6 +112,7 @@ pub async fn resolve_links_views(
                 owner: org.to_string(),
                 repo: repo.clone(),
                 number: iss.number,
+                kind: LinkKind::Issue,
             };
             let comments = gh.issue_comments(repo, iss.number).await?;
             for comment in &comments {

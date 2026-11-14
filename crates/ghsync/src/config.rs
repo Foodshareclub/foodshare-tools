@@ -157,26 +157,48 @@ pub fn card_link_comment(board: &str, task_id: &str) -> String {
     format!("kanban:{board}:{task_id}")
 }
 
-/// Parse a link comment. The whole line must be the link; a line that
-/// merely mentions one does not count. Accepts both the issue prefix
-/// (`ghsync …`) and the discussion prefix (`ghsyncd …`); both resolve to
-/// the same issue reference.
-pub fn parse_issue_link(line: &str) -> Option<IssueRef> {
-    let rest = line
-        .trim()
-        .strip_prefix(CARD_LINK_PREFIX)
-        .or_else(|| line.trim().strip_prefix(DISCUSSION_LINK_PREFIX))?;
+/// The kind of GitHub object a card link points at. The comment grammar
+/// encodes it: `ghsync owner/repo#n` is an issue, `ghsyncd owner/repo#n`
+/// is a discussion. Discussions and issues have independent number
+/// spaces, so the kind is part of the link's identity: a `ghsyncd`
+/// reference must never be read through the issues API (live 404).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum LinkKind {
+    Issue,
+    Discussion,
+}
+
+/// Parse a card-side link comment, carrying the kind of the prefix.
+/// The whole line must be the link; a line that merely mentions one does
+/// not count.
+pub fn parse_link_ref(line: &str) -> Option<(IssueRef, LinkKind)> {
+    let t = line.trim();
+    let (rest, kind) = if let Some(r) = t.strip_prefix(CARD_LINK_PREFIX) {
+        (r, LinkKind::Issue)
+    } else {
+        let r = t.strip_prefix(DISCUSSION_LINK_PREFIX)?;
+        (r, LinkKind::Discussion)
+    };
     let (path, number) = rest.split_once('#')?;
     let (owner, repo) = path.split_once('/')?;
     if owner.is_empty() || repo.is_empty() {
         return None;
     }
     let number = number.parse().ok()?;
-    Some(IssueRef {
-        owner: owner.to_string(),
-        repo: repo.to_string(),
-        number,
-    })
+    Some((
+        IssueRef {
+            owner: owner.to_string(),
+            repo: repo.to_string(),
+            number,
+            kind,
+        },
+        kind,
+    ))
+}
+
+/// Parse a card-side link comment (the prefix kind is dropped).
+pub fn parse_issue_link(line: &str) -> Option<IssueRef> {
+    parse_link_ref(line).map(|(r, _)| r)
 }
 
 /// Parse a card footer: `(board, task_id)`.

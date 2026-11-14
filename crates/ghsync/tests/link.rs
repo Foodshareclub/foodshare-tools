@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 
+use ghsync::config::LinkKind;
 use ghsync::fakes::{FakeGitHub, FakeKanban};
 use ghsync::github::GitHub;
 use ghsync::kanban::{Kanban, LinkedIssue};
@@ -24,6 +25,7 @@ fn issue(org: &str, repo: &str, number: u32) -> LinkedIssue {
         owner: org.into(),
         repo: repo.into(),
         number,
+        kind: LinkKind::Issue,
     }
 }
 

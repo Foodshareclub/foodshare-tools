@@ -23,7 +23,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    Config, ProjConfig, Status, card_link_comment, issue_link_comment, labels_for, phase_from_card,
+    Config, LinkKind, ProjConfig, Status, card_link_comment, issue_link_comment, labels_for,
+    phase_from_card,
 };
 use crate::github::{GitHub, Milestone};
 use crate::kanban::{CardView, Kanban};
@@ -149,6 +150,12 @@ pub async fn push_issues(
                 report.created.push(card.id.clone());
             }
             Some(linked) => {
+                // A discussion link: the card's GitHub side is the discussion
+                // itself — no issue to project, verify, or gesture on.
+                if linked.kind == LinkKind::Discussion {
+                    report.verified.push(card.id.clone());
+                    continue;
+                }
                 let issue = match gh.get_issue(repo_name, linked.number).await {
                     Ok(i) => i,
                     Err(_) => {

@@ -47,8 +47,10 @@ the cursor.
 - **Links are stateless comment grammar.** Each linked issue carries a
   `kanban:<board>:<task-id>` footer in its body; each card carries a
   `ghsync <owner>/<repo>#<n>` comment (discussions use `ghsyncd
-  <owner>/<repo>#<n>`). Either side rebuilds the other at any time;
-  the only file on disk is the cursor.
+  <owner>/<repo>#<n>`). The prefix is the link's kind: a `ghsyncd`
+  reference points at a discussion and is never read through the
+  issues API (the two number spaces are independent). Either side
+  rebuilds the other at any time; the only file on disk is the cursor.
 - **Project fields are display-only.** A human move on the GitHub
   board is display-only and is reverted on the next push. Change state
   in kanban, or use the issue close/reopen gestures below. `status`

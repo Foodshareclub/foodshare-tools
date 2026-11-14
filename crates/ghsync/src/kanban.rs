@@ -15,14 +15,16 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::config::{Status, issue_link_comment, parse_issue_link, phase_from_card};
+use crate::config::{LinkKind, Status, issue_link_comment, parse_link_ref, phase_from_card};
 
-/// A GitHub issue this card is linked to: `owner/repo#number`.
+/// A GitHub object this card is linked to: `owner/repo#number` plus the
+/// kind of reference (`ghsync …` issue / `ghsyncd …` discussion).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct LinkedIssue {
     pub owner: String,
     pub repo: String,
     pub number: u32,
+    pub kind: LinkKind,
 }
 
 impl LinkedIssue {
@@ -70,11 +72,12 @@ impl Card {
 pub fn links_from_comments(comments: &[String]) -> Vec<LinkedIssue> {
     comments
         .iter()
-        .filter_map(|c| parse_issue_link(c))
-        .map(|r| LinkedIssue {
+        .filter_map(|c| parse_link_ref(c))
+        .map(|(r, kind)| LinkedIssue {
             owner: r.owner,
             repo: r.repo,
             number: r.number,
+            kind,
         })
         .collect()
 }

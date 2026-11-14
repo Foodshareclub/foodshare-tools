@@ -395,3 +395,43 @@ async fn json_variant_serializes_rows() {
     assert_eq!(row["clean"], true);
     assert!(r.clean);
 }
+
+/// A card linked to a DISCUSSION (`ghsyncd …`): the GitHub side is the
+/// discussion, not an issue. `status` must not hit the issues API for it
+/// (live 404, hit 2026-11-14), and the row is a first-class clean linked
+/// state — not `issue-missing` drift.
+#[tokio::test]
+async fn discussion_linked_card_is_clean_and_never_hits_the_issue_api() {
+    let cfg = test_config();
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let card = kb
+        .create(
+            "E2E: discussion intake",
+            "body",
+            "default",
+            "k-disc",
+            "ready",
+        )
+        .await
+        .unwrap();
+    kb.comment(&card.id, "ghsyncd Foodshareclub/foodshare-tools#205")
+        .await
+        .unwrap();
+    // No issue #205 exists in the fake — the live API 404s it.
+    let rep = run_status(&mut kb, &mut gh, &cfg, &Cursor::default())
+        .await
+        .expect("status must not abort on a discussion link");
+    let row = rep
+        .rows
+        .iter()
+        .find(|r| r.task == card.id)
+        .expect("row for the card");
+    assert_eq!(row.kind, "discussion");
+    assert!(
+        row.drift.is_empty(),
+        "a discussion link is not drift: {:?}",
+        row.drift
+    );
+    assert!(row.clean);
+}

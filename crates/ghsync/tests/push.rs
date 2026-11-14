@@ -368,3 +368,45 @@ async fn existing_milestone_is_reused_not_duplicated() {
         Some(1)
     );
 }
+
+/// A card linked to a DISCUSSION (`ghsyncd …`): push must not treat it as a
+/// missing issue (live 404, hit 2026-11-14) — no drift, no skip, no new
+/// issue created for it.
+#[tokio::test]
+async fn discussion_linked_card_projects_nothing_and_drifts_nothing() {
+    let cfg = test_config();
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let card = kb
+        .create(
+            "E2E: discussion intake",
+            "body",
+            "default",
+            "k-disc2",
+            "ready",
+        )
+        .await
+        .unwrap();
+    kb.comment(&card.id, "ghsyncd Foodshareclub/foodshare-tools#205")
+        .await
+        .unwrap();
+    let rep = run(&mut kb, &mut gh, &cfg, false).await;
+    assert!(
+        rep.drift.is_empty(),
+        "discussion link must not be drift: {:?}",
+        rep.drift
+    );
+    assert!(
+        rep.skipped.is_empty(),
+        "discussion link must not be skipped: {:?}",
+        rep.skipped
+    );
+    assert!(
+        !rep.created.contains(&card.id),
+        "a discussion-linked card already has a GitHub side"
+    );
+    assert!(
+        gh.get_issue("foodshare-tools", 205).await.is_err(),
+        "push must not create an issue for a discussion link"
+    );
+}
