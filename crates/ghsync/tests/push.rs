@@ -532,7 +532,7 @@ async fn linked_issue_is_operated_in_the_linked_repo() {
     assert_eq!(issue.milestone.as_deref(), Some("Next.js 16 + Bun 1.4.4"));
     // Nothing was created or touched in tools.
     assert!(r.created.is_empty());
-    assert!(gh.issues.get(&("foodshare-tools".to_string(), n)).is_none());
+    assert!(!gh.issues.contains_key(&("foodshare-tools".to_string(), n)));
 }
 
 #[tokio::test]
