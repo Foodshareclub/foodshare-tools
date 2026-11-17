@@ -79,9 +79,23 @@ pub async fn check_syntax(flows: &[PathBuf]) -> Vec<SyntaxResult> {
 
 /// Run a Maestro suite on one device.
 ///
-/// The output is written to `log_file` when one is given, and the process
-/// exits with the suite's own code.
+/// Maestro's output always reaches this process's own stdout/stderr, so it
+/// shows up in the CI job log. With a `log_file` it is also copied there.
+/// Without one the streams are inherited: a pipe nobody reads both discards
+/// the output and can fill, blocking Maestro on its next write.
 pub async fn run_test(
+    device: &TargetDevice,
+    extra_args: &[String],
+    target: &Path,
+    log_file: Option<&Path>,
+) -> TestOutcome {
+    run_test_with(Path::new("maestro"), device, extra_args, target, log_file).await
+}
+
+/// [`run_test`] with the Maestro binary given explicitly, so tests can run a
+/// stand-in without rewriting `PATH`.
+async fn run_test_with(
+    program: &Path,
     device: &TargetDevice,
     extra_args: &[String],
     target: &Path,
@@ -89,16 +103,19 @@ pub async fn run_test(
 ) -> TestOutcome {
     let started = Instant::now();
 
-    let mut command = Command::new("maestro");
+    let mut command = Command::new(program);
     command
         .arg("--device")
         .arg(&device.id)
         .arg("test")
         .args(extra_args)
         .arg(target)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stdin(Stdio::null());
+    if log_file.is_some() {
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    } else {
+        command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+    }
 
     let mut child = match command.spawn() {
         Ok(child) => child,
@@ -131,10 +148,10 @@ pub async fn run_test(
         (Some(out), Some(err), Some(file)) => {
             let out_file = Arc::clone(&file);
             let out_task = tokio::spawn(async move {
-                copy_to_log(out, out_file).await;
+                copy_to_log(out, out_file, tokio::io::stdout()).await;
             });
             let err_task = tokio::spawn(async move {
-                copy_to_log(err, file).await;
+                copy_to_log(err, file, tokio::io::stderr()).await;
             });
             (Some(out_task), Some(err_task))
         }
@@ -168,9 +185,11 @@ pub async fn run_test(
 }
 
 /// Copy a process stream into the log file.
-async fn copy_to_log<R>(stream: R, file: Arc<tokio::sync::Mutex<tokio::fs::File>>)
+/// Copy `stream` into the shared log and, unchanged, to `echo` (the job log).
+async fn copy_to_log<R, W>(stream: R, file: Arc<tokio::sync::Mutex<tokio::fs::File>>, mut echo: W)
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
+    W: tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
     let mut reader = tokio::io::BufReader::new(stream);
     let mut buffer = [0u8; 8192];
@@ -178,6 +197,8 @@ where
         match reader.read(&mut buffer).await {
             Ok(0) | Err(_) => break,
             Ok(n) => {
+                // The echo is best effort; the log file is the record.
+                let _ = echo.write_all(&buffer[..n]).await;
                 let mut file = file.lock().await;
                 if file.write_all(&buffer[..n]).await.is_err() {
                     break;
@@ -260,6 +281,47 @@ mod tests {
         if !outcome.passed {
             assert!(outcome.error.is_some());
         }
+    }
+
+    /// A stand-in `maestro` that prints 256 KiB (four pipe buffers) to
+    /// stdout, then a marker to stderr. Returns its dir (keep it alive).
+    #[cfg(unix)]
+    fn noisy_maestro() -> (tempfile::TempDir, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().expect("temp dir");
+        let bin = dir.path().join("maestro");
+        std::fs::write(
+            &bin,
+            "#!/bin/sh\nhead -c 262144 /dev/zero | tr '\\0' x\necho done >&2\nexit 0\n",
+        )
+        .expect("write stand-in");
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        (dir, bin)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_run_test_without_log_does_not_block_on_large_output() {
+        let (_dir, bin) = noisy_maestro();
+        let outcome = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            run_test_with(&bin, &device(), &[], Path::new("."), None),
+        )
+        .await
+        .expect("run_test blocked on an unread pipe");
+        assert!(outcome.passed, "{:?}", outcome.error);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_run_test_with_log_records_all_output() {
+        let (dir, bin) = noisy_maestro();
+        let log = dir.path().join("run.log");
+        let outcome = run_test_with(&bin, &device(), &[], Path::new("."), Some(&log)).await;
+        assert!(outcome.passed, "{:?}", outcome.error);
+        let text = std::fs::read_to_string(&log).expect("log written");
+        assert_eq!(text.matches('x').count(), 262_144);
+        assert!(text.contains("done"));
     }
 
     #[tokio::test]
