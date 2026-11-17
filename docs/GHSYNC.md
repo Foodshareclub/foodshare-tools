@@ -41,6 +41,15 @@ the cursor.
   `intake` label; nothing else starts intake. Form fields are
   `**label:**` lines (Phase, Agent profile, Acceptance); a missing
   Phase means Ad-hoc, a missing profile means `default_assignee`.
+- **Intake is allow-listed and untrusted.** The form and labeled
+  discussions are public: only logins in `allowed_intake_authors`
+  (case-insensitive; empty = deny all) may dispatch work. Everyone
+  else gets a skip row, a drift row and one deduped note comment —
+  never a card. Created cards start in `todo` (the dispatcher does
+  not claim them until a human promotes) and their bodies banner the
+  issue/discussion text as untrusted data, not instructions. An
+  unknown agent profile is skipped with a note naming the valid
+  profiles; the run continues.
 - **`Repo: <name>` line** in a card body routes the card to a repo;
   absent it goes to `foodshare-tools`. An unknown name is drift, not
   an error.
@@ -84,7 +93,9 @@ the cursor.
 
 A card comment prefixed `sync:github ` carries a review verdict
 (`sync:github approve`, `sync:github request-changes`); a block
-reason prefixed `escalation:` is an escalation. `push` mirrors each
+reason prefixed `escalation:` is an escalation (the kernel stores
+block reasons as `BLOCKED: <reason>` comments; the prefix is stripped
+before matching). `push` mirrors each
 to a discussion in the repo's feed category (config `feed_category`,
 default `General`) titled `[<verdict>] <card title>`, and appends to
 the same discussion on later runs — never a second one. The card

@@ -20,9 +20,9 @@ state_path = "~/.config/ghsync/state.json"
 # Kanban assignee for intake cards without a named profile.
 default_assignee = "default"
 
-# Agent profiles the intake form may name. An unknown profile fails the
-# intake with a loud error naming this list. Must cover the form's
-# "Agent profile" options (agent-intake.yml).
+# Agent profiles the intake form may name. An unknown profile is
+# skipped with a note comment naming this list (the run continues).
+# Must cover the form's "Agent profile" options (agent-intake.yml).
 profiles = [
   "default",
   "architect",
@@ -30,6 +30,15 @@ profiles = [
   "security",
   "verifier",
 ]
+
+# GitHub logins allowed to dispatch work through the public intake form
+# (and `intake`-labeled discussions), case-insensitive. EMPTY (or
+# absent) DENIES EVERYONE: the public form must never be an
+# unauthenticated task-dispatch channel. Denied authors get a skip
+# row, a drift row and one note comment — never a card. Created cards
+# start in `todo` (not auto-dispatched) with the external text
+# bannered as untrusted data.
+allowed_intake_authors = ["organicnz"]
 
 # Repos ghsync manage. The two `discussions_*` flags are written by
 # `ghsync setup`; absent (or false) means the feed and discussion
