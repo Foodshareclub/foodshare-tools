@@ -72,10 +72,9 @@ pub fn verify_totp(secret: &[u8], code: &str, time_seconds: u64, window_steps: i
 
         if let Ok(expected) =
             generate_totp(secret, candidate_time, DEFAULT_TIME_STEP, DEFAULT_DIGITS)
+            && constant_time_compare(clean_code.as_bytes(), expected.as_bytes())
         {
-            if constant_time_compare(clean_code.as_bytes(), expected.as_bytes()) {
-                return true;
-            }
+            return true;
         }
     }
 
