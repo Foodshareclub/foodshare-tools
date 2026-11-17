@@ -286,8 +286,13 @@ pub struct Config {
     pub default_assignee: String,
     pub project: Option<ProjConfig>,
     /// Agent profiles that an intake form may name; an unknown profile
-    /// is a loud intake error naming this list.
+    /// is a skip row + note comment (the run continues).
     pub profiles: Vec<String>,
+    /// GitHub logins (case-insensitive) that may dispatch work via the
+    /// public intake form. Empty (the default) denies everyone: the
+    /// public form must never be an unauthenticated task-dispatch
+    /// channel.
+    pub allowed_intake_authors: Vec<String>,
     pub token: Option<String>,
     pub state_path: PathBuf,
 }
@@ -323,6 +328,7 @@ impl Default for Config {
             ],
             default_assignee: "default".into(),
             profiles: vec!["default".into()],
+            allowed_intake_authors: Vec::new(),
             project: Some(ProjConfig {
                 number: 1,
                 project_id: String::new(),
@@ -382,18 +388,29 @@ impl Config {
     }
 
     /// Write the config back to `path`, preserving every key (including
-    /// the token). Atomic like the cursor: temp file + rename.
+    /// the token). The file carries a PAT: write a fresh temp file
+    /// (random name, `0600` on unix) and rename it into place, so the
+    /// config never exists on disk with a loose mode or a predictable
+    /// temp name.
     pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
         let text = toml::to_string_pretty(&Raw::from(self))
             .map_err(|e| ConfigError::Parse(e.to_string()))?;
-        if let Some(dir) = path.parent()
-            && !dir.as_os_str().is_empty()
-        {
-            std::fs::create_dir_all(dir).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        let dir = path.parent().filter(|p| !p.as_os_str().is_empty());
+        let mut tmp = match dir {
+            Some(dir) => {
+                std::fs::create_dir_all(dir).map_err(|e| ConfigError::Parse(e.to_string()))?;
+                tempfile::NamedTempFile::new_in(dir)
+            }
+            None => tempfile::NamedTempFile::new(),
         }
-        let tmp = path.with_extension("tmp");
-        std::fs::write(&tmp, &text).map_err(|e| ConfigError::Parse(e.to_string()))?;
-        std::fs::rename(&tmp, path).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        .map_err(|e| ConfigError::Parse(e.to_string()))?;
+        std::io::Write::write_all(&mut tmp, text.as_bytes())
+            .map_err(|e| ConfigError::Parse(e.to_string()))?;
+        tmp.as_file()
+            .sync_all()
+            .map_err(|e| ConfigError::Parse(e.to_string()))?;
+        tmp.persist(path)
+            .map_err(|e| ConfigError::Parse(e.error.to_string()))?;
         Ok(())
     }
 }
@@ -420,6 +437,8 @@ struct Raw {
     #[serde(skip_serializing_if = "Option::is_none")]
     default_assignee: Option<String>,
     profiles: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    allowed_intake_authors: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     project: Option<RawProj>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -491,6 +510,7 @@ impl From<&Config> for Raw {
                 .collect(),
             default_assignee: Some(c.default_assignee.clone()),
             profiles: c.profiles.clone(),
+            allowed_intake_authors: c.allowed_intake_authors.clone(),
             project: c.project.as_ref().map(|p| RawProj {
                 number: Some(p.number),
                 project_id: Some(p.project_id.clone()),
@@ -582,6 +602,8 @@ impl Config {
             } else {
                 raw.profiles
             },
+            // Empty (or absent) means "deny all" — never the default.
+            allowed_intake_authors: raw.allowed_intake_authors,
             project,
             token: raw.token,
             state_path: raw
@@ -589,5 +611,14 @@ impl Config {
                 .map(|p| crate::cli::expand_tilde(&p))
                 .unwrap_or(d.state_path),
         })
+    }
+
+    /// Whether a GitHub login may dispatch work via the public intake
+    /// form (case-insensitive). An empty allow-list — the default —
+    /// denies everyone.
+    pub fn intake_allowed(&self, author: &str) -> bool {
+        self.allowed_intake_authors
+            .iter()
+            .any(|a| a.eq_ignore_ascii_case(author))
     }
 }

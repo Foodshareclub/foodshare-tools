@@ -410,3 +410,162 @@ async fn discussion_linked_card_projects_nothing_and_drifts_nothing() {
         "push must not create an issue for a discussion link"
     );
 }
+
+#[tokio::test]
+async fn refused_block_is_drift_and_push_continues() {
+    // Live-demonstrated (t_fa1e7206): the kernel can refuse a block it
+    // considers invalid. That must be a drift row per card — never an
+    // aborted multi-repo push.
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let cfg = test_config();
+    let c1 = kb
+        .create("On hold", "x", "default", "k1", "running")
+        .await
+        .unwrap();
+    let c2 = kb
+        .create(
+            "Also closed",
+            "Repo: foodshare-app",
+            "default",
+            "k2",
+            "running",
+        )
+        .await
+        .unwrap();
+    let n1 = prelink(&mut kb, &mut gh, &c1.id, "foodshare-tools").await;
+    let n2 = prelink(&mut kb, &mut gh, &c2.id, "foodshare-app").await;
+    // A human closes both issues; the kernel refuses to block c1.
+    gh.close_issue("foodshare-tools", n1).await.unwrap();
+    gh.close_issue("foodshare-app", n2).await.unwrap();
+    kb.block_fails.insert(c1.id.clone());
+
+    let r = run(&mut kb, &mut gh, &cfg, false).await;
+
+    // c1: the refused gesture is a drift row, and the card is not
+    // counted as verified.
+    assert!(
+        r.drift
+            .iter()
+            .any(|d| d.card == c1.id && d.kind == "gesture-refused"),
+        "drift: {:?}",
+        r.drift
+    );
+    assert!(!r.verified.contains(&c1.id));
+    // c2: the push continued and gestured normally.
+    assert!(
+        r.gestures
+            .iter()
+            .any(|g| g.card == c2.id && g.action == "block"),
+        "gestures: {:?}",
+        r.gestures
+    );
+    assert!(r.verified.contains(&c2.id));
+    assert_eq!(
+        kb.blocked,
+        vec![(c2.id.clone(), "dependency".into(), CLOSED_REASON.into())]
+    );
+}
+
+#[tokio::test]
+async fn refused_unblock_is_drift_and_push_continues() {
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let cfg = test_config();
+    let card = kb
+        .create("WIP", "x", "default", "k1", "running")
+        .await
+        .unwrap();
+    let n = prelink(&mut kb, &mut gh, &card.id, "foodshare-tools").await;
+    // A human closes the issue; the first push blocks the card.
+    gh.close_issue("foodshare-tools", n).await.unwrap();
+    run(&mut kb, &mut gh, &cfg, false).await;
+    // A human reopens it; the kernel refuses the unblock.
+    gh.issues
+        .get_mut(&("foodshare-tools".to_string(), n))
+        .unwrap()
+        .state = "open".into();
+    kb.unblock_fails.insert(card.id.clone());
+
+    let r = run(&mut kb, &mut gh, &cfg, false).await;
+
+    assert!(
+        r.drift
+            .iter()
+            .any(|d| d.card == card.id && d.kind == "gesture-refused"),
+        "drift: {:?}",
+        r.drift
+    );
+    assert!(
+        !r.gestures.iter().any(|g| g.card == card.id),
+        "gestures: {:?}",
+        r.gestures
+    );
+    assert!(kb.unblocked.is_empty());
+}
+#[tokio::test]
+async fn linked_issue_is_operated_in_the_linked_repo() {
+    // The card has no `Repo:` line (routing default: foodshare-tools),
+    // but the link says the issue lives in foodshare-app. Push must
+    // operate the app issue — never look it up in tools, where the
+    // same number is a different object (the B-1 number-space class).
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let cfg = test_config();
+    let card = kb
+        .create("Cross repo", "x", "default", "k1", "running")
+        .await
+        .unwrap();
+    let n = prelink(&mut kb, &mut gh, &card.id, "foodshare-app").await;
+
+    let r = run(&mut kb, &mut gh, &cfg, false).await;
+
+    assert!(
+        r.verified.contains(&card.id),
+        "the app-side issue must be found and verified (skipped: {:?}, drift: {:?})",
+        r.skipped,
+        r.drift
+    );
+    assert!(r.skipped.is_empty(), "skipped: {:?}", r.skipped);
+    // The app's own default milestone is enforced on the app issue.
+    let issue = &gh.issues[&("foodshare-app".to_string(), n)];
+    assert_eq!(issue.milestone.as_deref(), Some("Next.js 16 + Bun 1.4.4"));
+    // Nothing was created or touched in tools.
+    assert!(r.created.is_empty());
+    assert!(gh.issues.get(&("foodshare-tools".to_string(), n)).is_none());
+}
+
+#[tokio::test]
+async fn link_to_unmanaged_repo_is_drift_not_operation() {
+    // A card comment points at a repo ghsync does not manage. The link
+    // is honored as drift — no issue operations in any configured repo.
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let cfg = test_config();
+    let card = kb
+        .create("Ghost repo", "x", "default", "k1", "running")
+        .await
+        .unwrap();
+    kb.comment(
+        &card.id,
+        &issue_link_comment("Foodshareclub", "foodshare-web", 9),
+    )
+    .await
+    .unwrap();
+
+    let r = run(&mut kb, &mut gh, &cfg, false).await;
+
+    assert!(
+        r.drift
+            .iter()
+            .any(|d| d.card == card.id && d.kind == "link-repo-unmanaged"),
+        "drift: {:?}",
+        r.drift
+    );
+    assert!(!r.verified.contains(&card.id));
+    assert!(
+        r.created.is_empty(),
+        "no issue may be created in a managed repo"
+    );
+    assert!(r.gestures.is_empty());
+}

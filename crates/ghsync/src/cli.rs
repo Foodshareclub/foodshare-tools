@@ -69,8 +69,20 @@ pub fn expand_tilde(path: &Path) -> PathBuf {
 }
 
 /// Parse the command line from the given argv (program name first).
+///
+/// `--help` and `--version` are successful invocations: they print and
+/// exit 0, not an error.
 pub fn parse(args: &[String]) -> Result<Cli> {
-    Cli::try_parse_from(args).map_err(|e| anyhow::anyhow!("{e}"))
+    Cli::try_parse_from(args).map_err(|e| {
+        if matches!(
+            e.kind(),
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+        ) {
+            let _ = e.print();
+            std::process::exit(0);
+        }
+        anyhow::anyhow!("{e}")
+    })
 }
 
 /// Run the parsed command to completion.
@@ -255,6 +267,9 @@ pub async fn run(args: Vec<String>) -> Result<()> {
             for (issue, why) in &report.skipped {
                 println!("skipped {issue}: {why}");
             }
+            for d in &report.drift {
+                println!("drift {}: {} ({})", d.kind, d.card, d.detail);
+            }
             let dreport =
                 crate::discuss::intake_discussions(&mut kb, &mut gh, &cfg, dry_run).await?;
             for i in &dreport.would_create {
@@ -268,6 +283,9 @@ pub async fn run(args: Vec<String>) -> Result<()> {
             }
             for (issue, why) in &dreport.skipped {
                 println!("skipped {issue}: {why}");
+            }
+            for d in &dreport.drift {
+                println!("drift {}: {} ({})", d.kind, d.card, d.detail);
             }
             println!(
                 "intake: {} created, {} would-create, {} skipped",

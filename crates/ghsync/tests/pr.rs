@@ -327,3 +327,106 @@ fn ci_rollup_aggregates_check_runs() {
     // No check runs at all: pending (nothing to fail, nothing green).
     assert_eq!(ci_rollup(&[]), "pending");
 }
+
+#[tokio::test]
+async fn discussion_linked_card_gets_no_pr_evidence() {
+    // The card is linked to a DISCUSSION: the PR URL in its body must
+    // not be probed and no comment posted (evidence is an issue comment,
+    // and the issue/discussion number spaces can collide).
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let card = kb
+        .create(
+            "Card",
+            "https://github.com/Foodshareclub/foodshare-tools/pull/42",
+            "default",
+            "k1",
+            "running",
+        )
+        .await
+        .unwrap();
+    kb.comment(&card.id, "ghsyncd Foodshareclub/foodshare-tools#205")
+        .await
+        .unwrap();
+    // A merged PR + a green run: it must still not be touched.
+    seed_merged_pr(&mut gh, "sha1", vec![run("completed", Some("success"))]);
+    let cfg = test_config();
+
+    let report = run_pr(&mut kb, &mut gh, &cfg, false).await;
+
+    assert!(report.posted.is_empty());
+    assert!(report.would_post.is_empty());
+    assert!(report.skipped.is_empty());
+    assert!(gh.comments_posted.is_empty());
+}
+
+#[tokio::test]
+async fn pr_in_a_different_configured_repo_is_out_of_scope() {
+    // The evidence comment lands on the linked issue; a PR of a
+    // different configured repo (e.g. a private one merely mentioned in
+    // the card body) must not be probed or reported.
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let body = "https://github.com/Foodshareclub/foodshare-app/pull/42";
+    linked_card_with_pr(&mut kb, &mut gh, body, None, "running").await;
+    // A merged app PR: in scope under the old org+repos rule, out of
+    // scope now.
+    gh.pulls.insert(
+        ("foodshare-app".to_string(), 42),
+        ghsync::github::Pull {
+            number: 42,
+            merged: true,
+            head_sha: "sha1".into(),
+            url: "https://github.com/Foodshareclub/foodshare-app/pull/42".into(),
+        },
+    );
+    gh.check_runs.insert(
+        "sha1".to_string(),
+        vec![ghsync::github::CheckRun {
+            status: "completed".into(),
+            conclusion: Some("success".into()),
+        }],
+    );
+    let cfg = Config {
+        repos: vec![
+            RepoConfig {
+                name: REPO.into(),
+                default_milestone: "Rust + TypeScript".into(),
+                ..Default::default()
+            },
+            RepoConfig {
+                name: "foodshare-app".into(),
+                default_milestone: "Next.js 16 + Bun 1.4.4".into(),
+                ..Default::default()
+            },
+        ],
+        ..Config::default()
+    };
+
+    // Resolve links across both repos (run_pr is single-repo).
+    let cards = kb.list().await.unwrap();
+    let mut vs: Vec<CardView> = Vec::new();
+    for c in &cards {
+        vs.push(kb.show(&c.id).await.unwrap());
+    }
+    let links = resolve_links_views(
+        &mut gh,
+        &cfg.board,
+        &cfg.org,
+        &[REPO.to_string(), "foodshare-app".to_string()],
+        &vs,
+    )
+    .await
+    .unwrap();
+    let report = post_pr_evidence(&mut gh, &cfg, &vs, &links, false)
+        .await
+        .unwrap();
+
+    assert!(report.posted.is_empty());
+    assert!(
+        report.skipped.is_empty(),
+        "an out-of-scope PR is not even a skip row: {:?}",
+        report.skipped
+    );
+    assert!(gh.comments_posted.is_empty());
+}

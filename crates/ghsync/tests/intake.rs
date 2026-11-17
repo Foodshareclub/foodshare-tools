@@ -7,7 +7,7 @@
 
 use ghsync::config::{Config, RepoConfig};
 use ghsync::fakes::{FakeGitHub, FakeKanban};
-use ghsync::intake::{INTAKE_LABEL, IntakeError, PHASE_AD_HOC, intake_issues, parse_form};
+use ghsync::intake::{INTAKE_LABEL, PHASE_AD_HOC, intake_issues, parse_form};
 
 /// The rendered body of the agent-intake form (phase P3, profile
 /// architect, multi-line acceptance).
@@ -28,7 +28,7 @@ cargo test -p ghsync passes
 const PLAIN_BODY: &str = "Please fix the flaky test in the CI matrix.";
 
 fn config_with(profiles: &[&str]) -> Config {
-    Config {
+    let mut cfg = Config {
         repos: vec![RepoConfig {
             name: "foodshare-tools".into(),
             default_milestone: "Rust + TypeScript".into(),
@@ -36,7 +36,10 @@ fn config_with(profiles: &[&str]) -> Config {
         }],
         profiles: profiles.iter().map(|s| s.to_string()).collect(),
         ..Config::default()
-    }
+    };
+    // The operator login the seeded issues are authored by.
+    cfg.allowed_intake_authors = vec!["organic".into()];
+    cfg
 }
 
 /// Seed open issue #7 with the `intake` label and the repo's default
@@ -48,6 +51,7 @@ fn seed(gh: &mut FakeGitHub, title: &str, body: &str) {
             owner: "Foodshareclub".into(),
             repo: "foodshare-tools".into(),
             number: 7,
+            author: "organic".into(),
             title: title.into(),
             body: body.into(),
             node_id: "GH_ISSUE_7".into(),
@@ -92,11 +96,15 @@ async fn form_issue_creates_one_card_with_key_assignee_and_milestone() {
     );
     assert_eq!(card.assignee, "architect");
     assert_eq!(
-        card.initial_status, "ready",
-        "intake cards default to ready"
+        card.initial_status, "todo",
+        "intake cards start in the backlog (untrusted input)"
     );
-    // Card body = issue body + the stateless link line.
-    assert!(card.body.starts_with(FORM_BODY.trim_end()));
+    // Card body = untrusted-input banner + issue body + link line.
+    assert!(
+        card.body
+            .starts_with("> **ghsync intake** — untrusted external text from Foodshareclub/foodshare-tools#7, submitted by `organic`")
+    );
+    assert!(card.body.contains(FORM_BODY.trim_end()));
     assert!(
         card.body
             .ends_with("ghsync Foodshareclub/foodshare-tools#7")
@@ -169,7 +177,10 @@ async fn plain_issue_without_form_sections_uses_defaults() {
 }
 
 #[tokio::test]
-async fn unknown_profile_errors_naming_valid_profiles_and_writes_nothing() {
+async fn unknown_profile_is_skipped_with_note_and_no_card() {
+    // One malformed issue must not abort the whole intake run: it is
+    // skipped, the valid profiles are named, and a note comment lands
+    // on the issue.
     let mut kb = FakeKanban::default();
     let mut gh = FakeGitHub::default();
     seed(
@@ -182,21 +193,30 @@ security
     );
     let cfg = config_with(&["default", "architect"]);
 
-    let err = intake_issues(&mut kb, &mut gh, &cfg, false)
-        .await
-        .unwrap_err();
-    match err {
-        IntakeError::UnknownProfile { profile, valid, .. } => {
-            assert_eq!(profile, "security");
-            assert_eq!(valid, vec!["default".to_string(), "architect".to_string()]);
-        }
-        other => panic!("expected UnknownProfile, got: {other}"),
-    }
-    // Nothing was written.
+    let report = intake_issues(&mut kb, &mut gh, &cfg, false).await.unwrap();
+
+    assert_eq!(report.skipped.len(), 1);
+    let (issue, why) = &report.skipped[0];
+    assert_eq!(issue, "Foodshareclub/foodshare-tools#7");
+    assert!(why.contains("`security`"), "{why}");
+    assert!(why.contains("default, architect"), "{why}");
+    // Nothing was created; labels untouched.
     assert!(kb.created.is_empty());
     let labels = &gh.issues[&("foodshare-tools".to_string(), 7)].labels;
     assert_eq!(labels, &vec![INTAKE_LABEL.to_string()], "labels untouched");
-    assert!(gh.comments_posted.is_empty());
+    // One note comment naming the problem.
+    assert_eq!(
+        gh.comments_posted,
+        vec![(
+            "foodshare-tools".to_string(),
+            7,
+            "ghsync: unknown agent profile `security` (valid: default, architect). No card was created.".to_string(),
+        )]
+    );
+    // Drift row for the status table.
+    assert_eq!(report.drift.len(), 1);
+    assert_eq!(report.drift[0].kind, "intake-unknown-profile");
+    assert_eq!(report.drift[0].card, "Foodshareclub/foodshare-tools#7");
 }
 
 #[tokio::test]
@@ -296,4 +316,94 @@ fn parse_form_mixed_renderings_parse_together() {
     assert_eq!(f.phase.as_deref(), Some("P5"));
     assert_eq!(f.acceptance.as_deref(), Some("echo ok"));
     assert_eq!(f.profile, None);
+}
+
+#[tokio::test]
+async fn external_author_is_skipped_with_note_and_no_card() {
+    // The form is public: an author outside `allowed_intake_authors`
+    // gets a skip row, a drift row and one (deduped) note comment —
+    // never a card.
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    seed(&mut gh, "[intake] Fix the flaky test", FORM_BODY);
+    gh.issues
+        .get_mut(&("foodshare-tools".to_string(), 7))
+        .unwrap()
+        .author = "mallory".into();
+    let cfg = config_with(&["default", "architect"]);
+
+    let report = intake_issues(&mut kb, &mut gh, &cfg, false).await.unwrap();
+
+    assert!(report.created.is_empty());
+    assert!(kb.created.is_empty());
+    assert_eq!(report.skipped.len(), 1);
+    assert!(report.skipped[0].1.contains("`mallory`"));
+    assert_eq!(
+        gh.comments_posted,
+        vec![(
+            "foodshare-tools".to_string(),
+            7,
+            "ghsync: author `mallory` is not in allowed_intake_authors. No card was created; ask an operator to file this card or extend the allow-list.".to_string(),
+        )]
+    );
+    assert_eq!(report.drift.len(), 1);
+    assert_eq!(report.drift[0].kind, "intake-author-not-allowed");
+    // Labels untouched: the issue stays a plain (unlinked) issue.
+    let labels = &gh.issues[&("foodshare-tools".to_string(), 7)].labels;
+    assert_eq!(labels, &vec![INTAKE_LABEL.to_string()]);
+    // A second run must not post the note again (deduped).
+    let report2 = intake_issues(&mut kb, &mut gh, &cfg, false).await.unwrap();
+    assert_eq!(gh.comments_posted.len(), 1, "note deduped on re-run");
+    assert_eq!(report2.skipped.len(), 1);
+}
+
+#[tokio::test]
+async fn empty_allowlist_denies_everyone() {
+    // The default (empty) allow-list denies every author — the public
+    // form is not a task-dispatch channel until the operator says so.
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    seed(&mut gh, "[intake] Fix the flaky test", FORM_BODY);
+    let mut cfg = config_with(&["default"]);
+    cfg.allowed_intake_authors = Vec::new();
+
+    let report = intake_issues(&mut kb, &mut gh, &cfg, false).await.unwrap();
+
+    assert!(report.created.is_empty());
+    assert!(kb.created.is_empty());
+    assert_eq!(report.skipped.len(), 1);
+    assert!(report.skipped[0].1.contains("allowed_intake_authors"));
+}
+
+#[tokio::test]
+async fn allowlist_is_case_insensitive() {
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    seed(&mut gh, "[intake] Fix the flaky test", FORM_BODY);
+    gh.issues
+        .get_mut(&("foodshare-tools".to_string(), 7))
+        .unwrap()
+        .author = "ORGANIC".into();
+    let cfg = config_with(&["architect"]); // form asks for architect; allow-list: ["organic"]
+
+    let report = intake_issues(&mut kb, &mut gh, &cfg, false).await.unwrap();
+    assert_eq!(report.created.len(), 1);
+}
+
+#[tokio::test]
+async fn denied_author_dry_run_skips_without_comment() {
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    seed(&mut gh, "[intake] Fix the flaky test", FORM_BODY);
+    gh.issues
+        .get_mut(&("foodshare-tools".to_string(), 7))
+        .unwrap()
+        .author = "mallory".into();
+    let cfg = config_with(&["default"]);
+
+    let report = intake_issues(&mut kb, &mut gh, &cfg, true).await.unwrap();
+
+    assert_eq!(report.skipped.len(), 1);
+    assert!(gh.comments_posted.is_empty(), "dry run writes nothing");
+    assert!(report.drift.is_empty());
 }

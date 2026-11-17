@@ -2,8 +2,9 @@
 //!
 //! The card↔issue map is re-derived on every run from the two sides:
 //! each card's `ghsync owner/repo#n` comments, and each `ghsync`-labeled
-//! issue's `kanban:<board>:<task-id>` footer. Either side can rebuild the
-//! map from the other; nothing is stored.
+//! issue's `kanban:<board>:<task-id>` footer (in the issue BODY —
+//! comments are public and are never trusted with links). Either side
+//! can rebuild the map from the other; nothing is stored.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -103,7 +104,10 @@ pub async fn resolve_links_views(
         }
     }
 
-    // Issue side: the footers on ghsync-labeled issues.
+    // Issue side: the footers in the BODY of ghsync-labeled issues.
+    // Only the body is scanned: comments are public, and a `kanban:`
+    // line in a comment would let any commenter forge a card link onto
+    // their own issue (state gestures, feed verdicts, status).
     let card_ids: BTreeSet<&str> = views.iter().map(|v| v.card.id.as_str()).collect();
     for repo in repos {
         let issues = gh.issues_labeled(repo, GHSYNC_LABEL).await?;
@@ -114,9 +118,8 @@ pub async fn resolve_links_views(
                 number: iss.number,
                 kind: LinkKind::Issue,
             };
-            let comments = gh.issue_comments(repo, iss.number).await?;
-            for comment in &comments {
-                let Some((b, task_id)) = parse_card_link(&comment.body) else {
+            for line in iss.body.lines() {
+                let Some((b, task_id)) = parse_card_link(line) else {
                     continue;
                 };
                 if b != board || !card_ids.contains(task_id.as_str()) {

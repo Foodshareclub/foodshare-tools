@@ -361,6 +361,41 @@ async fn dry_run_reports_transitions_without_writing_or_cursoring() {
     );
 }
 
+#[tokio::test]
+async fn discussion_linked_card_is_skipped_without_project_calls() {
+    // A discussion link must never reach the issue-scoped project API
+    // (the issue/discussion number spaces can collide — a write "by
+    // number" could hit the wrong issue, or 404 and abort the push).
+    let cfg = test_config();
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let card = kb
+        .create("E2E discussion", "x", "default", "k-d", "ready")
+        .await
+        .unwrap();
+    kb.comment(&card.id, "ghsyncd Foodshareclub/foodshare-tools#205")
+        .await
+        .unwrap();
+    let mut cursor = Cursor::default();
+
+    let report = run_fields(&mut kb, &mut gh, &cfg, &mut cursor, false).await;
+
+    assert_eq!(
+        report.skipped,
+        vec![(
+            card.id.clone(),
+            "discussion link (issues-scoped API)".to_string()
+        )]
+    );
+    assert!(report.writes.is_empty());
+    assert!(report.would_write.is_empty());
+    assert!(report.items_added.is_empty());
+    assert!(gh.project_field_reads.is_empty());
+    assert!(gh.project_field_writes.is_empty());
+    assert!(gh.project_items.is_empty());
+    assert!(cursor.fields.is_empty());
+}
+
 fn issue_key() -> String {
     "Foodshareclub/foodshare-tools#1".to_string()
 }

@@ -15,7 +15,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::config::Config;
+use crate::config::{Config, LinkKind};
 use crate::github::{CheckRun, GitHub, GitHubError};
 use crate::kanban::CardView;
 use crate::link::LinkMap;
@@ -100,7 +100,6 @@ pub async fn post_pr_evidence(
     dry_run: bool,
 ) -> Result<PrReport, GitHubError> {
     let mut report = PrReport::default();
-    let repos: Vec<String> = cfg.repos.iter().map(|r| r.name.clone()).collect();
     let mut sorted: Vec<&CardView> = views.iter().collect();
     sorted.sort_by(|a, b| a.card.id.cmp(&b.card.id));
 
@@ -109,6 +108,12 @@ pub async fn post_pr_evidence(
         let Some(linked) = links.issue_for_card(&card.id) else {
             continue;
         };
+        // Evidence is a comment on the linked *issue*; a discussion link
+        // has no issue object to comment on (and its number can collide
+        // with a real issue's). Discussion cards skip PR evidence.
+        if linked.kind == LinkKind::Discussion {
+            continue;
+        }
         // Candidates: PR URLs in the completion contract and the body.
         let mut seen: BTreeSet<(String, u32)> = BTreeSet::new();
         let mut candidates: Vec<(&str, Option<&str>)> = Vec::new();
@@ -120,8 +125,10 @@ pub async fn post_pr_evidence(
             let Some((owner, repo, number)) = extract_pr_url(text) else {
                 continue;
             };
-            // Scoped to this org's configured repos; one pass per PR.
-            if owner != cfg.org || !repos.contains(&repo) || !seen.insert((repo.clone(), number)) {
+            // The evidence lands on the linked issue, so only PRs in
+            // that issue's own repo are probed — never a (private) repo
+            // merely mentioned in the card body.
+            if owner != cfg.org || repo != linked.repo || !seen.insert((repo.clone(), number)) {
                 continue;
             }
             let pull = gh.get_pull(&repo, number).await?;

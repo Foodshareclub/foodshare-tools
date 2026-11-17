@@ -49,11 +49,11 @@ pub struct Gesture {
 /// A drift row: the GitHub side diverged, or a card could not be
 /// projected. Drift is reported, never repaired silently beyond the
 /// gestures above.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Drift {
     pub card: String,
     /// `unknown-repo` | `unknown-status` | `issue-missing` |
-    /// `footer-restored` | `issue-closed-by-human`.
+    /// `footer-restored` | `issue-closed-by-human` | `gesture-refused`.
     pub kind: String,
     pub detail: String,
 }
@@ -156,7 +156,23 @@ pub async fn push_issues(
                     report.verified.push(card.id.clone());
                     continue;
                 }
-                let issue = match gh.get_issue(repo_name, linked.number).await {
+                // The link is authoritative about which repo the issue
+                // lives in (the card's `Repo:` line is only a routing
+                // hint). Operating it in any other repo would look up a
+                // different number space for the same number (the B-1
+                // class of wrong-object writes).
+                let Some(issue_repo_cfg) = cfg.repo(&linked.repo) else {
+                    report
+                        .skipped
+                        .push((card.id.clone(), "link-repo-unmanaged".into()));
+                    report.drift.push(Drift {
+                        card: card.id.clone(),
+                        kind: "link-repo-unmanaged".into(),
+                        detail: linked.key(),
+                    });
+                    continue;
+                };
+                let issue = match gh.get_issue(&linked.repo, linked.number).await {
                     Ok(i) => i,
                     Err(_) => {
                         report
@@ -181,12 +197,12 @@ pub async fn push_issues(
                         });
                     } else {
                         gh.set_issue_body(
-                            repo_name,
+                            &linked.repo,
                             issue.number,
                             &format!("{}\n\n---\n{}", issue.body.trim_end(), footer),
                         )
                         .await?;
-                        gh.comment(repo_name, issue.number, FOOTER_NOTE).await?;
+                        gh.comment(&linked.repo, issue.number, FOOTER_NOTE).await?;
                         report.drift.push(Drift {
                             card: card.id.clone(),
                             kind: "footer-restored".into(),
@@ -196,17 +212,19 @@ pub async fn push_issues(
                 }
 
                 // 2. Normalize labels to the ghsync set for the repo.
-                let labels = labels_for(repo_name);
+                let labels = labels_for(&linked.repo);
                 if issue.labels != labels && !dry_run {
-                    gh.set_labels(repo_name, issue.number, &labels).await?;
+                    gh.set_labels(&linked.repo, issue.number, &labels).await?;
                 }
 
                 // 3. Enforce the repo's default milestone.
-                if issue.milestone.as_deref() != Some(repo_cfg.default_milestone.as_str())
+                if issue.milestone.as_deref() != Some(issue_repo_cfg.default_milestone.as_str())
                     && !dry_run
                 {
-                    let m = ensure_milestone(gh, repo_name, &repo_cfg.default_milestone).await?;
-                    gh.set_milestone(repo_name, issue.number, m.number).await?;
+                    let m = ensure_milestone(gh, &linked.repo, &issue_repo_cfg.default_milestone)
+                        .await?;
+                    gh.set_milestone(&linked.repo, issue.number, m.number)
+                        .await?;
                 }
 
                 // 4. State gestures.
@@ -216,7 +234,7 @@ pub async fn push_issues(
                 match (status, closed) {
                     (Status::Done, false) => {
                         if !dry_run {
-                            gh.close_issue(repo_name, issue.number).await?;
+                            gh.close_issue(&linked.repo, issue.number).await?;
                         }
                         report.gestures.push(Gesture {
                             card: card.id.clone(),
@@ -235,9 +253,20 @@ pub async fn push_issues(
                         true,
                     ) if !blocked_here => {
                         // A human closed the issue; that is the sanctioned
-                        // gesture for "this work is on hold".
-                        if !dry_run {
-                            kb.block(&card.id, "dependency", CLOSED_REASON).await?;
+                        // gesture for "this work is on hold". A refused
+                        // gesture (the kernel rejects a block it considers
+                        // invalid, e.g. the card is already blocked) is a
+                        // drift row — one bad card must not abort the whole
+                        // multi-repo push.
+                        if !dry_run
+                            && let Err(e) = kb.block(&card.id, "dependency", CLOSED_REASON).await
+                        {
+                            report.drift.push(Drift {
+                                card: card.id.clone(),
+                                kind: "gesture-refused".into(),
+                                detail: format!("block refused: {e}"),
+                            });
+                            continue;
                         }
                         report.gestures.push(Gesture {
                             card: card.id.clone(),
@@ -251,8 +280,13 @@ pub async fn push_issues(
                         });
                     }
                     (_, false) if blocked_here => {
-                        if !dry_run {
-                            kb.unblock(&card.id, REOPEN_REASON).await?;
+                        if !dry_run && let Err(e) = kb.unblock(&card.id, REOPEN_REASON).await {
+                            report.drift.push(Drift {
+                                card: card.id.clone(),
+                                kind: "gesture-refused".into(),
+                                detail: format!("unblock refused: {e}"),
+                            });
+                            continue;
                         }
                         report.gestures.push(Gesture {
                             card: card.id.clone(),
@@ -304,17 +338,21 @@ impl Cursor {
             .unwrap_or_default()
     }
 
-    /// Save atomically (temp file + rename) so a killed run can never
-    /// leave a torn cursor behind.
+    /// Save atomically (fresh temp file + rename) so a killed run can
+    /// never leave a torn cursor behind, and the temp name is never
+    /// predictable.
     pub fn save(&self, path: &Path) -> Result<()> {
-        if let Some(dir) = path.parent()
-            && !dir.as_os_str().is_empty()
-        {
-            std::fs::create_dir_all(dir)?;
-        }
-        let tmp = path.with_extension("tmp");
-        std::fs::write(&tmp, serde_json::to_string_pretty(self)?)?;
-        std::fs::rename(&tmp, path)?;
+        let dir = path.parent().filter(|p| !p.as_os_str().is_empty());
+        let mut tmp = match dir {
+            Some(dir) => {
+                std::fs::create_dir_all(dir)?;
+                tempfile::NamedTempFile::new_in(dir)?
+            }
+            None => tempfile::NamedTempFile::new()?,
+        };
+        std::io::Write::write_all(&mut tmp, serde_json::to_string_pretty(self)?.as_bytes())?;
+        tmp.persist(path)
+            .map_err(|e| anyhow::anyhow!("persist state file: {}", e.error))?;
         Ok(())
     }
 
@@ -401,6 +439,17 @@ pub async fn push_project_fields(
             report.skipped.push((card.id.clone(), "unlinked".into()));
             continue;
         };
+        // A discussion link is a different object: the project API is
+        // issue-scoped, and the issue/discussion number spaces can
+        // collide — a field write "by number" for a discussion would hit
+        // the wrong issue, or 404 and abort the whole push.
+        if linked.kind == LinkKind::Discussion {
+            report.skipped.push((
+                card.id.clone(),
+                "discussion link (issues-scoped API)".into(),
+            ));
+            continue;
+        }
         let status = match Status::from_kanban(&card.status) {
             Some(s) => s,
             None => {

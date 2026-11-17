@@ -33,25 +33,21 @@ fn issue(org: &str, repo: &str, number: u32) -> LinkedIssue {
 async fn resolution_builds_bidirectional_map() {
     let mut kb = FakeKanban::default();
     let mut gh = FakeGitHub::default();
-    // The issue exists first (labeled ghsync), then the card links to it
-    // and the issue carries the footer back to the card.
+    // The card exists first, then the issue (labeled ghsync) carries the
+    // footer in its BODY back to the card.
+    let id = seed_card(&mut kb, "A", None).await;
     let iss = gh
-        .create_issue("foodshare-app", "A", "b", &["ghsync".into()])
+        .create_issue(
+            "foodshare-app",
+            "A",
+            &format!("b\n\n---\nkanban:foodshare:{id}"),
+            &["ghsync".into()],
+        )
         .await
         .unwrap();
-    let id = seed_card(
-        &mut kb,
-        "A",
-        Some(&format!(
-            "ghsync Foodshareclub/foodshare-app#{}",
-            iss.number
-        )),
-    )
-    .await;
-    gh.comment(
-        "foodshare-app",
-        iss.number,
-        &format!("kanban:foodshare:{id}"),
+    kb.comment(
+        &id,
+        &format!("ghsync Foodshareclub/foodshare-app#{}", iss.number),
     )
     .await
     .unwrap();
@@ -139,10 +135,12 @@ async fn footer_to_missing_card_is_ignored() {
     let mut gh = FakeGitHub::default();
     seed_card(&mut kb, "A", None).await;
     let iss = gh
-        .create_issue("foodshare-app", "X", "b", &["ghsync".into()])
-        .await
-        .unwrap();
-    gh.comment("foodshare-app", iss.number, "kanban:foodshare:t_gone")
+        .create_issue(
+            "foodshare-app",
+            "X",
+            "b\n\n---\nkanban:foodshare:t_gone",
+            &["ghsync".into()],
+        )
         .await
         .unwrap();
 
@@ -170,13 +168,47 @@ async fn footer_on_other_board_is_ignored() {
     let mut gh = FakeGitHub::default();
     let id = seed_card(&mut kb, "A", None).await;
     let iss = gh
+        .create_issue(
+            "foodshare-app",
+            "X",
+            &format!("b\n\n---\nkanban:other-board:{id}"),
+            &["ghsync".into()],
+        )
+        .await
+        .unwrap();
+
+    let cards = kb.list().await.unwrap();
+    let map = resolve_links(
+        &mut kb,
+        &mut gh,
+        "foodshare",
+        "Foodshareclub",
+        &["foodshare-app".to_string()],
+        &cards,
+    )
+    .await
+    .unwrap();
+    let key = issue("Foodshareclub", "foodshare-app", iss.number);
+    assert!(!map.by_issue.contains_key(&key));
+}
+
+#[tokio::test]
+async fn kanban_line_in_issue_comment_is_not_a_link() {
+    // Comments are public: a `kanban:` line in an issue comment must not
+    // create a card↔issue link (any commenter could otherwise forge a
+    // link onto their own issue — state gestures, feed verdicts,
+    // status).
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let id = seed_card(&mut kb, "A", None).await;
+    let iss = gh
         .create_issue("foodshare-app", "X", "b", &["ghsync".into()])
         .await
         .unwrap();
     gh.comment(
         "foodshare-app",
         iss.number,
-        &format!("kanban:other-board:{id}"),
+        &format!("kanban:foodshare:{id}"),
     )
     .await
     .unwrap();
@@ -194,6 +226,7 @@ async fn footer_on_other_board_is_ignored() {
     .unwrap();
     let key = issue("Foodshareclub", "foodshare-app", iss.number);
     assert!(!map.by_issue.contains_key(&key));
+    assert!(map.by_card.get(&id).map(|v| v.is_empty()).unwrap_or(true));
 }
 
 // ---------- card repo routing ----------

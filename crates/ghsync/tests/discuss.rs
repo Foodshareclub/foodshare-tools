@@ -21,7 +21,7 @@ const REPO: &str = "foodshare-tools";
 const BOARD: &str = "foodshare";
 
 fn test_config() -> Config {
-    Config {
+    let mut cfg = Config {
         repos: vec![RepoConfig {
             name: REPO.into(),
             default_milestone: "Rust + TypeScript".into(),
@@ -30,7 +30,10 @@ fn test_config() -> Config {
             ..Default::default()
         }],
         ..Config::default()
-    }
+    };
+    // The operator login the seeded discussions/issues are authored by.
+    cfg.allowed_intake_authors = vec!["organic".into()];
+    cfg
 }
 
 /// One linked card (+ issue) the way push left it.
@@ -83,6 +86,7 @@ fn seed_discussion(gh: &mut FakeGitHub, number: u32, title: &str, body: &str, la
         number,
         title: title.into(),
         body: body.into(),
+        author: "organic".into(),
         labels: labels
             .iter()
             .map(|n| ghsync::github::DiscussionLabel {
@@ -127,7 +131,11 @@ async fn approval_verdict_creates_one_discussion_second_run_appends_at_most_one_
 }
 
 #[tokio::test]
-async fn escalation_block_creates_discussion_titled_escalation() {
+async fn kernel_blocked_card_with_escalation_reason_creates_discussion() {
+    // The kernel records block reasons as `BLOCKED: <reason>` comments
+    // (hermes_cli/kanban.py `_commented`); the escalation marker behind
+    // that prefix must reach the feed (the live E2E's documented
+    // escalation→feed path).
     let mut kb = FakeKanban::default();
     let mut gh = FakeGitHub::default();
     let card_id = linked_card(&mut kb, &mut gh, "Needs a decision").await;
@@ -149,6 +157,27 @@ async fn escalation_block_creates_discussion_titled_escalation() {
         "title must name the escalation: {title}"
     );
     assert_eq!(title, "[escalation] Needs a decision");
+}
+
+#[tokio::test]
+async fn bare_escalation_comment_on_blocked_card_counts_too() {
+    // A manual `escalation:` line (no kernel prefix) on a blocked card
+    // is an escalation as well.
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    let card_id = linked_card(&mut kb, &mut gh, "Needs a decision").await;
+    kb.block(&card_id, "needs_input", "waiting on operator")
+        .await
+        .unwrap();
+    kb.comment(&card_id, "escalation: manual marker")
+        .await
+        .unwrap();
+    let cfg = test_config();
+
+    let report = run_feed(&mut kb, &mut gh, &cfg).await;
+
+    assert_eq!(report.created, 1);
+    assert_eq!(gh.created_discussions[0].2, "[escalation] Needs a decision");
 }
 
 #[tokio::test]
@@ -235,6 +264,12 @@ async fn discussion_intake_creates_one_card_with_key_and_removes_label() {
         card.title,
         "Please add a release note (ghd Foodshareclub/foodshare-tools#7)"
     );
+    // The card body banners the untrusted external text.
+    assert!(
+        card.body
+            .starts_with("> **ghsync intake** — untrusted external text from Foodshareclub/foodshare-tools#7, submitted by `organic`")
+    );
+    assert!(card.body.contains("We need a release note for 1.4."));
     // Link comment on the card uses the discussion prefix.
     let comments = &kb.comments[&card.id];
     assert_eq!(
@@ -315,4 +350,62 @@ fn unknown_verdict_token_is_not_a_verdict() {
         ghsync::discuss::verdict_from_line("sync:github request-changes"),
         Some("request-changes")
     );
+}
+
+#[tokio::test]
+async fn external_discussion_author_is_skipped_with_note_and_no_card() {
+    // Discussions are public: an author outside `allowed_intake_authors`
+    // gets a skip row, a drift row and one (deduped) note comment —
+    // never a card, and the intake label stays (nothing was claimed).
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    seed_discussion(&mut gh, 7, "External ask", "please do this", &["intake"]);
+    gh.discussions.get_mut(REPO).unwrap()[0].author = "mallory".into();
+    let cfg = test_config();
+
+    let report = ghsync::discuss::intake_discussions(&mut kb, &mut gh, &cfg, false)
+        .await
+        .unwrap();
+
+    assert!(report.created.is_empty());
+    assert!(kb.created.is_empty());
+    assert_eq!(report.skipped.len(), 1);
+    assert!(report.skipped[0].1.contains("`mallory`"));
+    assert_eq!(report.drift.len(), 1);
+    assert_eq!(report.drift[0].kind, "intake-author-not-allowed");
+    assert_eq!(report.drift[0].card, "Foodshareclub/foodshare-tools#7");
+    // One note comment on the discussion.
+    assert_eq!(gh.discussion_comments.len(), 1);
+    assert!(
+        gh.discussion_comments[0]
+            .1
+            .contains("not in allowed_intake_authors")
+    );
+    // The label is untouched: the discussion keeps `intake`.
+    assert!(gh.removed_labels.is_empty());
+
+    // A second run must not post the note again (deduped).
+    let second = ghsync::discuss::intake_discussions(&mut kb, &mut gh, &cfg, false)
+        .await
+        .unwrap();
+    assert_eq!(gh.discussion_comments.len(), 1, "note deduped on re-run");
+    assert_eq!(second.skipped.len(), 1);
+}
+
+#[tokio::test]
+async fn discussion_denied_author_dry_run_skips_without_comment() {
+    let mut kb = FakeKanban::default();
+    let mut gh = FakeGitHub::default();
+    seed_discussion(&mut gh, 7, "External ask", "body", &["intake"]);
+    gh.discussions.get_mut(REPO).unwrap()[0].author = "mallory".into();
+    let cfg = test_config();
+
+    let report = ghsync::discuss::intake_discussions(&mut kb, &mut gh, &cfg, true)
+        .await
+        .unwrap();
+
+    assert_eq!(report.skipped.len(), 1);
+    assert!(report.would_create.is_empty(), "denied -> not would-create");
+    assert!(gh.discussion_comments.is_empty(), "dry run writes nothing");
+    assert!(report.drift.is_empty());
 }

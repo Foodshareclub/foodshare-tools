@@ -17,6 +17,9 @@ pub struct Issue {
     pub owner: String,
     pub repo: String,
     pub number: u32,
+    /// The issue author's login (the intake allow-list decision is
+    /// based on it).
+    pub author: String,
     pub title: String,
     pub body: String,
     /// GitHub's node id (`GH_ISSUE_…`); the content id for project items.
@@ -82,6 +85,9 @@ pub struct Discussion {
     pub number: u32,
     pub title: String,
     pub body: String,
+    /// The discussion author's login (the intake allow-list decision
+    /// is based on it).
+    pub author: String,
     pub labels: Vec<DiscussionLabel>,
     /// Comment bodies, oldest first (used for dedupe + append detection).
     pub comments: Vec<String>,
@@ -517,6 +523,9 @@ pub const GHSYNC_DISCUSSION_LIST_QUERY: &str = r#"query GhsyncDiscussionList($ow
         number
         title
         body
+        author {
+          login
+        }
         category {
           id
           name
@@ -634,7 +643,12 @@ pub struct RealGitHub {
 impl RealGitHub {
     pub fn new(api: &str, org: &str, token: &str) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            // A stalled endpoint must not hang the 15-minute cron run
+            // forever: every request gets a hard timeout.
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .expect("static client config"),
             api: api.trim_end_matches('/').to_string(),
             org: org.to_string(),
             token: token.to_string(),
@@ -703,6 +717,11 @@ impl RealGitHub {
             owner: self.org.clone(),
             repo: repo.to_string(),
             number: v.get("number").and_then(|n| n.as_u64()).unwrap_or(0) as u32,
+            author: v
+                .pointer("/user/login")
+                .and_then(|u| u.as_str())
+                .unwrap_or_default()
+                .to_string(),
             title: v
                 .get("title")
                 .and_then(|t| t.as_str())
@@ -1322,6 +1341,11 @@ impl GitHub for RealGitHub {
                                 .and_then(|b| b.as_str())
                                 .unwrap_or_default()
                                 .to_string(),
+                            author: d
+                                .pointer("/author/login")
+                                .and_then(|a| a.as_str())
+                                .unwrap_or_default()
+                                .to_string(),
                             labels,
                             comments,
                         })
@@ -1399,6 +1423,9 @@ impl GitHub for RealGitHub {
                 .unwrap_or_default()
                 .to_string(),
             body: body.to_string(),
+            // The create mutation returns no author; the next
+            // list_discussions resolves the real one.
+            author: String::new(),
             labels: Vec::new(),
             comments: Vec::new(),
         })

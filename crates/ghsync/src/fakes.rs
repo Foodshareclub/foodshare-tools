@@ -24,6 +24,12 @@ pub struct FakeKanban {
     pub unblocked: Vec<(String, String)>,
     /// Recorded `complete` calls: (task_id, summary).
     pub completed: Vec<(String, String)>,
+    /// Cards whose `block` is refused (the kernel rejects an invalid
+    /// block): `block` returns Err for these.
+    pub block_fails: std::collections::BTreeSet<String>,
+    /// Cards whose `unblock` is refused: `unblock` returns Err for
+    /// these.
+    pub unblock_fails: std::collections::BTreeSet<String>,
     next_id: u32,
 }
 
@@ -127,26 +133,48 @@ impl Kanban for FakeKanban {
     }
 
     async fn block(&mut self, task_id: &str, kind: &str, reason: &str) -> Result<(), KanbanError> {
+        if self.block_fails.contains(task_id) {
+            return Err(KanbanError::Command {
+                cmd: "block".into(),
+                code: 1,
+                stderr: format!("simulated kernel refusal for {task_id}"),
+            });
+        }
         let card = self
             .find_mut(task_id)
             .ok_or_else(|| KanbanError::NotFound(task_id.to_string(), "fake".to_string()))?;
         card.status = "blocked".into();
-        // The CLI appends the reason as a comment; the fake mirrors that,
-        // because push's unblock detection reads it back.
+        // The kernel records the block reason as a `BLOCKED: <reason>`
+        // comment (hermes_cli/kanban.py `_commented`); the fake mirrors
+        // that exact form, because push's unblock detection and the
+        // feed's escalation detection read comments back.
         self.comments
             .entry(task_id.to_string())
             .or_default()
-            .push(reason.to_string());
+            .push(format!("BLOCKED: {reason}"));
         self.blocked
             .push((task_id.to_string(), kind.to_string(), reason.to_string()));
         Ok(())
     }
 
     async fn unblock(&mut self, task_id: &str, reason: &str) -> Result<(), KanbanError> {
+        if self.unblock_fails.contains(task_id) {
+            return Err(KanbanError::Command {
+                cmd: "unblock".into(),
+                code: 1,
+                stderr: format!("simulated kernel refusal for {task_id}"),
+            });
+        }
         let card = self
             .find_mut(task_id)
             .ok_or_else(|| KanbanError::NotFound(task_id.to_string(), "fake".to_string()))?;
         card.status = "ready".into();
+        // Kernel parity: an unblock is recorded as an `UNBLOCK: <reason>`
+        // comment.
+        self.comments
+            .entry(task_id.to_string())
+            .or_default()
+            .push(format!("UNBLOCK: {reason}"));
         self.unblocked
             .push((task_id.to_string(), reason.to_string()));
         Ok(())
@@ -194,6 +222,12 @@ pub struct FakeGitHub {
     pub graphql_responses: Vec<serde_json::Value>,
     /// Login returned by `get_user` (default "fakeuser").
     pub user_login: String,
+    /// The author login stamped on issues created via `create_issue`
+    /// (intake allow-list tests).
+    pub issue_author: String,
+    /// The author login stamped on discussions created via
+    /// `create_discussion` (intake allow-list tests).
+    pub discussion_author: String,
     /// When true, `get_user` returns a 401 error.
     pub user_rejected: bool,
     /// Label names per repo.
@@ -247,6 +281,7 @@ impl GitHub for FakeGitHub {
             owner: "fakeorg".into(),
             repo: repo.to_string(),
             number: self.next_issue_number,
+            author: self.issue_author.clone(),
             title: title.to_string(),
             body: body.to_string(),
             node_id: format!("GH_ISSUE_{}", self.next_issue_number),
@@ -520,6 +555,7 @@ impl GitHub for FakeGitHub {
             number,
             title: title.to_string(),
             body: body.to_string(),
+            author: self.discussion_author.clone(),
             labels: Vec::new(),
             comments: Vec::new(),
         };
