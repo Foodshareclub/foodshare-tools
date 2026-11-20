@@ -45,6 +45,8 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets -- -D clippy::correctness -D clippy::suspicious
         # mirrors ci.yml Lint gate; pedantic doc-lint debt tracked there
 

@@ -95,6 +95,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: foodshare-tools-${{ matrix.artifact }}
+          retention-days: 3
           path: foodshare-tools-${{ matrix.artifact }}.tar.gz
 
   release:
