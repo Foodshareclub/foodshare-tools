@@ -1,0 +1,57 @@
+name: Storage hygiene
+
+# The guard the sibling repositories call from their own CI:
+#
+#   jobs:
+#     storage-hygiene:
+#       uses: Foodshareclub/foodshare-tools/.github/workflows/storage-hygiene.yml@main
+#
+# It lives here, rather than as a copy in each repository, so the four
+# repositories cannot drift into four slightly different rules. The check
+# itself is `scripts/check-workflow-storage.ts`: no dependencies, so this job
+# needs no install step and finishes in seconds.
+#
+# Retention is tiered: 7 days by default, 1 day for a run-scoped handoff
+# that the same workflow downloads later, and the guard's explicit release
+# allowlist. Composite actions under .github/actions are checked too.
+#
+# It also rejects a cache key containing github.sha, github.run_id,
+# github.run_number or github.run_attempt (a new cache every time, restored
+# by none).
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  storage-hygiene:
+    name: Artifacts and caches stay bounded
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check out the guard
+        # Public repository, so the default token can read it. Only the one
+        # script is fetched: this job has no business with the rest of the
+        # tree.
+        uses: actions/checkout@v4
+        with:
+          repository: Foodshareclub/foodshare-tools
+          path: .storage-guard
+          # Cone mode takes directories, not a single file path.
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Keep aligned with BUN_VERSION in this repository's ci.yml.
+          bun-version: "1.4.4"
+
+      - name: Check artifacts and caches
+        run: bun run .storage-guard/scripts/check-workflow-storage.ts .github/workflows .github/actions
