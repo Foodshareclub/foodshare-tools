@@ -4,10 +4,16 @@ name: Storage report
 # repository can be green while both keep growing. This report totals both per
 # repository, names the caches no future run can restore (duplicate keys, and
 # caches whose pull request is closed), and fails when an artifact upload died
-# on the storage quota. The red scheduled run and its annotation are the alert.
+# on the storage quota.
+#
+# The alert is a single deduplicated issue with the affected run links and
+# first/last-seen timestamps. It is updated on every failing run and closed
+# automatically once a run finds no quota failures. The red scheduled run is a
+# backstop, not the only signal.
 #
 # CROSS_REPO_TOKEN is the same token the compatibility matrix uses to read the
-# private repositories; the default GITHUB_TOKEN cannot see them.
+# private repositories; the default GITHUB_TOKEN cannot see them. The issue is
+# written with the workflow token, which needs issues: write below.
 
 on:
   schedule:
@@ -17,6 +23,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 
 concurrency:
   group: storage-report-${{ github.ref }}
@@ -45,4 +52,9 @@ jobs:
           # without it the report still runs and says why the accrued GB-hours
           # section is unavailable.
           BILLING_TOKEN: ${{ secrets.ORG_BILLING_TOKEN || secrets.CROSS_REPO_TOKEN }}
+          # The report reads private repositories with CROSS_REPO_TOKEN. Issue
+          # writes use the workflow token with the issues: write permission
+          # above, so a read-only cross-repo token is enough.
+          STORAGE_ISSUE_REPO: ${{ github.repository }}
+          STORAGE_ISSUE_TOKEN: ${{ github.token }}
         run: bun run report:storage

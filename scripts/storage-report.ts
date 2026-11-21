@@ -27,6 +27,9 @@
 //        STORAGE_ORG         organisation for billing (default first repo owner)
 //        STORAGE_ALLOWANCE_GB_HOURS  monthly artifact allowance (default 372,
 //                            which is 500 MB metered over a 744-hour month)
+//        STORAGE_ISSUE_REPO  repository for the alert issue (empty disables
+//                            issue management)
+//        STORAGE_ISSUE_TOKEN token with issues write (defaults to GITHUB_TOKEN)
 
 import { mkdtempSync, rmSync, writeFileSync } from "bun:fs";
 import { tmpdir } from "bun:os";
@@ -61,6 +64,11 @@ const FALLBACK_PRICE_PER_GB_HOUR = 0.25 / 744;
 /** Cap the number of job logs fetched, so a bad day cannot stall the report. */
 const QUOTA_LOG_LIMIT = 40;
 
+/** Issue management is opt-in so local runs do not write to GitHub. */
+const ISSUE_REPO = (process.env.STORAGE_ISSUE_REPO ?? "").trim();
+const ISSUE_TOKEN = process.env.STORAGE_ISSUE_TOKEN ?? TOKEN;
+export const ISSUE_TITLE = "Storage report artifact quota failures";
+
 export type CacheEntry = {
   id: number;
   ref: string;
@@ -92,6 +100,35 @@ export type QuotaFailure = {
   job: string;
   step: string;
   line: string;
+};
+
+export type IssueFailureSeen = {
+  firstSeen: string;
+  lastSeen: string;
+};
+
+export type IssueState = {
+  firstSeen: string;
+  failures: Record<string, IssueFailureSeen>;
+};
+
+export type Issue = {
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  body: string | null;
+  html_url: string;
+};
+
+export type IssueApi = {
+  find(): Promise<Issue | undefined>;
+  create(input: { title: string; body: string }): Promise<Issue>;
+  update(number: number, input: { body: string; state?: "open" | "closed" }): Promise<Issue>;
+};
+
+export type IssueSyncResult = {
+  action: "created" | "updated" | "reopened" | "closed" | "none";
+  issue?: Issue;
 };
 
 export type RepoReport = {
@@ -170,13 +207,24 @@ function headers(token: string): Record<string, string> {
   };
 }
 
-async function request<T>(path: string, token = TOKEN): Promise<T> {
-  const response = await fetch(`${API}${path}`, { headers: headers(token) });
+async function api<T>(method: string, path: string, token = TOKEN, body?: unknown): Promise<T> {
+  const response = await fetch(`${API}${path}`, {
+    method,
+    headers: {
+      ...headers(token),
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   if (!response.ok) {
-    const body = (await response.text()).slice(0, 300);
-    throw new Error(`GET ${path} -> ${response.status}: ${body}`);
+    const text = (await response.text()).slice(0, 300);
+    throw new Error(`${method} ${path} -> ${response.status}: ${text}`);
   }
   return (await response.json()) as T;
+}
+
+async function request<T>(path: string, token = TOKEN): Promise<T> {
+  return api("GET", path, token);
 }
 
 async function paginate<T>(path: string, field: string): Promise<T[]> {
@@ -687,6 +735,198 @@ export function renderReport(
   return lines.join("\n");
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Stable identity for one failed run step across daily reports. */
+export function failureKey(failure: Pick<QuotaFailure, "repo" | "run" | "job" | "step">): string {
+  return JSON.stringify([failure.repo, failure.run, failure.job, failure.step]);
+}
+
+function base64Encode(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function base64Decode(value: string): string {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+/** The marker is hidden in the issue body and survives ordinary edits. */
+export function encodeIssueState(state: IssueState): string {
+  return `<!-- storage-report-state: ${base64Encode(JSON.stringify(state))} -->`;
+}
+
+export function parseIssueState(body: string): IssueState | undefined {
+  const match = /<!-- storage-report-state: ([A-Za-z0-9+/=]+) -->/.exec(body);
+  if (match?.[1] === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(base64Decode(match[1]));
+    if (!isRecord(parsed) || typeof parsed.firstSeen !== "string" || !isRecord(parsed.failures)) {
+      return undefined;
+    }
+    const failures: Record<string, IssueFailureSeen> = {};
+    for (const [key, value] of Object.entries(parsed.failures)) {
+      if (isRecord(value) && typeof value.firstSeen === "string" && typeof value.lastSeen === "string") {
+        failures[key] = { firstSeen: value.firstSeen, lastSeen: value.lastSeen };
+      }
+    }
+    return { firstSeen: parsed.firstSeen, failures };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Keep the first sighting of each failure and refresh only its last sighting. */
+export function mergeIssueState(previous: IssueState | undefined, failures: QuotaFailure[], now: string): IssueState {
+  const prior = previous?.failures ?? {};
+  const next: Record<string, IssueFailureSeen> = {};
+  for (const failure of failures) {
+    const key = failureKey(failure);
+    next[key] = { firstSeen: prior[key]?.firstSeen ?? now, lastSeen: now };
+  }
+  return { firstSeen: previous?.firstSeen ?? now, failures: next };
+}
+
+function issueQuotaLines(quota: QuotaReport | undefined): string[] {
+  if (quota === undefined) {
+    return [];
+  }
+  if (!quota.available) {
+    return [`Billing usage unavailable: ${markdownCell(quota.error)}`];
+  }
+  const status = quota.exhausted
+    ? `Exhausted${quota.exhaustedOn === undefined ? "" : ` on ${quota.exhaustedOn}`}`
+    : "Within allowance";
+  return [
+    `Status: **${status}**`,
+    `Billable usage: ${formatGbHours(quota.combinedGbHours)} of ${formatGbHours(quota.allowanceGbHours)} (${formatPercent(quota.usedPercent)})`,
+  ];
+}
+
+export function renderIssueBody(input: {
+  failures: QuotaFailure[];
+  state: IssueState;
+  quota?: QuotaReport;
+  reportRunUrl?: string;
+  now: string;
+}): string {
+  const lines: string[] = [
+    "# Actions artifact quota failures",
+    "",
+    `First seen: <code>${input.state.firstSeen}</code>`,
+    `Last seen: <code>${input.now}</code>`,
+    "",
+    `The scheduled storage report found ${input.failures.length} failed artifact upload(s) in the last ${REPORT_DAYS} days.`,
+    "",
+    "| Repository | Run | Job | Step | First seen | Last seen |",
+    "|---|---|---|---|---|---|",
+  ];
+  for (const failure of input.failures) {
+    const seen = input.state.failures[failureKey(failure)];
+    lines.push(
+      `| ${failure.repo} | [run](${failure.run}) | ${markdownCell(failure.job)} | ${markdownCell(failure.step)} | <code>${seen?.firstSeen ?? input.now}</code> | <code>${seen?.lastSeen ?? input.now}</code> |`,
+    );
+  }
+  lines.push("", "## Quota status", "", ...issueQuotaLines(input.quota));
+  if (input.reportRunUrl !== undefined) {
+    lines.push("", `[Scheduled report run](${input.reportRunUrl})`);
+  }
+  lines.push("", encodeIssueState(input.state), "");
+  return lines.join("\n");
+}
+
+export function renderResolvedIssueBody(input: { now: string; quota?: QuotaReport; reportRunUrl?: string }): string {
+  const lines: string[] = [
+    "# Actions artifact quota failures",
+    "",
+    `Resolved at <code>${input.now}</code>.`,
+    "",
+    `The scheduled storage report found no failed artifact uploads in the last ${REPORT_DAYS} days.`,
+    "",
+    "## Quota status",
+    "",
+    ...issueQuotaLines(input.quota),
+  ];
+  if (input.reportRunUrl !== undefined) {
+    lines.push("", `[Scheduled report run](${input.reportRunUrl})`);
+  }
+  return lines.join("\n");
+}
+
+/** Create, update, reopen, or close the single alert issue. */
+export async function syncIssue(input: {
+  failures: QuotaFailure[];
+  quota?: QuotaReport;
+  now: string;
+  reportRunUrl?: string;
+  api: IssueApi;
+}): Promise<IssueSyncResult> {
+  const existing = await input.api.find();
+  if (input.failures.length === 0) {
+    if (existing === undefined || existing.state === "closed") {
+      return { action: "none", issue: existing };
+    }
+    const issue = await input.api.update(existing.number, {
+      body: renderResolvedIssueBody({
+        now: input.now,
+        quota: input.quota,
+        reportRunUrl: input.reportRunUrl,
+      }),
+      state: "closed",
+    });
+    return { action: "closed", issue };
+  }
+
+  const previous = existing?.body === null || existing?.body === undefined ? undefined : parseIssueState(existing.body);
+  const state = mergeIssueState(previous, input.failures, input.now);
+  const body = renderIssueBody({
+    failures: input.failures,
+    state,
+    quota: input.quota,
+    reportRunUrl: input.reportRunUrl,
+    now: input.now,
+  });
+  if (existing === undefined) {
+    const issue = await input.api.create({ title: ISSUE_TITLE, body });
+    return { action: "created", issue };
+  }
+  const issue = await input.api.update(existing.number, { body, state: "open" });
+  return { action: existing.state === "closed" ? "reopened" : "updated", issue };
+}
+
+export function createIssueApi(repo: string, token: string): IssueApi {
+  return {
+    async find() {
+      const query = `repo:${repo} is:issue in:title "${ISSUE_TITLE}"`;
+      const result = await api<{ items: Issue[] }>(
+        "GET",
+        `/search/issues?q=${encodeURIComponent(query)}&per_page=20`,
+        token,
+      );
+      const matches = (result.items ?? []).filter((issue) => issue.title === ISSUE_TITLE);
+      return matches.find((issue) => issue.state === "open") ?? matches[0];
+    },
+    async create(input) {
+      return api<Issue>("POST", `/repos/${repo}/issues`, token, input);
+    },
+    async update(number, input) {
+      return api<Issue>("PATCH", `/repos/${repo}/issues/${number}`, token, input);
+    },
+  };
+}
+
 async function privateRepoNameSet(reports: RepoReport[]): Promise<Set<string>> {
   const names = new Set<string>();
   if (ORG !== "") {
@@ -791,6 +1031,34 @@ if (import.meta.main) {
   for (const failure of failures) {
     const message = `${failure.repo} ${failure.job} › ${failure.step}: ${failure.line} (${failure.run})`;
     console.log(`::error title=Actions artifact quota::${message}`);
+  }
+
+  const server = (process.env.GITHUB_SERVER_URL ?? "https://github.com").replace(/\/+$/, "");
+  const runId = process.env.GITHUB_RUN_ID;
+  const reportRunUrl =
+    runId === undefined ? undefined : `${server}/${ISSUE_REPO || REPOS[0] || ""}/actions/runs/${runId}`;
+
+  if (ISSUE_REPO !== "") {
+    if (ISSUE_TOKEN === "") {
+      console.error("❌ STORAGE_ISSUE_REPO requires STORAGE_ISSUE_TOKEN (or GITHUB_TOKEN) with issues write");
+      process.exit(2);
+    }
+    try {
+      const result = await syncIssue({
+        failures,
+        quota,
+        now: generatedAt,
+        reportRunUrl,
+        api: createIssueApi(ISSUE_REPO, ISSUE_TOKEN),
+      });
+      const issue = result.issue === undefined ? "" : ` #${result.issue.number} ${result.issue.html_url}`;
+      console.log(`::notice title=Storage report issue::${result.action}${issue}`);
+    } catch (error) {
+      console.error(`::error title=Storage report issue::${error instanceof Error ? error.message : String(error)}`);
+      if (failures.length === 0) {
+        process.exit(2);
+      }
+    }
   }
 
   if (failures.length > 0) {

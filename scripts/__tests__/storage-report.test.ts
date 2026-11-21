@@ -4,20 +4,31 @@ import {
   closedPrCaches,
   decodeJobLog,
   duplicateCacheGroups,
+  encodeIssueState,
+  failureKey,
   formatBytes,
   formatGbHours,
   formatPercent,
   formatUsd,
   isActionsStorageSku,
   isPackagesStorageSku,
+  ISSUE_TITLE,
   markdownCell,
+  mergeIssueState,
+  parseIssueState,
   quotaLine,
   quotaReport,
+  renderIssueBody,
   renderQuotaSection,
   renderReport,
+  renderResolvedIssueBody,
+  syncIssue,
   type BillingSummaryItem,
   type BillingUsageItem,
   type CacheEntry,
+  type Issue,
+  type IssueApi,
+  type QuotaFailure,
   type QuotaReport,
 } from "../storage-report";
 
@@ -54,6 +65,54 @@ const summaryItem = (overrides: Partial<BillingSummaryItem>): BillingSummaryItem
   unitType: "gigabyte-hours",
   ...overrides,
 });
+
+const failure = (overrides: Partial<QuotaFailure> = {}): QuotaFailure => ({
+  repo: "Foodshareclub/foodshare-app",
+  run: "https://github.com/Foodshareclub/foodshare-app/actions/runs/123",
+  job: "Build Android",
+  step: "Upload debug APK",
+  line: "Artifact storage quota has been hit.",
+  ...overrides,
+});
+
+function fakeIssueApi(initial?: Issue) {
+  const calls = {
+    created: [] as Array<{ title: string; body: string }>,
+    updated: [] as Array<{ number: number; body: string; state?: "open" | "closed" }>,
+  };
+  let current = initial;
+  const api: IssueApi = {
+    async find() {
+      return current;
+    },
+    async create(input) {
+      calls.created.push(input);
+      current = {
+        number: 1,
+        title: input.title,
+        state: "open",
+        body: input.body,
+        html_url: "https://github.com/Foodshareclub/foodshare-tools/issues/1",
+      };
+      return current;
+    },
+    async update(number, input) {
+      calls.updated.push({ number, ...input });
+      if (current === undefined) {
+        throw new Error("no issue to update");
+      }
+      current = { ...current, ...input };
+      return current;
+    },
+  };
+  return {
+    api,
+    calls,
+    get current() {
+      return current;
+    },
+  };
+}
 
 describe("duplicateCacheGroups", () => {
   test("groups identical keys and counts the bytes beyond the largest copy", () => {
@@ -291,5 +350,142 @@ describe("renderReport", () => {
 
     expect(quota).toBeGreaterThan(text.indexOf("## Totals"));
     expect(quota).toBeLessThan(text.indexOf("## Duplicate caches"));
+  });
+});
+
+describe("issue alert", () => {
+  const now = "2026-11-21T06:10:00.000Z";
+
+  test("round-trips the hidden state marker", () => {
+    const f = failure();
+    const state = {
+      firstSeen: "2026-11-20T06:10:00.000Z",
+      failures: {
+        [failureKey(f)]: { firstSeen: "2026-11-20T06:10:00.000Z", lastSeen: now },
+      },
+    };
+
+    expect(parseIssueState(encodeIssueState(state))).toEqual(state);
+  });
+
+  test("ignores a missing or malformed marker", () => {
+    expect(parseIssueState("plain body")).toBeUndefined();
+    expect(parseIssueState("<!-- storage-report-state: not-base64 -->")).toBeUndefined();
+    expect(parseIssueState("<!-- storage-report-state: e30= -->")).toBeUndefined();
+  });
+
+  test("preserves first seen and refreshes last seen", () => {
+    const first = failure();
+    const second = failure({
+      run: "https://github.com/Foodshareclub/foodshare-app/actions/runs/456",
+      step: "Upload release AAB",
+    });
+    const old = "2026-11-20T06:10:00.000Z";
+    const previous = {
+      firstSeen: old,
+      failures: { [failureKey(first)]: { firstSeen: old, lastSeen: old } },
+    };
+
+    const merged = mergeIssueState(previous, [first, second], now);
+
+    expect(merged.firstSeen).toBe(old);
+    expect(merged.failures[failureKey(first)]).toEqual({ firstSeen: old, lastSeen: now });
+    expect(merged.failures[failureKey(second)]).toEqual({ firstSeen: now, lastSeen: now });
+  });
+
+  test("renders failing run links and both timestamps", () => {
+    const f = failure();
+    const state = mergeIssueState(undefined, [f], now);
+    const body = renderIssueBody({
+      failures: [f],
+      state,
+      quota: exhaustedQuota,
+      reportRunUrl: "https://github.com/Foodshareclub/foodshare-tools/actions/runs/999",
+      now,
+    });
+
+    expect(body).toContain(f.run);
+    expect(body).toContain("First seen:");
+    expect(body).toContain("Last seen:");
+    expect(body).toContain(now);
+    expect(body).toContain("Exhausted on 2026-11-19");
+    expect(body).toContain("Scheduled report run");
+    expect(parseIssueState(body)).toEqual(state);
+  });
+
+  test("renders a resolved body with no state marker", () => {
+    const body = renderResolvedIssueBody({ now, quota: exhaustedQuota });
+
+    expect(body).toContain("Resolved at");
+    expect(body).not.toContain("storage-report-state");
+  });
+
+  test("creates one issue with a stable title and run link", async () => {
+    const store = fakeIssueApi();
+    const result = await syncIssue({
+      failures: [failure()],
+      quota: exhaustedQuota,
+      now,
+      api: store.api,
+    });
+
+    expect(result.action).toBe("created");
+    expect(store.calls.created).toHaveLength(1);
+    expect(store.calls.created[0]?.title).toBe(ISSUE_TITLE);
+    expect(store.calls.created[0]?.body).toContain("https://github.com/Foodshareclub/foodshare-app/actions/runs/123");
+  });
+
+  test("updates the existing open issue and preserves first seen", async () => {
+    const firstSeen = "2026-11-20T06:10:00.000Z";
+    const store = fakeIssueApi();
+    await syncIssue({ failures: [failure()], now: firstSeen, api: store.api });
+
+    const result = await syncIssue({ failures: [failure()], now, api: store.api });
+    const state = parseIssueState(store.current?.body ?? "");
+    const key = failureKey(failure());
+
+    expect(result.action).toBe("updated");
+    expect(store.calls.updated).toHaveLength(1);
+    expect(state?.firstSeen).toBe(firstSeen);
+    expect(state?.failures[key]?.firstSeen).toBe(firstSeen);
+    expect(state?.failures[key]?.lastSeen).toBe(now);
+  });
+
+  test("reopens a closed issue when failures recur", async () => {
+    const store = fakeIssueApi({
+      number: 7,
+      title: ISSUE_TITLE,
+      state: "closed",
+      body: "Resolved.",
+      html_url: "https://github.com/Foodshareclub/foodshare-tools/issues/7",
+    });
+
+    const result = await syncIssue({ failures: [failure()], now, api: store.api });
+
+    expect(result.action).toBe("reopened");
+    expect(store.calls.updated[0]?.state).toBe("open");
+  });
+
+  test("closes the open issue when clean", async () => {
+    const store = fakeIssueApi();
+    await syncIssue({ failures: [failure()], now: "2026-11-20T06:10:00.000Z", api: store.api });
+
+    const result = await syncIssue({ failures: [], now, api: store.api });
+
+    expect(result.action).toBe("closed");
+    expect(store.calls.updated.at(-1)?.state).toBe("closed");
+    expect(store.current?.state).toBe("closed");
+    expect(store.current?.body).toContain("Resolved at");
+    expect(store.current?.body).not.toContain("storage-report-state");
+  });
+
+  test("leaves a clean run with no open issue alone", async () => {
+    const store = fakeIssueApi();
+
+    const result = await syncIssue({ failures: [], now, api: store.api });
+
+    expect(result.action).toBe("none");
+    expect(store.calls.created).toHaveLength(0);
+    expect(store.calls.updated).toHaveLength(0);
   });
 });
