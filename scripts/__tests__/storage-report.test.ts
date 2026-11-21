@@ -5,6 +5,7 @@ import {
   decodeJobLog,
   duplicateCacheGroups,
   formatBytes,
+  markdownCell,
   quotaLine,
   type CacheEntry,
 } from "../storage-report";
@@ -77,6 +78,12 @@ describe("quotaLine", () => {
   test("ignores upload failures that are not about the quota", () => {
     expect(quotaLine("Error: Failed to create artifact")).toBeUndefined();
     expect(quotaLine("Unable to reserve cache with key bun-lock")).toBeUndefined();
+  });
+});
+
+describe("markdownCell", () => {
+  test("escapes backslashes before pipes so neither can break the table", () => {
+    expect(markdownCell("a\\b|c")).toBe("a\\\\b\\|c");
   });
 });
 

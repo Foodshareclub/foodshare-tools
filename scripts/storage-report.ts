@@ -288,6 +288,11 @@ async function repoReport(repo: string): Promise<RepoReport> {
   };
 }
 
+/** Escape a value for a Markdown table cell, backslashes first. */
+export function markdownCell(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -370,10 +375,9 @@ export function renderReport(reports: RepoReport[], failures: QuotaFailure[], ge
     lines.push("| Repository | Run | Job | Step | Line |", "|---|---|---|---|---|");
     for (const failure of failures) {
       lines.push(
-        `| ${failure.repo} | [run](${failure.run}) | ${failure.job} | ${failure.step} | \`${failure.line.replace(
-          /\|/g,
-          "\\|",
-        )}\` |`,
+        `| ${failure.repo} | [run](${failure.run}) | ${markdownCell(failure.job)} | ${markdownCell(
+          failure.step,
+        )} | \`${markdownCell(failure.line)}\` |`,
       );
     }
     lines.push("");
