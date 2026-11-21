@@ -36,6 +36,7 @@
     "check:yaml": "bun scripts/check-yaml.ts .github/workflows/*.yml",
     "check:json": "bun scripts/check-json.ts",
     "report:storage": "bun scripts/storage-report.ts",
+    "check:workflows": "bun scripts/check-workflow-storage.ts .github/workflows",
     "docs:cli-reference": "bun scripts/generate-cli-reference.ts",
     "check:cli-reference": "bun scripts/generate-cli-reference.ts --check",
     "verify": "bun run check:no-node && bun run check:bun-modules && bun run check:json && bun run lint && bun run format:check && bun run test",

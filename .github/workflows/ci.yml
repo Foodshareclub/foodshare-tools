@@ -79,6 +79,13 @@ jobs:
         # sibling repositories reads every `package.json` in the tree, and
         # it crashed on one.
         run: bun run check:json
+      - name: Artifacts and caches stay bounded
+        # Two shapes preceded a 45 GB storage overage: an upload-artifact with
+        # no retention-days (which falls back to a 90-day default) and a cache
+        # key built from github.sha (a new cache on every commit, restored by
+        # none). Both pass a green build, so this is the only place they are
+        # caught.
+        run: bun run check:workflows
 
   web:
     name: The web app
