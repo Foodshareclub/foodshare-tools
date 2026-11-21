@@ -1,0 +1,43 @@
+name: Storage report
+
+# GitHub bills artifacts and caches long after the run that made them, so a
+# repository can be green while both keep growing. This report totals both per
+# repository, names the caches no future run can restore (duplicate keys, and
+# caches whose pull request is closed), and fails when an artifact upload died
+# on the storage quota. The red scheduled run and its annotation are the alert.
+#
+# CROSS_REPO_TOKEN is the same token the compatibility matrix uses to read the
+# private repositories; the default GITHUB_TOKEN cannot see them.
+
+on:
+  schedule:
+    - cron: "10 6 * * *" # 06:10 UTC daily, after the per-repo nightlies
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: storage-report-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Artifacts and caches by repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Keep aligned with BUN_VERSION in ci.yml.
+          bun-version: "1.4.4"
+
+      - name: Report storage
+        env:
+          GITHUB_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+        run: bun run report:storage
