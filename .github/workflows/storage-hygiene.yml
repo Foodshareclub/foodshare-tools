@@ -11,11 +11,13 @@ name: Storage hygiene
 # itself is `scripts/check-workflow-storage.ts`: no dependencies, so this job
 # needs no install step and finishes in seconds.
 #
-# Two shapes it rejects, both of which passed a green build while adding
-# storage on every push:
-#   - upload-artifact without retention-days (90-day repository default);
-#   - a cache key containing github.sha, github.run_id, github.run_number or
-#     github.run_attempt (a new cache every time, restored by none).
+# Retention is tiered: 7 days by default, 1 day for a run-scoped handoff
+# that the same workflow downloads later, and the guard's explicit release
+# allowlist. Composite actions under .github/actions are checked too.
+#
+# It also rejects a cache key containing github.sha, github.run_id,
+# github.run_number or github.run_attempt (a new cache every time, restored
+# by none).
 
 on:
   workflow_call:
@@ -52,4 +54,4 @@ jobs:
           bun-version: "1.4.4"
 
       - name: Check artifacts and caches
-        run: bun run .storage-guard/scripts/check-workflow-storage.ts .github/workflows
+        run: bun run .storage-guard/scripts/check-workflow-storage.ts .github/workflows .github/actions
