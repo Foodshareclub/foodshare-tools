@@ -22,6 +22,11 @@
 // Env:   STORAGE_REPOS       comma-separated owner/name list
 //        STORAGE_REPORT_DAYS how far back to scan failed runs (default 7)
 //        GITHUB_API_URL      API base (default https://api.github.com)
+//        BILLING_TOKEN       org billing-read token (defaults to GITHUB_TOKEN);
+//                            the cross-repo token may not carry billing read
+//        STORAGE_ORG         organisation for billing (default first repo owner)
+//        STORAGE_ALLOWANCE_GB_HOURS  monthly artifact allowance (default 372,
+//                            which is 500 MB metered over a 744-hour month)
 
 import { mkdtempSync, rmSync, writeFileSync } from "bun:fs";
 import { tmpdir } from "bun:os";
@@ -40,6 +45,18 @@ const REPOS = (process.env.STORAGE_REPOS ?? DEFAULT_REPOS.join(","))
   .map((repo) => repo.trim())
   .filter((repo) => repo !== "");
 const REPORT_DAYS = Number.parseInt(process.env.STORAGE_REPORT_DAYS ?? "7", 10) || 7;
+const BILLING_TOKEN = process.env.BILLING_TOKEN ?? TOKEN;
+const ORG = process.env.STORAGE_ORG ?? REPOS[0]?.split("/")[0] ?? "";
+/**
+ * 500 MB of artifact storage for a 744-hour billing month. GitHub meters the
+ * allowance in GB-hours (0.5 GB x 744 h), not as a 500 MB snapshot; the
+ * summary endpoint discounts exactly this much once billable usage reaches it.
+ */
+const DEFAULT_ALLOWANCE_GB_HOURS = 372;
+const ALLOWANCE_GB_HOURS =
+  Number.parseFloat(process.env.STORAGE_ALLOWANCE_GB_HOURS ?? `${DEFAULT_ALLOWANCE_GB_HOURS}`) ||
+  DEFAULT_ALLOWANCE_GB_HOURS;
+const FALLBACK_PRICE_PER_GB_HOUR = 0.25 / 744;
 
 /** Cap the number of job logs fetched, so a bad day cannot stall the report. */
 const QUOTA_LOG_LIMIT = 40;
@@ -79,6 +96,7 @@ export type QuotaFailure = {
 
 export type RepoReport = {
   repo: string;
+  private: boolean;
   artifactBytes: number;
   artifactCount: number;
   cacheBytes: number;
@@ -87,17 +105,73 @@ export type RepoReport = {
   closedPr: CacheEntry[];
 };
 
-function headers(): Record<string, string> {
+export type BillingUsageItem = {
+  date: string;
+  product: string;
+  sku: string;
+  quantity: number;
+  unitType: string;
+  pricePerUnit?: number;
+  grossAmount?: number;
+  discountAmount?: number;
+  netAmount?: number;
+  repositoryName?: string;
+};
+
+export type BillingSummaryItem = {
+  product: string;
+  sku: string;
+  grossQuantity: number;
+  discountQuantity: number;
+  netQuantity: number;
+  grossAmount: number;
+  discountAmount: number;
+  netAmount: number;
+  pricePerUnit: number;
+  unitType: string;
+};
+
+export type BillingUsageResponse = { usageItems?: BillingUsageItem[] };
+export type BillingSummaryResponse = {
+  usageItems?: BillingSummaryItem[];
+  timePeriod?: { year: number; month: number };
+};
+
+export type QuotaMetrics = {
+  month: string;
+  day: number;
+  daysInMonth: number;
+  actionsGbHours: number;
+  publicActionsGbHours: number;
+  packagesGbHours: number;
+  combinedGbHours: number;
+  allowanceGbHours: number;
+  usedPercent: number;
+  netGbHours: number;
+  exhausted: boolean;
+  exhaustedOn?: string;
+  currentArtifactBytes: number;
+  currentGb: number;
+  projectedGbHours: number;
+  projectedOverGbHours: number;
+  accruedCost: number;
+  projectedCost: number;
+  projectedExhaustion?: string;
+};
+
+export type QuotaReport = ({ available: true } & QuotaMetrics) | { available: false; error: string };
+
+function headers(token: string): Record<string, string> {
   return {
-    authorization: `Bearer ${TOKEN}`,
+    authorization: `Bearer ${token}`,
     accept: "application/vnd.github+json",
     "user-agent": "foodshare-storage-report",
     "x-github-api-version": "2022-11-28",
   };
 }
 
-async function request<T>(path: string): Promise<T> {
-  const response = await fetch(`${API}${path}`, { headers: headers() });
+async function request<T>(path: string, token = TOKEN): Promise<T> {
+  const response = await fetch(`${API}${path}`, { headers: headers(token) });
   if (!response.ok) {
     const body = (await response.text()).slice(0, 300);
     throw new Error(`GET ${path} -> ${response.status}: ${body}`);
@@ -219,7 +293,7 @@ export function decodeJobLog(bytes: Uint8Array): string {
 
 async function jobLog(repo: string, jobId: number): Promise<string> {
   const response = await fetch(`${API}/repos/${repo}/actions/jobs/${jobId}/logs`, {
-    headers: headers(),
+    headers: headers(TOKEN),
     redirect: "manual",
   });
   const location = response.headers.get("location");
@@ -271,6 +345,7 @@ async function quotaFailures(repo: string, since: string): Promise<QuotaFailure[
 }
 
 async function repoReport(repo: string): Promise<RepoReport> {
+  const meta = await request<{ private: boolean }>(`/repos/${repo}`);
   const usage = await request<{ active_caches_size_in_bytes: number }>(`/repos/${repo}/actions/cache/usage`);
   const caches = await paginate<CacheEntry>(`/repos/${repo}/actions/caches`, "actions_caches");
   const artifacts = await paginate<ArtifactEntry>(`/repos/${repo}/actions/artifacts`, "artifacts");
@@ -279,6 +354,7 @@ async function repoReport(repo: string): Promise<RepoReport> {
 
   return {
     repo,
+    private: meta.private,
     artifactBytes: activeArtifacts.reduce((sum, artifact) => sum + artifact.size_in_bytes, 0),
     artifactCount: activeArtifacts.length,
     cacheBytes: usage.active_caches_size_in_bytes,
@@ -307,7 +383,228 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(1)} ${units[unit]}`;
 }
 
-export function renderReport(reports: RepoReport[], failures: QuotaFailure[], generatedAt: string): string {
+export function formatGbHours(value: number): string {
+  return `${value.toFixed(1)} GB-hours`;
+}
+
+export function formatPercent(value: number): string {
+  return `${value.toFixed(1)}%`;
+}
+
+export function formatUsd(value: number): string {
+  return `$${value.toFixed(value > 0 && value < 1 ? 4 : 2)}`;
+}
+
+const normalizeSku = (sku: string): string =>
+  sku
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+/** Detailed usage uses `Actions storage`; the summary uses `actions_storage`. */
+export function isActionsStorageSku(sku: string): boolean {
+  return normalizeSku(sku) === "actions_storage";
+}
+
+export function isPackagesStorageSku(sku: string): boolean {
+  const normalized = normalizeSku(sku);
+  return normalized === "packages_storage" || normalized.startsWith("packages_");
+}
+
+const isGbHours = (item: { unitType: string }): boolean => /gigabyte.?hour/i.test(item.unitType);
+
+export function sumGbHours(items: BillingUsageItem[]): number {
+  return items.filter((item) => isGbHours(item)).reduce((sum, item) => sum + item.quantity, 0);
+}
+
+function isPrivateRepo(name: string | undefined, privateRepos: Set<string>): boolean {
+  if (name === undefined) {
+    return false;
+  }
+  return privateRepos.has(name) || privateRepos.has(name.split("/")[1] ?? "");
+}
+
+/** First day the cumulative billable meter crossed the monthly allowance. */
+function firstDayOver(items: BillingUsageItem[], allowance: number): string | undefined {
+  const byDay = new Map<string, number>();
+  for (const item of items) {
+    if (!isGbHours(item)) {
+      continue;
+    }
+    const day = item.date.slice(0, 10);
+    byDay.set(day, (byDay.get(day) ?? 0) + item.quantity);
+  }
+  let cumulative = 0;
+  for (const day of [...byDay.keys()].sort()) {
+    cumulative += byDay.get(day) ?? 0;
+    if (cumulative > allowance) {
+      return day;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Turn the billing meter into the quota facts that current bytes cannot show.
+ *
+ * `privateRepos` is the set of repositories whose artifact storage is billed;
+ * public repositories are free and are subtracted so the usage is comparable
+ * with the 500 MB allowance. Packages share the same allowance.
+ */
+export function quotaReport(input: {
+  summary: BillingSummaryResponse;
+  detailed: BillingUsageItem[];
+  privateRepos: Set<string>;
+  currentArtifactBytes: number;
+  now: Date;
+  allowanceGbHours?: number;
+}): QuotaReport {
+  const summaryItems = input.summary.usageItems ?? [];
+  const actionsSummary = summaryItems.find((item) => isActionsStorageSku(item.sku));
+  const packagesSummary = summaryItems.find((item) => isPackagesStorageSku(item.sku));
+  const detailedActions = input.detailed.filter((item) => isActionsStorageSku(item.sku));
+  const detailedPackages = input.detailed.filter((item) => isPackagesStorageSku(item.sku));
+
+  if (detailedActions.length === 0 && (actionsSummary?.grossQuantity ?? 0) > 0) {
+    return { available: false, error: "Detailed billing usage is unavailable for Actions storage" };
+  }
+
+  const privateActions = detailedActions.filter((item) => isPrivateRepo(item.repositoryName, input.privateRepos));
+  const publicActions = detailedActions.filter((item) => !isPrivateRepo(item.repositoryName, input.privateRepos));
+  const actionsGbHours = sumGbHours(privateActions);
+  const publicActionsGbHours = sumGbHours(publicActions);
+  const packagesGbHours = packagesSummary?.grossQuantity ?? sumGbHours(detailedPackages);
+  const combinedGbHours = actionsGbHours + packagesGbHours;
+  const allowanceGbHours = input.allowanceGbHours ?? ALLOWANCE_GB_HOURS;
+  const usedPercent = allowanceGbHours > 0 ? (combinedGbHours / allowanceGbHours) * 100 : 0;
+  const summaryNetGbHours = (actionsSummary?.netQuantity ?? 0) + (packagesSummary?.netQuantity ?? 0);
+  const netGbHours =
+    actionsSummary === undefined && packagesSummary === undefined
+      ? Math.max(0, combinedGbHours - allowanceGbHours)
+      : summaryNetGbHours;
+  const pricePerGbHour = actionsSummary?.pricePerUnit ?? FALLBACK_PRICE_PER_GB_HOUR;
+
+  const year = input.now.getUTCFullYear();
+  const monthIndex = input.now.getUTCMonth();
+  const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+  const monthStart = new Date(Date.UTC(year, monthIndex, 1));
+  const nextMonth = new Date(Date.UTC(year, monthIndex + 1, 1));
+  const hoursElapsed = Math.max(0, (input.now.getTime() - monthStart.getTime()) / 3_600_000);
+  const hoursInMonth = (nextMonth.getTime() - monthStart.getTime()) / 3_600_000;
+  const remainingHours = Math.max(0, hoursInMonth - hoursElapsed);
+
+  const currentArtifactGb = input.currentArtifactBytes / 1024 ** 3;
+  const packageDays = detailedPackages
+    .filter((item) => isGbHours(item))
+    .map((item) => item.date.slice(0, 10))
+    .sort();
+  const latestPackageDay = packageDays[packageDays.length - 1];
+  const packagesCurrentGb =
+    latestPackageDay === undefined
+      ? 0
+      : sumGbHours(detailedPackages.filter((item) => item.date.startsWith(latestPackageDay))) / 24;
+  const currentGb = currentArtifactGb + packagesCurrentGb;
+
+  const projectedGbHours = combinedGbHours + currentGb * remainingHours;
+  const projectedOverGbHours = Math.max(0, projectedGbHours - allowanceGbHours);
+  const exhausted = combinedGbHours > allowanceGbHours;
+  const exhaustedOn = firstDayOver([...privateActions, ...detailedPackages], allowanceGbHours);
+
+  let projectedExhaustion: string | undefined;
+  if (!exhausted) {
+    if (currentGb <= 0) {
+      projectedExhaustion = "not projected (no billable storage)";
+    } else {
+      const hoursToExhaustion = (allowanceGbHours - combinedGbHours) / currentGb;
+      projectedExhaustion =
+        hoursToExhaustion > remainingHours
+          ? "after month end"
+          : new Date(input.now.getTime() + hoursToExhaustion * 3_600_000).toISOString().slice(0, 10);
+    }
+  }
+
+  const summaryCost = (actionsSummary?.netAmount ?? 0) + (packagesSummary?.netAmount ?? 0);
+  const accruedCost = summaryCost > 0 ? summaryCost : netGbHours * pricePerGbHour;
+
+  return {
+    available: true,
+    month: `${year}-${String(monthIndex + 1).padStart(2, "0")}`,
+    day: input.now.getUTCDate(),
+    daysInMonth,
+    actionsGbHours,
+    publicActionsGbHours,
+    packagesGbHours,
+    combinedGbHours,
+    allowanceGbHours,
+    usedPercent,
+    netGbHours,
+    exhausted,
+    exhaustedOn,
+    currentArtifactBytes: input.currentArtifactBytes,
+    currentGb,
+    projectedGbHours,
+    projectedOverGbHours,
+    accruedCost,
+    projectedCost: projectedOverGbHours * pricePerGbHour,
+    projectedExhaustion,
+  };
+}
+
+export function renderQuotaSection(quota: QuotaReport): string[] {
+  const lines: string[] = ["## Artifact quota (accrued)", ""];
+  if (!quota.available) {
+    lines.push(
+      `Billing usage unavailable: ${markdownCell(quota.error)}`,
+      "",
+      "Grant the report token organization billing read (for example, ORG_BILLING_TOKEN) to include month-to-date GB-hours.",
+      "",
+    );
+    return lines;
+  }
+
+  let status = "**Within allowance**";
+  if (quota.exhausted) {
+    status = `**Exhausted${quota.exhaustedOn === undefined ? "" : ` on ${quota.exhaustedOn}`}**`;
+  } else if (
+    quota.projectedExhaustion !== undefined &&
+    quota.projectedExhaustion !== "after month end" &&
+    !quota.projectedExhaustion.startsWith("not projected")
+  ) {
+    status = `**Within allowance**; projected exhaustion ${quota.projectedExhaustion}`;
+  }
+
+  lines.push(
+    "GitHub blocks uploads on accrued GB-hours, not on stored bytes. The 500 MB allowance is shared with Packages; caches are separate.",
+    "",
+    "| Metric | Value |",
+    "|---|---:|",
+    `| Billing period | ${quota.month}, day ${quota.day} of ${quota.daysInMonth} |`,
+    `| Billable Actions storage | ${formatGbHours(quota.actionsGbHours)} |`,
+    `| Public repository storage (free) | ${formatGbHours(quota.publicActionsGbHours)} |`,
+    `| Packages storage | ${formatGbHours(quota.packagesGbHours)} |`,
+    `| Combined billable | ${formatGbHours(quota.combinedGbHours)} |`,
+    `| Monthly allowance (500 MB) | ${formatGbHours(quota.allowanceGbHours)} |`,
+    `| Allowance used | ${formatPercent(quota.usedPercent)} |`,
+    `| Billing net overage | ${formatGbHours(quota.netGbHours)} |`,
+    `| Status | ${status} |`,
+    `| Current billable artifacts | ${formatBytes(quota.currentArtifactBytes)} |`,
+    `| Projected month-end | ${formatGbHours(quota.projectedGbHours)} |`,
+    `| Projected overage | ${formatGbHours(quota.projectedOverGbHours)} |`,
+    `| Accrued cost | ${formatUsd(quota.accruedCost)} |`,
+    `| Projected cost | ${formatUsd(quota.projectedCost)} |`,
+    "",
+    "Projection holds current billable storage flat for the rest of the month. Costs use the billing API net amount and the shared-storage rate.",
+    "",
+  );
+  return lines;
+}
+
+export function renderReport(
+  reports: RepoReport[],
+  failures: QuotaFailure[],
+  generatedAt: string,
+  quota?: QuotaReport,
+): string {
   const lines: string[] = ["# Actions storage report", "", `Generated ${generatedAt}.`, ""];
 
   lines.push(
@@ -333,6 +630,10 @@ export function renderReport(reports: RepoReport[], failures: QuotaFailure[], ge
     )} | ${cacheCount} | ${formatBytes(artifactBytes + cacheBytes)} |`,
     "",
   );
+
+  if (quota !== undefined) {
+    lines.push(...renderQuotaSection(quota));
+  }
 
   lines.push("## Duplicate caches", "");
   const duplicates = reports.flatMap((report) => report.duplicates.map((group) => ({ report, group })));
@@ -386,18 +687,92 @@ export function renderReport(reports: RepoReport[], failures: QuotaFailure[], ge
   return lines.join("\n");
 }
 
+async function privateRepoNameSet(reports: RepoReport[]): Promise<Set<string>> {
+  const names = new Set<string>();
+  if (ORG !== "") {
+    try {
+      for (let page = 1; page <= 10; page += 1) {
+        const batch = await request<Array<{ name: string; full_name: string }>>(
+          `/orgs/${ORG}/repos?type=private&per_page=100&page=${page}`,
+        );
+        for (const repo of batch) {
+          names.add(repo.name);
+          const short = repo.full_name.split("/")[1];
+          if (short !== undefined) {
+            names.add(short);
+          }
+        }
+        if (batch.length < 100) {
+          break;
+        }
+      }
+    } catch {
+      // Fall back to the configured repositories below. An unlisted private
+      // repository is still visible in the billing detail but is counted as
+      // public until the token can list organisation repositories.
+    }
+  }
+  for (const report of reports) {
+    if (report.private) {
+      const short = report.repo.split("/")[1];
+      if (short !== undefined) {
+        names.add(short);
+      }
+    }
+  }
+  return names;
+}
+
+async function buildQuotaReport(reports: RepoReport[], now: Date): Promise<QuotaReport> {
+  if (ORG === "") {
+    return { available: false, error: "STORAGE_ORG is empty" };
+  }
+  try {
+    const query = `year=${now.getUTCFullYear()}&month=${now.getUTCMonth() + 1}`;
+    const [summary, detailed] = await Promise.all([
+      request<BillingSummaryResponse>(`/orgs/${ORG}/settings/billing/usage/summary?${query}`, BILLING_TOKEN),
+      request<BillingUsageResponse>(`/orgs/${ORG}/settings/billing/usage?${query}`, BILLING_TOKEN),
+    ]);
+    const privateRepos = await privateRepoNameSet(reports);
+    const currentArtifactBytes = reports
+      .filter((report) => report.private)
+      .reduce((sum, report) => sum + report.artifactBytes, 0);
+    return quotaReport({
+      summary,
+      detailed: detailed.usageItems ?? [],
+      privateRepos,
+      currentArtifactBytes,
+      now,
+    });
+  } catch (error) {
+    return { available: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 if (import.meta.main) {
   if (TOKEN === "") {
     console.error("❌ GITHUB_TOKEN (or GH_TOKEN) is required to read Actions storage");
     process.exit(2);
   }
 
-  const generatedAt = new Date().toISOString();
-  const since = new Date(Date.now() - REPORT_DAYS * 86_400_000).toISOString();
+  const now = new Date();
+  const generatedAt = now.toISOString();
+  const since = new Date(now.getTime() - REPORT_DAYS * 86_400_000).toISOString();
 
   const reports: RepoReport[] = [];
   for (const repo of REPOS) {
     reports.push(await repoReport(repo));
+  }
+
+  const quota = await buildQuotaReport(reports, now);
+  if (!quota.available) {
+    console.log(`::warning title=Storage report::Billing usage unavailable: ${quota.error}`);
+  } else if (quota.exhausted) {
+    console.log(
+      `::warning title=Artifact quota::${quota.combinedGbHours.toFixed(1)} of ${quota.allowanceGbHours.toFixed(
+        1,
+      )} GB-hours used${quota.exhaustedOn === undefined ? "" : `; exceeded on ${quota.exhaustedOn}`}`,
+    );
   }
 
   const failures: QuotaFailure[] = [];
@@ -405,7 +780,7 @@ if (import.meta.main) {
     failures.push(...(await quotaFailures(repo, since)));
   }
 
-  const markdown = renderReport(reports, failures, generatedAt);
+  const markdown = renderReport(reports, failures, generatedAt, quota);
   const summary = process.env.GITHUB_STEP_SUMMARY;
   if (summary) {
     await Bun.write(summary, `${markdown}\n`);

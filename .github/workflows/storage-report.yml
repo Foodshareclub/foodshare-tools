@@ -40,4 +40,9 @@ jobs:
       - name: Report storage
         env:
           GITHUB_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+          # Org billing read is separate from repository read. Set
+          # ORG_BILLING_TOKEN to a token with organization billing access;
+          # without it the report still runs and says why the accrued GB-hours
+          # section is unavailable.
+          BILLING_TOKEN: ${{ secrets.ORG_BILLING_TOKEN || secrets.CROSS_REPO_TOKEN }}
         run: bun run report:storage
