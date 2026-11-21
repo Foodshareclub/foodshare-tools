@@ -1,0 +1,42 @@
+name: Central storage audit
+
+# Per-repository storage-hygiene jobs only run when that repository's CI runs.
+# A queued pipeline can leave a retention or cache key drifting on the default
+# branch while its own guard is blind. This audit fetches the default-branch
+# workflow and composite-action YAML directly through the API and applies the
+# same guard, independently of every repository's CI.
+
+on:
+  schedule:
+    - cron: "40 6 * * *" # 06:40 UTC, after the storage report at 06:10
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: storage-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Every repository's workflow YAML
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the audit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Keep aligned with BUN_VERSION in ci.yml.
+          bun-version: "1.4.4"
+
+      - name: Fetch and check every repository
+        env:
+          # The default token can read this repository; the cross-repo token
+          # reads the workflows and composite actions in the other three.
+          GITHUB_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+        run: bun run audit:workflows
