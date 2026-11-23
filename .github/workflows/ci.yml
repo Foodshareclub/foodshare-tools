@@ -329,9 +329,9 @@ jobs:
         run: bun scripts/generate-cli-reference.ts --check
 
   msrv:
-    name: MSRV (1.89)
+    name: MSRV (1.88)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.89
+      - uses: dtolnay/rust-toolchain@1.88
       - run: cargo check --workspace
