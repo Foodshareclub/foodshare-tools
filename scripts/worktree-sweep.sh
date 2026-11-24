@@ -31,6 +31,13 @@ declare -a REMOVED=()
 declare -a SAVED=()
 declare -a KEPT=()
 declare -a SKIPPED=()
+# Unresolvable strays for the report card: "repo<TAB>path<TAB>reason" (t_8dec3a01).
+declare -a STRAYS=()
+REPORT="${REPORT:-1}"                 # 0 disables the report-to-card step
+REPORT_BOARD="${REPORT_BOARD:-foodshare}"
+REPORT_KEY="stray-worktrees"          # stable idempotency key of the single report card
+HERMES_BIN="${HERMES_BIN:-$HOME/.hermes/hermes-agent/.hermes/bin/hermes}"
+stray() { STRAYS+=("$1"$'\t'"$2"$'\t'"$3"); }
 
 log() { printf '[worktree-sweep %s] %s\n' "$STAMP" "$*"; }
 run() {
@@ -112,7 +119,7 @@ for repo in "${REPOS[@]}"; do
     # completion-integrity gate re-verifies.
     case "$wt_path" in
       "$rdir/.worktrees/"*) : ;;
-      *) SKIPPED+=("$wt_path"); continue ;;
+      *) SKIPPED+=("$wt_path"); stray "$repo" "$wt_path" "out-of-repo (outside <repo>/.worktrees; never touched)"; continue ;;
     esac
     # --- Acceptance G(a)/(b): explicit protected-prefix guard (defense in depth).
     # The in-repo scope above already confines removal to <repo>/.worktrees/, which
@@ -154,15 +161,21 @@ for repo in "${REPOS[@]}"; do
           SAVED+=("$wt_path -> $wip + artifacts/worktree-backup/$name")
         else
           KEPT+=("$wt_path (card $card_id $state, clean=$clean pushed=$pushed)")
+          stray "$repo" "$wt_path" "clean but unpushed (card $card_id $state)"
         fi
         ;;
       collision)
         # Item 1b: the report line names the boards + conflicting statuses.
         log "$repo :: $(basename "$wt_path")  COLLISION — ${CARD_DETAIL} — keep + report, never remove"
         KEPT+=("$wt_path (card $card_id CROSS-BOARD COLLISION [${CARD_DETAIL}] — keep + report, never remove)")
+        stray "$repo" "$wt_path" "cross-board collision ($CARD_DETAIL)"
         ;;
       *)
         KEPT+=("$wt_path (card $card_id state=$state)")
+        if [ "$state" = unknown ]; then
+          if [ -z "$card_id" ]; then stray "$repo" "$wt_path" "no card id (free-form name)"
+          else stray "$repo" "$wt_path" "card $card_id found on no board"; fi
+        fi
         ;;
     esac
   done <<< "$wt_paths"
@@ -173,3 +186,92 @@ if [ "$DRY_RUN" = "1" ]; then log "(dry run — no mutations)"; fi
 if [ ${#SAVED[@]} -gt 0 ]; then for s in "${SAVED[@]}"; do log "saved: $s"; done; fi
 if [ ${#KEPT[@]} -gt 0 ]; then for k in "${KEPT[@]}"; do log "kept:  $k"; done; fi
 if [ ${#SKIPPED[@]} -gt 0 ]; then log "skipped (out-of-repo, never touched): ${#SKIPPED[@]} worktrees"; fi
+
+# --- Report-to-card (t_8dec3a01): surface the unresolvable strays on the board ----
+# Spec: "report anything it isn't sure about to a board card instead of deleting it".
+# Bars from the card:
+#   * LAST step, after the deletion pass; every row is re-checked against a fresh
+#     `git worktree list`, so the card can never list a since-deleted phantom.
+#   * exactly ONE card, found by the stable idempotency key; the body is REPLACED each
+#     run (latest inventory, never merged with an older one).
+#   * kept non-dispatchable (blocked) with the "not actionable" marker.
+#   * scoped: only this card is written, through the hermes kanban CLI.
+#   * disjoint from deletion: it reads only STRAYS, runs in a subshell, and a failure
+#     here is logged without changing the sweep's exit status or keep-safe behaviour.
+report_strays() {
+  set +e
+  local board_db="$HOME/.hermes/kanban/boards/$REPORT_BOARD/kanban.db"
+  [ -f "$board_db" ] || { log "report: board DB $board_db missing — skipped"; return 1; }
+  [ -x "$HERMES_BIN" ] || { log "report: $HERMES_BIN not executable — skipped"; return 1; }
+
+  # Post-deletion snapshot: every worktree path that exists now, across the repos.
+  local current repo rdir
+  current="$(for repo in "${REPOS[@]}"; do
+    rdir="$UMBRELLA/$repo"
+    [ -e "$rdir/.git" ] && { git -C "$rdir" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p'; }
+  done)"
+
+  local rows="" n=0 nfree=0 nfound=0 ncoll=0 nunpushed=0 nout=0 legacy="" entry r p why
+  if [ ${#STRAYS[@]} -gt 0 ]; then
+    for entry in "${STRAYS[@]}"; do
+      IFS=$'\t' read -r r p why <<< "$entry"
+      grep -qxF -- "$p" <<< "$current" || continue   # gone after the deletion pass
+      n=$((n + 1))
+      rows+="| $n | $r | $(basename "$p") | \`$p\` | $why |"$'\n'
+      case "$why" in
+        "no card id"*) nfree=$((nfree + 1)); legacy+="- $r: \`$(basename "$p")\` → rename to \`<card-id>-<purpose>\` if a card maps, otherwise check for unpushed work and remove by hand"$'\n' ;;
+        card*"found on no board") nfound=$((nfound + 1)) ;;
+        "cross-board collision"*) ncoll=$((ncoll + 1)) ;;
+        "clean but unpushed"*) nunpushed=$((nunpushed + 1)) ;;
+        out-of-repo*) nout=$((nout + 1)) ;;
+      esac
+    done
+  fi
+
+  local body
+  body="auto-upserted stray-worktrees report — not actionable, do not dispatch or unblock.
+
+**Generated:** $STAMP by worktree-sweep.sh (post-deletion snapshot, DRY_RUN=$DRY_RUN)
+**Board:** $REPORT_BOARD · **Removed this run:** ${#REMOVED[@]} · **Saved to wip/:** ${#SAVED[@]}
+**Unresolvable strays: $n** — free-form/no card id $nfree · card not found $nfound · cross-board collision $ncoll · clean-but-unpushed $nunpushed · out-of-repo $nout
+
+Each row was re-checked against \`git worktree list\` after the deletion pass. The sweep never deletes these; resolve them individually.
+
+## Unresolvable strays
+| # | repo | name | path | reason |
+|---|------|------|------|--------|
+${rows:-| - | - | - | - | none |
+}
+## Legacy free-form inventory (individual retirement)
+${legacy:-none
+}"
+
+  local id
+  id="$(sqlite3 -readonly "$board_db" "SELECT id FROM tasks WHERE idempotency_key='$REPORT_KEY' AND status<>'archived' ORDER BY created_at LIMIT 1;" 2>/dev/null)"
+  if [ -z "$id" ]; then
+    id="$(printf '%s' "$body" | "$HERMES_BIN" kanban --board "$REPORT_BOARD" create "Stray worktrees report" \
+      --body-file - --idempotency-key "$REPORT_KEY" --json 2>/dev/null \
+      | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' 2>/dev/null)"
+    [ -n "$id" ] || { log "report: could not create the report card"; return 1; }
+    log "report: created $id"
+  else
+    "$HERMES_BIN" kanban --board "$REPORT_BOARD" edit "$id" --body "$body" >/dev/null 2>&1 \
+      || { log "report: could not update $id"; return 1; }
+    log "report: updated $id (body replaced)"
+  fi
+
+  local status
+  status="$(sqlite3 -readonly "$board_db" "SELECT status FROM tasks WHERE id='$id';" 2>/dev/null)"
+  case "$status" in
+    blocked|scheduled) : ;;
+    *) "$HERMES_BIN" kanban --board "$REPORT_BOARD" block "$id" \
+         "auto-upserted stray-worktrees report — not actionable, do not dispatch or unblock" >/dev/null 2>&1 \
+         && log "report: $id was $status -> blocked (non-dispatchable)" \
+         || { log "report: could not block $id (status $status)"; return 1; } ;;
+  esac
+  log "report: $id lists $n unresolvable strays"
+}
+
+if [ "$REPORT" = "1" ]; then
+  ( report_strays ) || log "report-to-card step failed — deletion results above are unaffected"
+fi
