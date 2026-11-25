@@ -91,12 +91,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
     match cli.command {
         Command::Setup => {
             let cfg = crate::config::Config::load(&cli.config_path())?;
-            let token = cfg.token.clone().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "no token configured; set it in {}",
-                    cli.config_path().display()
-                )
-            })?;
+            let token = cfg.resolve_token()?;
             let mut gh = crate::github::RealGitHub::new(&cfg.api, &cfg.org, &token);
             let report = crate::setup::run_setup(&mut gh, &cfg).await?;
             println!("✓ token OK (user {})", report.user);
@@ -142,12 +137,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
         }
         Command::Push { dry_run } => {
             let cfg = crate::config::Config::load(&cli.config_path())?;
-            let token = cfg.token.clone().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "no token configured; set it in {}",
-                    cli.config_path().display()
-                )
-            })?;
+            let token = cfg.resolve_token()?;
             let mut kb = crate::kanban::RealKanban::new(&cfg.board);
             let mut gh = crate::github::RealGitHub::new(&cfg.api, &cfg.org, &token);
             let cards = kb.list().await?;
@@ -246,12 +236,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
         }
         Command::Intake { dry_run } => {
             let cfg = crate::config::Config::load(&cli.config_path())?;
-            let token = cfg.token.clone().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "no token configured; set it in {}",
-                    cli.config_path().display()
-                )
-            })?;
+            let token = cfg.resolve_token()?;
             let mut kb = crate::kanban::RealKanban::new(&cfg.board);
             let mut gh = crate::github::RealGitHub::new(&cfg.api, &cfg.org, &token);
             let report = crate::intake::intake_issues(&mut kb, &mut gh, &cfg, dry_run).await?;
@@ -297,12 +282,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
         }
         Command::Status { json } => {
             let cfg = crate::config::Config::load(&cli.config_path())?;
-            let token = cfg.token.clone().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "no token configured; set it in {}",
-                    cli.config_path().display()
-                )
-            })?;
+            let token = cfg.resolve_token()?;
             let mut kb = crate::kanban::RealKanban::new(&cfg.board);
             let mut gh = crate::github::RealGitHub::new(&cfg.api, &cfg.org, &token);
             let cursor = crate::push::Cursor::load(&cfg.state_path);

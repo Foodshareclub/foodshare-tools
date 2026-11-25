@@ -12,6 +12,9 @@ api = "https://api.github.com"
 # Fine-grained PAT, org Foodshareclub, all repos: Issues + Projects RW,
 # Discussions RW, Pull requests read; 90-day expiry.
 token = "REPLACE_WITH_FINE_GRAINED_PAT"
+# Preferred: a command (no shell) that prints a fresh token on stdout, run
+# on every invocation and overriding `token`. For the foodshare-bot App:
+# token_command = ["/path/to/python", "/path/to/foodshare-bot-token.py", "--print"]
 
 # The cursor: the only on-disk state. Last-written project field values
 # per linked issue, used for change detection (steady state = zero writes).

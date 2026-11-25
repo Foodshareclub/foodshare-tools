@@ -294,6 +294,11 @@ pub struct Config {
     /// channel.
     pub allowed_intake_authors: Vec<String>,
     pub token: Option<String>,
+    /// Program and arguments (no shell) that print a token on stdout.
+    /// When set it takes precedence over `token` and runs on every
+    /// invocation, so a short-lived GitHub App installation token is
+    /// always fresh.
+    pub token_command: Vec<String>,
     pub state_path: PathBuf,
 }
 
@@ -367,6 +372,7 @@ impl Default for Config {
                 phase_option_ids: BTreeMap::new(),
             }),
             token: None,
+            token_command: Vec::new(),
             state_path: default_state_path(),
         }
     }
@@ -378,6 +384,37 @@ impl Config {
         self.repos.iter().find(|r| r.name == name)
     }
 
+    /// The token to authenticate with: the stdout of `token_command` when
+    /// configured (run now, so it is fresh), else the static `token`.
+    /// Neither the token nor the command's stderr is included in errors.
+    pub fn resolve_token(&self) -> Result<String, ConfigError> {
+        let Some((program, args)) = self.token_command.split_first() else {
+            return self
+                .token
+                .clone()
+                .filter(|t| !t.is_empty())
+                .ok_or(ConfigError::NoToken);
+        };
+        let out = std::process::Command::new(program)
+            .args(args)
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output()
+            .map_err(|e| ConfigError::TokenCommand(format!("cannot run `{program}`: {e}")))?;
+        if !out.status.success() {
+            return Err(ConfigError::TokenCommand(format!(
+                "`{program}` exited with {}",
+                out.status
+            )));
+        }
+        let tok = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if tok.is_empty() {
+            return Err(ConfigError::TokenCommand(format!(
+                "`{program}` printed no token"
+            )));
+        }
+        Ok(tok)
+    }
     /// Load the TOML config at `path`; missing keys fall back to the
     /// defaults above.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
@@ -422,6 +459,10 @@ pub enum ConfigError {
     NotFound(PathBuf),
     #[error("config parse error: {0}")]
     Parse(String),
+    #[error("no token configured; set `token` or `token_command` in the config")]
+    NoToken,
+    #[error("token_command failed: {0}")]
+    TokenCommand(String),
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -443,6 +484,8 @@ struct Raw {
     project: Option<RawProj>,
     #[serde(skip_serializing_if = "Option::is_none")]
     token: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    token_command: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     state_path: Option<PathBuf>,
 }
@@ -529,6 +572,7 @@ impl From<&Config> for Raw {
                 phase_option_ids: Some(p.phase_option_ids.clone()),
             }),
             token: c.token.clone(),
+            token_command: c.token_command.clone(),
             state_path: Some(c.state_path.clone()),
         }
     }
@@ -606,6 +650,7 @@ impl Config {
             allowed_intake_authors: raw.allowed_intake_authors,
             project,
             token: raw.token,
+            token_command: raw.token_command,
             state_path: raw
                 .state_path
                 .map(|p| crate::cli::expand_tilde(&p))

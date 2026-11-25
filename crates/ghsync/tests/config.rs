@@ -260,3 +260,44 @@ fn link_kind_is_carried_from_the_comment_prefix() {
     assert!(parse_link_ref("ghsyncd something-else").is_none());
     assert!(parse_link_ref("regular comment").is_none());
 }
+
+#[cfg(unix)]
+#[test]
+fn token_command_overrides_static_token_and_survives_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
+    std::fs::write(
+        &path,
+        "token = \"static\"\ntoken_command = [\"printf\", \"%s\\n\", \"fresh-token\"]\n",
+    )
+    .unwrap();
+    let c = Config::load(&path).unwrap();
+    assert_eq!(c.resolve_token().unwrap(), "fresh-token");
+    c.save(&path).unwrap();
+    let again = Config::load(&path).unwrap();
+    assert_eq!(again.token_command, c.token_command);
+}
+
+#[test]
+fn static_token_used_without_command_and_missing_is_error() {
+    let mut c = Config::default();
+    assert!(c.resolve_token().is_err());
+    c.token = Some("abc".into());
+    assert_eq!(c.resolve_token().unwrap(), "abc");
+}
+
+#[cfg(unix)]
+#[test]
+fn token_command_failure_and_empty_output_are_errors_without_leaking() {
+    let mut c = Config {
+        token: Some("static-secret".into()),
+        ..Config::default()
+    };
+    c.token_command = vec!["false".into()];
+    let e = c.resolve_token().unwrap_err().to_string();
+    assert!(e.contains("token_command failed") && !e.contains("static-secret"));
+    c.token_command = vec!["true".into()];
+    assert!(c.resolve_token().is_err());
+    c.token_command = vec!["/nonexistent/prog".into()];
+    assert!(c.resolve_token().is_err());
+}

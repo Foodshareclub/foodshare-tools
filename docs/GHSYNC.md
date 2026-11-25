@@ -130,3 +130,19 @@ reference line in the discussion body
 Fine-grained PAT, org `Foodshareclub`, all repositories: Issues
 read/write, Projects read/write, Discussions read/write, Pull
 requests read; 90-day expiry. It lives in the config file only.
+
+### GitHub App installation token (preferred)
+
+Instead of a PAT, set `token_command` to a program and arguments (no
+shell) that print a token on stdout. It runs on every invocation, so a
+short-lived App installation token is always fresh, and it overrides
+`token`. Example for the `foodshare-bot` App:
+
+```toml
+token_command = ["/Users/<you>/.hermes/hermes-agent/.venv/bin/python", "/Users/<you>/.hermes/bin/foodshare-bot-token.py", "--print"]
+```
+
+The App needs Issues, Projects (organization) and Discussions
+read/write and Pull requests read. `ghsync setup` calls `GET /user`,
+which an installation token cannot answer; run `setup` with a user
+token, and `push`, `intake` and `status` with the App token.
