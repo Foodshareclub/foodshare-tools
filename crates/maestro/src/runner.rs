@@ -92,6 +92,22 @@ pub async fn run_test(
     run_test_with(Path::new("maestro"), device, extra_args, target, log_file).await
 }
 
+/// Maestro flow variables must be passed with `-e`; inheriting the process
+/// environment alone does not populate `${PARITY_CAPTURE}` in a flow.
+/// Forward only the public artifact paths, never arbitrary CI credentials.
+fn capture_args(environment: impl IntoIterator<Item = (String, String)>) -> Vec<String> {
+    environment
+        .into_iter()
+        .filter(|(name, value)| {
+            matches!(
+                name.as_str(),
+                "PARITY_CAPTURE" | "ONBOARDING_CAPTURE" | "LOCATION_ERROR_CAPTURE"
+            ) && !value.is_empty()
+        })
+        .flat_map(|(name, value)| ["-e".to_string(), format!("{name}={value}")])
+        .collect()
+}
+
 /// [`run_test`] with the Maestro binary given explicitly, so tests can run a
 /// stand-in without rewriting `PATH`.
 async fn run_test_with(
@@ -108,6 +124,7 @@ async fn run_test_with(
         .arg("--device")
         .arg(&device.id)
         .arg("test")
+        .args(capture_args(std::env::vars()))
         .args(extra_args)
         .arg(target)
         .stdin(Stdio::null());
@@ -266,6 +283,29 @@ mod tests {
             id: "test-id".to_string(),
             name: "Test Device".to_string(),
         }
+    }
+
+    #[test]
+    fn capture_paths_are_explicit_flow_variables_without_forwarding_credentials() {
+        let args = capture_args([
+            ("PARITY_CAPTURE".into(), "reports/parity with spaces".into()),
+            ("ONBOARDING_CAPTURE".into(), "reports/onboarding".into()),
+            ("LOCATION_ERROR_CAPTURE".into(), "reports/location".into()),
+            ("SERVICE_ROLE_KEY".into(), "must-not-be-forwarded".into()),
+            ("GITHUB_TOKEN".into(), "must-not-be-forwarded".into()),
+        ]);
+        assert_eq!(
+            args,
+            [
+                "-e",
+                "PARITY_CAPTURE=reports/parity with spaces",
+                "-e",
+                "ONBOARDING_CAPTURE=reports/onboarding",
+                "-e",
+                "LOCATION_ERROR_CAPTURE=reports/location",
+            ]
+        );
+        assert!(capture_args([("PARITY_CAPTURE".into(), String::new())]).is_empty());
     }
 
     #[tokio::test]
